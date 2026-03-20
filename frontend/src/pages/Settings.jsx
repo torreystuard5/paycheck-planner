@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, User, Bell, DollarSign } from 'lucide-react';
+import { Save, User, Bell, DollarSign, Download, Loader2 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -10,6 +10,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const [profile, setProfile] = useState({
     first_name: '',
     last_name: '',
@@ -76,6 +77,25 @@ export default function Settings() {
       setError('Failed to save settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    setExporting(true);
+    try {
+      const response = await api.get('/api/v1/export/all', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'paycheck_planner_export.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -247,6 +267,35 @@ export default function Settings() {
           </button>
         </div>
       </form>
+
+      <div className="max-w-2xl">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+            <Download className="w-5 h-5 text-blue-500" />
+            Export All Data
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Download all your bills, debts, and payment history in a single Excel file.
+          </p>
+          <button
+            onClick={handleExportAll}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {exporting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Export All Data
+              </>
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

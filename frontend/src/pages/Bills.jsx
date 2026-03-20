@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, FileText } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, X, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../services/api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -32,9 +32,25 @@ export default function Bills() {
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const exportRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchBills();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const fetchBills = async () => {
@@ -104,6 +120,46 @@ export default function Bills() {
     }
   };
 
+  const handleExport = async (format = 'excel') => {
+    setShowExportMenu(false);
+    try {
+      const response = await api.get(`/api/v1/export/bills?format=${format}`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `bills_export.${format === 'excel' ? 'xlsx' : 'csv'}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError('Export failed. Please try again.');
+    }
+  };
+
+  const handleImport = async (file) => {
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const response = await api.post('/api/v1/import/bills', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setImportResult(response.data);
+      if (response.data.imported_count > 0) {
+        fetchBills();
+      }
+    } catch {
+      setImportResult({ imported_count: 0, error_count: 1, errors: ['Import failed. Please check your CSV file format.'] });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const filtered = bills.filter((b) => {
     const matchSearch = !search || b.name?.toLowerCase().includes(search.toLowerCase());
     const matchCategory = !filterCategory || b.category === filterCategory;
@@ -121,10 +177,39 @@ export default function Bills() {
           <h1 className="text-2xl font-bold text-gray-900">Bills</h1>
           <p className="text-sm text-gray-600 mt-1">Manage your recurring bills</p>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
-          <Plus className="h-4 w-4" />
-          Add Bill
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Export
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                <button onClick={() => handleExport('excel')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg">
+                  Excel (.xlsx)
+                </button>
+                <button onClick={() => handleExport('csv')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-b-lg">
+                  CSV (.csv)
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => { setShowImportModal(true); setImportResult(null); }}
+            className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Upload className="h-4 w-4" />
+            Import CSV
+          </button>
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+            <Plus className="h-4 w-4" />
+            Add Bill
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -235,6 +320,69 @@ export default function Bills() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={showImportModal} onClose={() => setShowImportModal(false)} title="Import Bills from CSV">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Upload a CSV file with columns: name, amount, due_day, frequency, category, auto_pay
+          </p>
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+          >
+            <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-600">Click to select a .csv file</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleImport(file);
+                e.target.value = '';
+              }}
+            />
+          </div>
+
+          {importing && (
+            <div className="text-sm text-gray-600 text-center">Importing...</div>
+          )}
+
+          {importResult && (
+            <div className="space-y-2">
+              {importResult.imported_count > 0 && (
+                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  {importResult.imported_count} bill{importResult.imported_count !== 1 ? 's' : ''} imported successfully
+                </div>
+              )}
+              {importResult.error_count > 0 && (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {importResult.error_count} error{importResult.error_count !== 1 ? 's' : ''}
+                  </div>
+                  <ul className="ml-6 list-disc space-y-1 mt-2">
+                    {importResult.errors?.map((err, i) => (
+                      <li key={i} className="text-xs">{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowImportModal(false)}
+              className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       </Modal>
 
       <ConfirmDialog

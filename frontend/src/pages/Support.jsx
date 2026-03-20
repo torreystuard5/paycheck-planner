@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Send, Loader2, ChevronDown, ChevronUp, HelpCircle, MessageSquare, BookOpen } from 'lucide-react';
+import { Send, Loader2, ChevronDown, ChevronUp, HelpCircle, MessageSquare, BookOpen, AlertCircle } from 'lucide-react';
+import api from '../services/api';
 
 const FAQ_ITEMS = [
   {
@@ -38,20 +39,32 @@ export default function Support() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState(null);
   const [openFaq, setOpenFaq] = useState(null);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     setSent(false);
+    setError(null);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSent(true);
-    setForm({ name: '', email: '', subject: '', message: '' });
-    setSubmitting(false);
+    setError(null);
+    setSent(false);
+    try {
+      await api.post('/api/v1/support', {
+        subject: form.subject,
+        message: form.message,
+      });
+      setSent(true);
+      setForm({ name: '', email: '', subject: '', message: '' });
+    } catch {
+      setError('Failed to send message. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const toggleFaq = (idx) => {
@@ -126,6 +139,13 @@ export default function Support() {
             </div>
           )}
 
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -187,11 +207,16 @@ export default function Support() {
               className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Sending...
+                </>
               ) : (
-                <Send className="h-4 w-4" />
+                <>
+                  <Send className="h-4 w-4" />
+                  Send Message
+                </>
               )}
-              Send Message
             </button>
           </form>
         </div>

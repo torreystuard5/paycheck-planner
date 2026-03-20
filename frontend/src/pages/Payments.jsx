@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Filter, Receipt } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Filter, Receipt, Download, ChevronDown } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import api from '../services/api';
 import Modal from '../components/Modal';
@@ -28,9 +28,21 @@ export default function Payments() {
     confirmation_number: '',
     notes: '',
   });
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportRef = useRef(null);
 
   useEffect(() => {
     fetchAll();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const fetchAll = async () => {
@@ -101,6 +113,26 @@ export default function Payments() {
     }
   };
 
+  const handleExport = async (exportFormat = 'excel') => {
+    setShowExportMenu(false);
+    try {
+      let url = `/api/v1/export/payments?format=${exportFormat}`;
+      if (startDate) url += `&start_date=${startDate}`;
+      if (endDate) url += `&end_date=${endDate}`;
+      const response = await api.get(url, { responseType: 'blob' });
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', `payments_export.${exportFormat === 'excel' ? 'xlsx' : 'csv'}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      setError('Export failed. Please try again.');
+    }
+  };
+
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
   if (loading) return <LoadingSpinner />;
@@ -112,10 +144,32 @@ export default function Payments() {
           <h1 className="text-2xl font-bold text-gray-900">Payment History</h1>
           <p className="text-sm text-gray-600 mt-1">View and manage your payments</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
-          <Plus className="h-4 w-4" />
-          Record Payment
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Export
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                <button onClick={() => handleExport('excel')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg">
+                  Excel (.xlsx)
+                </button>
+                <button onClick={() => handleExport('csv')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-b-lg">
+                  CSV (.csv)
+                </button>
+              </div>
+            )}
+          </div>
+          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+            <Plus className="h-4 w-4" />
+            Record Payment
+          </button>
+        </div>
       </div>
 
       {error && (

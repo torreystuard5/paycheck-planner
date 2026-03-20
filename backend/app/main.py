@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, bills, debts, income, paycheck_engine, payments, savings
+from app.routers import auth, bills, debts, import_export, income, paycheck_engine, payments, reminders, savings, support
 
 app = FastAPI(
     title="Paycheck Planner API",
@@ -25,6 +25,9 @@ app.include_router(debts.router, prefix="/api/v1")
 app.include_router(savings.router, prefix="/api/v1")
 app.include_router(payments.router, prefix="/api/v1")
 app.include_router(paycheck_engine.router, prefix="/api/v1")
+app.include_router(support.router, prefix="/api/v1")
+app.include_router(reminders.router, prefix="/api/v1")
+app.include_router(import_export.router, prefix="/api/v1")
 
 
 @app.get("/health")
