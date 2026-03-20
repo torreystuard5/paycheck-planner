@@ -1,6 +1,7 @@
+from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,9 +9,114 @@ from app.database import get_db
 from app.models.debt import Debt
 from app.models.user import User
 from app.schemas.debt import DebtCreate, DebtResponse, DebtUpdate
+from app.schemas.debt_calculator import (
+    CreditEfficiencyResponse,
+    DebtPayoffRequest,
+    ExtraPaymentRequest,
+    ExtraPaymentSimulation,
+    InterestProjection,
+    PaydownRecommendation,
+    PaydownRecommendRequest,
+    StrategyComparison,
+)
+from app.services.credit_efficiency import (
+    calculate_utilization,
+    project_interest_over_time,
+    recommend_paydown_priority,
+)
+from app.services.debt_calculator import compare_strategies, simulate_extra_payments
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/debts", tags=["Debts"])
+
+
+# ── Helper ─────────────────────────────────────────────────────────
+
+
+async def _active_debts_as_dicts(db: AsyncSession, user: User) -> list[dict]:
+    """Fetch all active debts for a user and return as plain dicts."""
+    result = await db.execute(
+        select(Debt).where(Debt.user_id == user.id, Debt.is_active.is_(True))
+    )
+    debts = result.scalars().all()
+    return [
+        {
+            "id": d.id,
+            "name": d.name,
+            "type": d.type,
+            "balance": Decimal(str(d.balance)),
+            "credit_limit": Decimal(str(d.credit_limit)) if d.credit_limit is not None else None,
+            "apr": Decimal(str(d.apr)),
+            "minimum_payment": Decimal(str(d.minimum_payment)),
+        }
+        for d in debts
+    ]
+
+
+# ── Analytical endpoints (defined BEFORE /{debt_id} to avoid route conflict) ──
+
+
+@router.post("/compare-strategies", response_model=StrategyComparison)
+async def compare_debt_strategies(
+    body: DebtPayoffRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    debt_dicts = await _active_debts_as_dicts(db, current_user)
+    if not debt_dicts:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active debts found",
+        )
+    result = compare_strategies(debt_dicts, extra_payment=body.extra_payment)
+    return result
+
+
+@router.post("/simulate-extra", response_model=list[ExtraPaymentSimulation])
+async def simulate_extra(
+    body: ExtraPaymentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    debt_dicts = await _active_debts_as_dicts(db, current_user)
+    if not debt_dicts:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active debts found",
+        )
+    return simulate_extra_payments(debt_dicts, extra_amounts=body.extra_amounts)
+
+
+@router.get("/credit-efficiency", response_model=CreditEfficiencyResponse)
+async def get_credit_efficiency(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    debt_dicts = await _active_debts_as_dicts(db, current_user)
+    return calculate_utilization(debt_dicts)
+
+
+@router.post("/credit-efficiency/recommend", response_model=list[PaydownRecommendation])
+async def recommend_paydown(
+    body: PaydownRecommendRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    debt_dicts = await _active_debts_as_dicts(db, current_user)
+    return recommend_paydown_priority(debt_dicts, available_amount=body.available_amount)
+
+
+@router.get("/interest-projection", response_model=list[InterestProjection])
+async def get_interest_projection(
+    months: int = Query(default=12, ge=1, le=60),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    debt_dicts = await _active_debts_as_dicts(db, current_user)
+    return project_interest_over_time(debt_dicts, months=months)
+
+
+# ── Standard CRUD (keep /{debt_id} routes AFTER analytical routes) ─
 
 
 @router.post("/", response_model=DebtResponse, status_code=status.HTTP_201_CREATED)
