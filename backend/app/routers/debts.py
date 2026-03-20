@@ -2,7 +2,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -25,6 +25,7 @@ from app.services.credit_efficiency import (
     recommend_paydown_priority,
 )
 from app.services.debt_calculator import compare_strategies, simulate_extra_payments
+from app.services.household_service import log_activity
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/debts", tags=["Debts"])
@@ -127,6 +128,7 @@ async def create_debt(
 ):
     debt = Debt(
         user_id=current_user.id,
+        household_id=current_user.household_id,
         name=data.name,
         type=data.type,
         balance=data.balance,
@@ -140,6 +142,21 @@ async def create_debt(
     db.add(debt)
     await db.flush()
     await db.refresh(debt)
+
+    if current_user.household_id:
+        try:
+            await log_activity(
+                household_id=current_user.household_id,
+                user_id=current_user.id,
+                action="created",
+                entity_type="debt",
+                entity_name=debt.name,
+                details=f"${debt.balance}",
+                db=db,
+            )
+        except Exception:
+            pass
+
     return debt
 
 
@@ -149,7 +166,15 @@ async def list_debts(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = select(Debt).where(Debt.user_id == current_user.id)
+    if current_user.household_id:
+        query = select(Debt).where(
+            or_(
+                Debt.user_id == current_user.id,
+                Debt.household_id == current_user.household_id,
+            )
+        )
+    else:
+        query = select(Debt).where(Debt.user_id == current_user.id)
     if active_only:
         query = query.where(Debt.is_active.is_(True))
     query = query.order_by(Debt.due_day)
@@ -164,10 +189,14 @@ async def get_debt(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Debt).where(Debt.id == debt_id, Debt.user_id == current_user.id)
+        select(Debt).where(Debt.id == debt_id)
     )
     debt = result.scalar_one_or_none()
     if not debt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+    if debt.user_id != current_user.id and (
+        not current_user.household_id or debt.household_id != current_user.household_id
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
     return debt
 
@@ -192,6 +221,21 @@ async def update_debt(
 
     await db.flush()
     await db.refresh(debt)
+
+    if current_user.household_id:
+        try:
+            await log_activity(
+                household_id=current_user.household_id,
+                user_id=current_user.id,
+                action="updated",
+                entity_type="debt",
+                entity_name=debt.name,
+                details=None,
+                db=db,
+            )
+        except Exception:
+            pass
+
     return debt
 
 
@@ -208,5 +252,20 @@ async def delete_debt(
     if not debt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
+    debt_name = debt.name
     debt.is_active = False
     await db.flush()
+
+    if current_user.household_id:
+        try:
+            await log_activity(
+                household_id=current_user.household_id,
+                user_id=current_user.id,
+                action="deleted",
+                entity_type="debt",
+                entity_name=debt_name,
+                details=None,
+                db=db,
+            )
+        except Exception:
+            pass

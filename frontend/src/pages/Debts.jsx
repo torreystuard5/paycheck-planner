@@ -1,13 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Edit, Trash2, CreditCard, TrendingDown, Shield, DollarSign, Download, Upload, ChevronDown, AlertCircle, CheckCircle } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import StatusBadge from '../components/StatusBadge';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import usePolling from '../hooks/usePolling';
 
 const TABS = ['Overview', 'Payoff Strategy', 'Credit Score'];
 const DEBT_TYPES = ['credit_card', 'student_loan', 'auto_loan', 'mortgage', 'personal_loan', 'medical', 'other'];
@@ -22,6 +25,7 @@ const defaultForm = {
 };
 
 export default function Debts() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('Overview');
   const [debts, setDebts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,12 +46,25 @@ export default function Debts() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const exportRef = useRef(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchDebts();
   }, []);
+
+  const pollDebts = useCallback(async () => {
+    try {
+      const res = await api.get('/api/v1/debts');
+      setDebts(Array.isArray(res.data) ? res.data : []);
+      setLastUpdated(new Date());
+    } catch {
+      // silent poll
+    }
+  }, []);
+
+  usePolling(pollDebts, 30000, !!user?.household_id);
 
   useEffect(() => {
     if (activeTab === 'Payoff Strategy') fetchPayoffData();
@@ -238,6 +255,9 @@ export default function Debts() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Debts</h1>
           <p className="text-sm text-gray-600 mt-1">Track and pay down your debts</p>
+          {lastUpdated && user?.household_id && (
+            <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+          )}
         </div>
         {activeTab === 'Overview' && (
           <div className="flex items-center gap-2">

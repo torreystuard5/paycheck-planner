@@ -6,6 +6,7 @@ from app.models.debt import Debt
 from app.models.savings_goal import SavingsContribution, SavingsGoal
 from app.models.transaction import Payment
 from app.models.support_ticket import SupportTicket
+from app.models.activity_log import ActivityLog
 
 __all__ = [
     "User",
@@ -17,4 +18,5 @@ __all__ = [
     "SavingsContribution",
     "Payment",
     "SupportTicket",
+    "ActivityLog",
 ]

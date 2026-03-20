@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import StatusBadge from '../components/StatusBadge';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import usePolling from '../hooks/usePolling';
 
 const CATEGORIES = ['Housing', 'Utilities', 'Insurance', 'Transportation', 'Subscriptions', 'Food', 'Healthcare', 'Other'];
 const FREQUENCIES = ['monthly', 'weekly', 'biweekly', 'quarterly', 'annually'];
@@ -22,6 +25,7 @@ const defaultForm = {
 };
 
 export default function Bills() {
+  const { user } = useAuth();
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -36,12 +40,25 @@ export default function Bills() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const exportRef = useRef(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchBills();
   }, []);
+
+  const pollBills = useCallback(async () => {
+    try {
+      const res = await api.get('/api/v1/bills');
+      setBills(Array.isArray(res.data) ? res.data : []);
+      setLastUpdated(new Date());
+    } catch {
+      // silent poll failure
+    }
+  }, []);
+
+  usePolling(pollBills, 30000, !!user?.household_id);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -176,6 +193,9 @@ export default function Bills() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Bills</h1>
           <p className="text-sm text-gray-600 mt-1">Manage your recurring bills</p>
+          {lastUpdated && user?.household_id && (
+            <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="relative" ref={exportRef}>

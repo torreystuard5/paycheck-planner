@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { useState, useEffect, useCallback } from 'react';
+import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock } from 'lucide-react';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import StatusBadge from '../components/StatusBadge';
+import usePolling from '../hooks/usePolling';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -18,13 +19,11 @@ export default function Dashboard() {
   const [paycheckPlan, setPaycheckPlan] = useState(null);
   const [creditScore, setCreditScore] = useState(null);
   const [recentPayments, setRecentPayments] = useState([]);
+  const [household, setHousehold] = useState(null);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
-    setLoading(true);
+  const fetchDashboardData = useCallback(async () => {
     setError(null);
     try {
       const [incomeRes, billsRes, debtsRes, savingsRes, paymentsRes] = await Promise.allSettled([
@@ -48,12 +47,38 @@ export default function Dashboard() {
 
       if (planRes.status === 'fulfilled') setPaycheckPlan(planRes.value.data);
       if (creditRes.status === 'fulfilled') setCreditScore(creditRes.value.data);
+
+      // Household data
+      try {
+        const hhRes = await api.get('/api/v1/households/me');
+        setHousehold(hhRes.data);
+        try {
+          const actRes = await api.get('/api/v1/households/activity?limit=5');
+          setRecentActivity(actRes.data.activities || []);
+        } catch {
+          // optional
+        }
+      } catch {
+        setHousehold(null);
+        setRecentActivity([]);
+      }
+
+      setLastUpdated(new Date());
     } catch (err) {
       setError('Failed to load dashboard data.');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      await fetchDashboardData();
+      setLoading(false);
+    };
+    init();
+  }, [fetchDashboardData]);
+
+  usePolling(fetchDashboardData, 30000, !!household);
 
   if (loading) return <LoadingSpinner />;
 
@@ -72,10 +97,23 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Welcome back{user?.first_name ? `, ${user.first_name}` : ''}
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Welcome back{user?.first_name ? `, ${user.first_name}` : ''}
+          </h1>
+          {household && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+              <Users className="w-3 h-3" />
+              Household Budget
+            </span>
+          )}
+        </div>
         <p className="text-gray-600 mt-1">Here&apos;s your financial overview</p>
+        {lastUpdated && household && (
+          <p className="text-xs text-gray-400 mt-0.5">
+            Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
+          </p>
+        )}
       </div>
 
       {error && (
@@ -236,6 +274,33 @@ export default function Dashboard() {
           <p className="text-gray-500 text-sm">No recent payments recorded.</p>
         )}
       </div>
+
+      {household && recentActivity.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-blue-500" />
+            Recent Household Activity
+          </h2>
+          <div className="space-y-3">
+            {recentActivity.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 text-sm">
+                <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-medium shrink-0">
+                  {(item.user_first_name || '?')[0].toUpperCase()}
+                </div>
+                <span className="text-gray-700 flex-1">
+                  <span className="font-medium">{item.user_first_name}</span>
+                  {' '}{item.action}{' '}{item.entity_type.replace(/_/g, ' ')}{' '}
+                  &apos;{item.entity_name}&apos;
+                </span>
+                <span className="text-xs text-gray-400 flex items-center gap-1 shrink-0">
+                  <Clock className="w-3 h-3" />
+                  {item.created_at ? formatDistanceToNow(parseISO(item.created_at), { addSuffix: true }) : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

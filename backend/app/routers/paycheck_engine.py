@@ -17,7 +17,7 @@ router = APIRouter(prefix="/paycheck-plan", tags=["Paycheck Plan"])
 
 
 async def _fetch_user_data(db: AsyncSession, user: User):
-    """Fetch active income sources, bills, and debts for a user."""
+    """Fetch active income sources, bills, and debts for a user (household-aware)."""
     income_result = await db.execute(
         select(IncomeSource)
         .where(IncomeSource.user_id == user.id, IncomeSource.is_active.is_(True))
@@ -25,16 +25,39 @@ async def _fetch_user_data(db: AsyncSession, user: User):
     )
     income_sources = list(income_result.scalars().all())
 
-    bills_result = await db.execute(
-        select(Bill)
-        .where(Bill.user_id == user.id, Bill.is_active.is_(True))
-    )
-    bills = list(bills_result.scalars().all())
+    if user.household_id:
+        from sqlalchemy import or_
+        bills_result = await db.execute(
+            select(Bill)
+            .where(
+                or_(
+                    Bill.user_id == user.id,
+                    Bill.household_id == user.household_id,
+                ),
+                Bill.is_active.is_(True),
+            )
+        )
+        debts_result = await db.execute(
+            select(Debt)
+            .where(
+                or_(
+                    Debt.user_id == user.id,
+                    Debt.household_id == user.household_id,
+                ),
+                Debt.is_active.is_(True),
+            )
+        )
+    else:
+        bills_result = await db.execute(
+            select(Bill)
+            .where(Bill.user_id == user.id, Bill.is_active.is_(True))
+        )
+        debts_result = await db.execute(
+            select(Debt)
+            .where(Debt.user_id == user.id, Debt.is_active.is_(True))
+        )
 
-    debts_result = await db.execute(
-        select(Debt)
-        .where(Debt.user_id == user.id, Debt.is_active.is_(True))
-    )
+    bills = list(bills_result.scalars().all())
     debts = list(debts_result.scalars().all())
 
     return income_sources, bills, debts

@@ -11,6 +11,7 @@ import {
   LogOut,
   X,
   Wallet,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -21,6 +22,7 @@ const links = [
   { to: '/savings', label: 'Savings', icon: PiggyBank },
   { to: '/payments', label: 'Payments', icon: DollarSign },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/household', label: 'Household', icon: Users },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
 ];

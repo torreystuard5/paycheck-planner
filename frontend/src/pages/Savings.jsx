@@ -1,17 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash2, PiggyBank, Calendar } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import usePolling from '../hooks/usePolling';
 
 const defaultGoalForm = { name: '', target_amount: '', current_amount: '', target_date: '', priority: 'medium' };
 const defaultContribForm = { goal_id: '', amount: '', date: '', note: '' };
 
 export default function Savings() {
+  const { user } = useAuth();
   const [goals, setGoals] = useState([]);
   const [contributions, setContributions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,10 +26,27 @@ export default function Savings() {
   const [contribForm, setContribForm] = useState(defaultContribForm);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  const pollData = useCallback(async () => {
+    try {
+      const [goalsRes, contribRes] = await Promise.allSettled([
+        api.get('/api/v1/savings/goals'),
+        api.get('/api/v1/savings/contributions'),
+      ]);
+      if (goalsRes.status === 'fulfilled') setGoals(Array.isArray(goalsRes.value.data) ? goalsRes.value.data : []);
+      if (contribRes.status === 'fulfilled') setContributions(Array.isArray(contribRes.value.data) ? contribRes.value.data : []);
+      setLastUpdated(new Date());
+    } catch {
+      // silent poll
+    }
+  }, []);
+
+  usePolling(pollData, 30000, !!user?.household_id);
 
   const fetchData = async () => {
     setLoading(true);
@@ -125,6 +145,9 @@ export default function Savings() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Savings Goals</h1>
           <p className="text-sm text-gray-600 mt-1">Set goals and track your progress</p>
+          {lastUpdated && user?.household_id && (
+            <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+          )}
         </div>
         <div className="flex gap-3">
           <button onClick={openAddContrib} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-colors">

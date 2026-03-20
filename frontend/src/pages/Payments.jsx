@@ -1,15 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Filter, Receipt, Download, ChevronDown } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import usePolling from '../hooks/usePolling';
 
 const PAYMENT_METHODS = ['bank_transfer', 'credit_card', 'debit_card', 'cash', 'check', 'other'];
 
 export default function Payments() {
+  const { user } = useAuth();
   const [payments, setPayments] = useState([]);
   const [bills, setBills] = useState([]);
   const [debts, setDebts] = useState([]);
@@ -29,11 +32,30 @@ export default function Payments() {
     notes: '',
   });
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const exportRef = useRef(null);
 
   useEffect(() => {
     fetchAll();
   }, []);
+
+  const pollPayments = useCallback(async () => {
+    try {
+      const [paymentsRes, billsRes, debtsRes] = await Promise.allSettled([
+        api.get('/api/v1/payments'),
+        api.get('/api/v1/bills'),
+        api.get('/api/v1/debts'),
+      ]);
+      if (paymentsRes.status === 'fulfilled') setPayments(Array.isArray(paymentsRes.value.data) ? paymentsRes.value.data : []);
+      if (billsRes.status === 'fulfilled') setBills(Array.isArray(billsRes.value.data) ? billsRes.value.data : []);
+      if (debtsRes.status === 'fulfilled') setDebts(Array.isArray(debtsRes.value.data) ? debtsRes.value.data : []);
+      setLastUpdated(new Date());
+    } catch {
+      // silent poll
+    }
+  }, []);
+
+  usePolling(pollPayments, 30000, !!user?.household_id);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -143,6 +165,9 @@ export default function Payments() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Payment History</h1>
           <p className="text-sm text-gray-600 mt-1">View and manage your payments</p>
+          {lastUpdated && user?.household_id && (
+            <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="relative" ref={exportRef}>
