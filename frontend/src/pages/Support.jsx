@@ -1,10 +1,44 @@
 import { useState } from 'react';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, ChevronDown, ChevronUp, HelpCircle, MessageSquare, BookOpen } from 'lucide-react';
+
+const FAQ_ITEMS = [
+  {
+    question: 'How do I set up my paycheck plan?',
+    answer: 'Go to the Dashboard and your paycheck plan will automatically be generated based on your income, bills, and pay schedule. Make sure you\'ve added your income sources and bills first.',
+  },
+  {
+    question: 'How does the debt payoff strategy work?',
+    answer: 'Navigate to the Debts page and click on the "Payoff Strategy" tab. You can compare snowball (smallest balance first) and avalanche (highest interest first) methods. You can also simulate extra monthly payments to see how much faster you can be debt-free.',
+  },
+  {
+    question: 'How is the credit efficiency score calculated?',
+    answer: 'The credit efficiency score is based on your credit utilization ratio, payment history, and debt-to-income ratio. Keep your credit utilization below 30% and make on-time payments to improve your score.',
+  },
+  {
+    question: 'Can I track multiple income sources?',
+    answer: 'Yes! Go to the Dashboard to see all your income sources. You can add multiple income entries with different pay frequencies to get an accurate picture of your total income.',
+  },
+  {
+    question: 'How do savings goals work?',
+    answer: 'Create savings goals on the Savings page with a target amount and optional target date. Track your progress by adding contributions. The progress bar shows how close you are to reaching each goal.',
+  },
+  {
+    question: 'How do I record a payment?',
+    answer: 'Go to the Payments page and click "Record Payment". Select the bill or debt you\'re paying, enter the amount and payment details. The payment will be tracked in your history and the related bill or debt will be updated.',
+  },
+];
+
+const RESOURCES = [
+  { title: 'Getting Started Guide', description: 'Learn the basics of setting up your account and managing your finances.' },
+  { title: 'Budget Planning Tips', description: 'Best practices for creating and maintaining a personal budget.' },
+  { title: 'Debt Payoff Strategies', description: 'Compare different approaches to becoming debt-free faster.' },
+];
 
 export default function Support() {
-  const [form, setForm] = useState({ subject: '', message: '' });
+  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
+  const [openFaq, setOpenFaq] = useState(null);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -14,38 +48,115 @@ export default function Support() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-    // Will connect to /api/v1/support in a future task
     await new Promise((r) => setTimeout(r, 800));
     setSent(true);
-    setForm({ subject: '', message: '' });
+    setForm({ name: '', email: '', subject: '', message: '' });
     setSubmitting(false);
   };
 
-  const inputClass =
-    'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
+  const toggleFaq = (idx) => {
+    setOpenFaq(openFaq === idx ? null : idx);
+  };
+
+  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Need Help?</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Send us a message and we&apos;ll get back to you
-        </p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Support</h1>
+        <p className="text-sm text-gray-600 mt-1">Get help and find answers to common questions</p>
       </div>
 
-      <div className="max-w-xl">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <HelpCircle className="w-5 h-5 text-blue-500" />
+              Frequently Asked Questions
+            </h2>
+            <div className="space-y-2">
+              {FAQ_ITEMS.map((item, idx) => (
+                <div key={idx} className="border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => toggleFaq(idx)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
+                  >
+                    <span>{item.question}</span>
+                    {openFaq === idx ? (
+                      <ChevronUp className="w-4 h-4 text-gray-400 shrink-0 ml-2" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-gray-400 shrink-0 ml-2" />
+                    )}
+                  </button>
+                  {openFaq === idx && (
+                    <div className="px-4 pb-3 text-sm text-gray-600 border-t border-gray-100 pt-3">
+                      {item.answer}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-green-500" />
+              Help Resources
+            </h2>
+            <div className="space-y-3">
+              {RESOURCES.map((resource, idx) => (
+                <div key={idx} className="p-3 rounded-lg border border-gray-100 hover:border-blue-200 hover:bg-blue-50 transition-colors cursor-pointer">
+                  <h3 className="text-sm font-medium text-gray-900">{resource.title}</h3>
+                  <p className="text-xs text-gray-500 mt-1">{resource.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-purple-500" />
+            Contact Us
+          </h2>
+
           {sent && (
             <div className="mb-4 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">
-              Message sent. We&apos;ll respond to the email address on your account.
+              Message sent successfully! We&apos;ll get back to you soon.
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input
+                  id="name"
+                  name="name"
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Your name"
+                />
+              </div>
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="you@example.com"
+                />
+              </div>
+            </div>
             <div>
-              <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">
-                Subject
-              </label>
+              <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
               <input
                 id="subject"
                 name="subject"
@@ -57,11 +168,8 @@ export default function Support() {
                 placeholder="What can we help with?"
               />
             </div>
-
             <div>
-              <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">
-                Message
-              </label>
+              <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">Message</label>
               <textarea
                 id="message"
                 name="message"
@@ -73,7 +181,6 @@ export default function Support() {
                 placeholder="Describe your issue or question..."
               />
             </div>
-
             <button
               type="submit"
               disabled={submitting}
@@ -87,10 +194,6 @@ export default function Support() {
               Send Message
             </button>
           </form>
-
-          <p className="mt-4 text-xs text-gray-400">
-            We&apos;ll respond to your email at the address on your account.
-          </p>
         </div>
       </div>
     </div>

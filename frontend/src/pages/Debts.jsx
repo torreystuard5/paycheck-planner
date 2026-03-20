@@ -1,35 +1,208 @@
-import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, CreditCard, TrendingDown, Shield, DollarSign } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import api from '../services/api';
+import Modal from '../components/Modal';
+import ConfirmDialog from '../components/ConfirmDialog';
+import LoadingSpinner from '../components/LoadingSpinner';
+import EmptyState from '../components/EmptyState';
+import StatusBadge from '../components/StatusBadge';
+import CurrencyDisplay from '../components/CurrencyDisplay';
 
 const TABS = ['Overview', 'Payoff Strategy', 'Credit Score'];
+const DEBT_TYPES = ['credit_card', 'student_loan', 'auto_loan', 'mortgage', 'personal_loan', 'medical', 'other'];
+
+const defaultForm = {
+  name: '',
+  balance: '',
+  minimum_payment: '',
+  interest_rate: '',
+  debt_type: 'credit_card',
+  lender: '',
+};
 
 export default function Debts() {
   const [activeTab, setActiveTab] = useState('Overview');
+  const [debts, setDebts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editingDebt, setEditingDebt] = useState(null);
+  const [form, setForm] = useState(defaultForm);
+  const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [strategies, setStrategies] = useState(null);
+  const [extraPayment, setExtraPayment] = useState('');
+  const [simulation, setSimulation] = useState(null);
+  const [interestProjection, setInterestProjection] = useState([]);
+  const [creditData, setCreditData] = useState(null);
+  const [recommendations, setRecommendations] = useState([]);
+  const [tabLoading, setTabLoading] = useState(false);
+
+  useEffect(() => {
+    fetchDebts();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'Payoff Strategy') fetchPayoffData();
+    if (activeTab === 'Credit Score') fetchCreditData();
+  }, [activeTab]);
+
+  const fetchDebts = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get('/api/v1/debts');
+      setDebts(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      setError('Failed to load debts.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPayoffData = async () => {
+    setTabLoading(true);
+    try {
+      const [stratRes, projRes] = await Promise.allSettled([
+        api.get('/api/v1/debts/compare-strategies'),
+        api.get('/api/v1/debts/interest-projection'),
+      ]);
+      if (stratRes.status === 'fulfilled') setStrategies(stratRes.value.data);
+      if (projRes.status === 'fulfilled') setInterestProjection(Array.isArray(projRes.value.data) ? projRes.value.data : []);
+    } catch {
+      setError('Failed to load payoff data.');
+    } finally {
+      setTabLoading(false);
+    }
+  };
+
+  const fetchCreditData = async () => {
+    setTabLoading(true);
+    try {
+      const [creditRes, recRes] = await Promise.allSettled([
+        api.get('/api/v1/debts/credit-efficiency'),
+        api.get('/api/v1/debts/credit-efficiency/recommend'),
+      ]);
+      if (creditRes.status === 'fulfilled') setCreditData(creditRes.value.data);
+      if (recRes.status === 'fulfilled') setRecommendations(Array.isArray(recRes.value.data) ? recRes.value.data : recRes.value.data?.recommendations || []);
+    } catch {
+      setError('Failed to load credit data.');
+    } finally {
+      setTabLoading(false);
+    }
+  };
+
+  const simulateExtra = async () => {
+    if (!extraPayment) return;
+    try {
+      const res = await api.post('/api/v1/debts/simulate-extra', { extra_amount: parseFloat(extraPayment) });
+      setSimulation(res.data);
+    } catch {
+      setError('Failed to simulate extra payments.');
+    }
+  };
+
+  const openAdd = () => {
+    setEditingDebt(null);
+    setForm(defaultForm);
+    setShowModal(true);
+  };
+
+  const openEdit = (debt) => {
+    setEditingDebt(debt);
+    setForm({
+      name: debt.name || '',
+      balance: debt.balance || '',
+      minimum_payment: debt.minimum_payment || '',
+      interest_rate: debt.interest_rate || '',
+      debt_type: debt.debt_type || 'credit_card',
+      lender: debt.lender || '',
+    });
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        balance: parseFloat(form.balance),
+        minimum_payment: parseFloat(form.minimum_payment),
+        interest_rate: parseFloat(form.interest_rate),
+      };
+      if (editingDebt) {
+        await api.put(`/api/v1/debts/${editingDebt.id}`, payload);
+      } else {
+        await api.post('/api/v1/debts', payload);
+      }
+      setShowModal(false);
+      fetchDebts();
+    } catch {
+      setError('Failed to save debt.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api.delete(`/api/v1/debts/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      fetchDebts();
+    } catch {
+      setError('Failed to delete debt.');
+    }
+  };
+
+  const totalDebt = debts.reduce((sum, d) => sum + (d.balance || 0), 0);
+  const totalMinPayment = debts.reduce((sum, d) => sum + (d.minimum_payment || 0), 0);
+
+  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
+
+  if (loading) return <LoadingSpinner />;
+
+  const getScoreColor = (score) => {
+    if (score >= 80) return 'text-green-500';
+    if (score >= 60) return 'text-amber-500';
+    return 'text-red-500';
+  };
+
+  const getScoreBg = (score) => {
+    if (score >= 80) return 'bg-green-500';
+    if (score >= 60) return 'bg-amber-500';
+    return 'bg-red-500';
+  };
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Debts</h1>
-          <p className="text-sm text-gray-500 mt-1">Track and pay down your debts</p>
+          <p className="text-sm text-gray-600 mt-1">Track and pay down your debts</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
-          <Plus className="h-4 w-4" />
-          Add Debt
-        </button>
+        {activeTab === 'Overview' && (
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+            <Plus className="h-4 w-4" />
+            Add Debt
+          </button>
+        )}
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+      )}
+
+      <div className="border-b border-gray-200">
         <nav className="flex gap-6">
           {TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               {tab}
@@ -38,11 +211,307 @@ export default function Debts() {
         </nav>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
-          {activeTab} content will appear here
+      {activeTab === 'Overview' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <p className="text-sm text-gray-600">Total Debt</p>
+              <CurrencyDisplay amount={totalDebt} className="text-2xl font-bold text-gray-900 mt-1 block" />
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <p className="text-sm text-gray-600">Total Minimum Payments</p>
+              <CurrencyDisplay amount={totalMinPayment} className="text-2xl font-bold text-gray-900 mt-1 block" />
+            </div>
+          </div>
+
+          {debts.length === 0 ? (
+            <EmptyState icon={CreditCard} title="No debts found" message="Add a debt to start tracking your payoff progress." actionLabel="Add Debt" onAction={openAdd} />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {debts.map((debt) => (
+                <div key={debt.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{debt.name}</h3>
+                      <p className="text-sm text-gray-500 capitalize">{debt.debt_type?.replace(/_/g, ' ') || 'Debt'}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => openEdit(debt)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setDeleteTarget(debt)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <CurrencyDisplay amount={debt.balance} className="text-xl font-bold text-gray-900 block mb-3" />
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-gray-500">Min Payment</span>
+                      <CurrencyDisplay amount={debt.minimum_payment} className="block font-medium text-gray-900" />
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Interest Rate</span>
+                      <p className="font-medium text-gray-900">{debt.interest_rate ? `${debt.interest_rate}%` : '--'}</p>
+                    </div>
+                  </div>
+                  {debt.lender && <p className="text-xs text-gray-400 mt-2">Lender: {debt.lender}</p>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {activeTab === 'Payoff Strategy' && (
+        <div className="space-y-6">
+          {tabLoading ? <LoadingSpinner /> : (
+            <>
+              {strategies && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <TrendingDown className="w-5 h-5 text-blue-500" />
+                      <h3 className="font-semibold text-gray-900">Snowball Method</h3>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-3">Pay smallest balances first for quick wins</p>
+                    {strategies.snowball && (
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Total Interest</span>
+                          <CurrencyDisplay amount={strategies.snowball.total_interest} className="font-medium text-gray-900" />
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Months to Payoff</span>
+                          <span className="font-medium text-gray-900">{strategies.snowball.months_to_payoff || '--'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Total Paid</span>
+                          <CurrencyDisplay amount={strategies.snowball.total_paid} className="font-medium text-gray-900" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <DollarSign className="w-5 h-5 text-green-500" />
+                      <h3 className="font-semibold text-gray-900">Avalanche Method</h3>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-3">Pay highest interest first to save money</p>
+                    {strategies.avalanche && (
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Total Interest</span>
+                          <CurrencyDisplay amount={strategies.avalanche.total_interest} className="font-medium text-gray-900" />
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Months to Payoff</span>
+                          <span className="font-medium text-gray-900">{strategies.avalanche.months_to_payoff || '--'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Total Paid</span>
+                          <CurrencyDisplay amount={strategies.avalanche.total_paid} className="font-medium text-gray-900" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Simulate Extra Payments</h3>
+                <div className="flex gap-3 mb-4">
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Extra monthly amount"
+                    value={extraPayment}
+                    onChange={(e) => setExtraPayment(e.target.value)}
+                    className={`${inputClass} max-w-xs`}
+                  />
+                  <button onClick={simulateExtra} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                    Simulate
+                  </button>
+                </div>
+                {simulation && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <p className="text-gray-600">Interest Saved</p>
+                      <CurrencyDisplay amount={simulation.interest_saved} className="text-lg font-bold text-green-600 block mt-1" />
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <p className="text-gray-600">Months Saved</p>
+                      <p className="text-lg font-bold text-blue-600 mt-1">{simulation.months_saved || 0}</p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <p className="text-gray-600">New Payoff Date</p>
+                      <p className="text-lg font-bold text-purple-600 mt-1">{simulation.new_payoff_date || '--'}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {interestProjection.length > 0 && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <h3 className="font-semibold text-gray-900 mb-4">Interest Projection</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={interestProjection}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, '']} />
+                      <Area type="monotone" dataKey="balance" stroke="#3b82f6" fill="#93c5fd" fillOpacity={0.3} name="Balance" />
+                      <Area type="monotone" dataKey="interest" stroke="#ef4444" fill="#fca5a5" fillOpacity={0.3} name="Interest" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {!strategies && interestProjection.length === 0 && (
+                <EmptyState icon={TrendingDown} title="No strategy data" message="Add debts to compare payoff strategies." />
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'Credit Score' && (
+        <div className="space-y-6">
+          {tabLoading ? <LoadingSpinner /> : (
+            <>
+              {creditData ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col items-center">
+                    <h3 className="font-semibold text-gray-900 mb-4">Credit Efficiency Score</h3>
+                    <div className="relative w-36 h-36 mb-4">
+                      <svg className="w-full h-full" viewBox="0 0 36 36">
+                        <path d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+                        <path
+                          d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          strokeDasharray={`${(creditData.score || 0)}, 100`}
+                          className={getScoreColor(creditData.score || 0)}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className={`text-3xl font-bold ${getScoreColor(creditData.score || 0)}`}>{creditData.score ?? '--'}</span>
+                      </div>
+                    </div>
+                    {creditData.rating && <StatusBadge status={creditData.rating} />}
+                  </div>
+
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h3 className="font-semibold text-gray-900 mb-4">Details</h3>
+                    <div className="space-y-4">
+                      {creditData.utilization_ratio != null && (
+                        <div>
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className="text-gray-600">Credit Utilization</span>
+                            <span className="font-medium text-gray-900">{(creditData.utilization_ratio * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className={`h-2.5 rounded-full ${getScoreBg(100 - creditData.utilization_ratio * 100)}`} style={{ width: `${Math.min(creditData.utilization_ratio * 100, 100)}%` }} />
+                          </div>
+                        </div>
+                      )}
+                      {creditData.total_credit_limit != null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Total Credit Limit</span>
+                          <CurrencyDisplay amount={creditData.total_credit_limit} className="font-medium text-gray-900" />
+                        </div>
+                      )}
+                      {creditData.total_balance != null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Total Balance</span>
+                          <CurrencyDisplay amount={creditData.total_balance} className="font-medium text-gray-900" />
+                        </div>
+                      )}
+                      {creditData.on_time_payment_rate != null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">On-Time Payment Rate</span>
+                          <span className="font-medium text-gray-900">{(creditData.on_time_payment_rate * 100).toFixed(0)}%</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState icon={Shield} title="No credit data" message="Add debts to see your credit efficiency score." />
+              )}
+
+              {Array.isArray(recommendations) && recommendations.length > 0 && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-blue-500" />
+                    Recommendations
+                  </h3>
+                  <ul className="space-y-3">
+                    {recommendations.map((rec, idx) => (
+                      <li key={idx} className="flex gap-3 text-sm">
+                        <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center shrink-0 text-xs font-medium">{idx + 1}</span>
+                        <span className="text-gray-700">{typeof rec === 'string' ? rec : rec.message || rec.recommendation || JSON.stringify(rec)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingDebt ? 'Edit Debt' : 'Add Debt'}>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Balance</label>
+              <input type="number" step="0.01" required value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Min Payment</label>
+              <input type="number" step="0.01" required value={form.minimum_payment} onChange={(e) => setForm({ ...form, minimum_payment: e.target.value })} className={inputClass} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Interest Rate (%)</label>
+              <input type="number" step="0.01" required value={form.interest_rate} onChange={(e) => setForm({ ...form, interest_rate: e.target.value })} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Debt Type</label>
+              <select value={form.debt_type} onChange={(e) => setForm({ ...form, debt_type: e.target.value })} className={inputClass}>
+                {DEBT_TYPES.map((t) => <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Lender</label>
+            <input type="text" value={form.lender} onChange={(e) => setForm({ ...form, lender: e.target.value })} className={inputClass} />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {saving ? 'Saving...' : editingDebt ? 'Update' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Debt"
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        danger
+      />
     </div>
   );
 }

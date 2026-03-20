@@ -1,34 +1,249 @@
+import { useState, useEffect } from 'react';
+import { Plus, Filter, Receipt } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import api from '../services/api';
+import Modal from '../components/Modal';
+import LoadingSpinner from '../components/LoadingSpinner';
+import EmptyState from '../components/EmptyState';
+import CurrencyDisplay from '../components/CurrencyDisplay';
+
+const PAYMENT_METHODS = ['bank_transfer', 'credit_card', 'debit_card', 'cash', 'check', 'other'];
+
 export default function Payments() {
+  const [payments, setPayments] = useState([]);
+  const [bills, setBills] = useState([]);
+  const [debts, setDebts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    bill_id: '',
+    debt_id: '',
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: 'bank_transfer',
+    confirmation_number: '',
+    notes: '',
+  });
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
+  const fetchAll = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [paymentsRes, billsRes, debtsRes] = await Promise.allSettled([
+        api.get('/api/v1/payments'),
+        api.get('/api/v1/bills'),
+        api.get('/api/v1/debts'),
+      ]);
+      if (paymentsRes.status === 'fulfilled') setPayments(Array.isArray(paymentsRes.value.data) ? paymentsRes.value.data : []);
+      if (billsRes.status === 'fulfilled') setBills(Array.isArray(billsRes.value.data) ? billsRes.value.data : []);
+      if (debtsRes.status === 'fulfilled') setDebts(Array.isArray(debtsRes.value.data) ? debtsRes.value.data : []);
+    } catch {
+      setError('Failed to load payment data.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFilter = async () => {
+    setLoading(true);
+    try {
+      let url = '/api/v1/payments';
+      const params = [];
+      if (startDate) params.push(`start_date=${startDate}`);
+      if (endDate) params.push(`end_date=${endDate}`);
+      if (params.length) url += `?${params.join('&')}`;
+      const res = await api.get(url);
+      setPayments(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      setError('Failed to filter payments.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const payload = {
+        amount: parseFloat(form.amount),
+        payment_date: form.payment_date,
+        payment_method: form.payment_method,
+        confirmation_number: form.confirmation_number || undefined,
+        notes: form.notes || undefined,
+      };
+      if (form.bill_id) payload.bill_id = parseInt(form.bill_id, 10);
+      if (form.debt_id) payload.debt_id = parseInt(form.debt_id, 10);
+      await api.post('/api/v1/payments', payload);
+      setShowModal(false);
+      setForm({
+        bill_id: '',
+        debt_id: '',
+        amount: '',
+        payment_date: new Date().toISOString().split('T')[0],
+        payment_method: 'bank_transfer',
+        confirmation_number: '',
+        notes: '',
+      });
+      fetchAll();
+    } catch {
+      setError('Failed to record payment.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
+
+  if (loading) return <LoadingSpinner />;
+
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Payment History</h1>
-        <p className="text-sm text-gray-500 mt-1">View and manage your payments</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Payment History</h1>
+          <p className="text-sm text-gray-600 mt-1">View and manage your payments</p>
+        </div>
+        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+          <Plus className="h-4 w-4" />
+          Record Payment
+        </button>
       </div>
 
-      {/* Date filter placeholder */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
         <input
           type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
           aria-label="Start date"
         />
         <span className="text-sm text-gray-400">to</span>
         <input
           type="date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
           aria-label="End date"
         />
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+        <button onClick={handleFilter} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+          <Filter className="h-4 w-4" />
           Filter
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
-          Payment history will appear here
+      {payments.length === 0 ? (
+        <EmptyState icon={Receipt} title="No payments found" message="Record a payment to start tracking your payment history." actionLabel="Record Payment" onAction={() => setShowModal(true)} />
+      ) : (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Date</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Description</th>
+                  <th className="text-right px-6 py-3 text-gray-600 font-medium">Amount</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Method</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Confirmation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((payment) => (
+                  <tr key={payment.id} className="border-t border-gray-100 hover:bg-gray-50">
+                    <td className="px-6 py-4 text-gray-900">
+                      {payment.payment_date ? format(parseISO(payment.payment_date), 'MMM d, yyyy') : '--'}
+                    </td>
+                    <td className="px-6 py-4 text-gray-700">
+                      {payment.notes || payment.bill_name || payment.debt_name || 'Payment'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <CurrencyDisplay amount={payment.amount} className="font-medium text-gray-900" />
+                    </td>
+                    <td className="px-6 py-4 text-gray-600 capitalize">{payment.payment_method?.replace(/_/g, ' ') || '--'}</td>
+                    <td className="px-6 py-4 text-gray-500">{payment.confirmation_number || '--'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Record Payment">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pay For</label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Bill</label>
+                <select
+                  value={form.bill_id}
+                  onChange={(e) => setForm({ ...form, bill_id: e.target.value, debt_id: '' })}
+                  className={inputClass}
+                >
+                  <option value="">None</option>
+                  {bills.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Debt</label>
+                <select
+                  value={form.debt_id}
+                  onChange={(e) => setForm({ ...form, debt_id: e.target.value, bill_id: '' })}
+                  className={inputClass}
+                >
+                  <option value="">None</option>
+                  {debts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+              <input type="number" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+              <input type="date" required value={form.payment_date} onChange={(e) => setForm({ ...form, payment_date: e.target.value })} className={inputClass} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Method</label>
+              <select value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} className={inputClass}>
+                {PAYMENT_METHODS.map((m) => <option key={m} value={m} className="capitalize">{m.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Confirmation #</label>
+              <input type="text" value={form.confirmation_number} onChange={(e) => setForm({ ...form, confirmation_number: e.target.value })} className={inputClass} placeholder="Optional" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputClass} placeholder="Optional notes" />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {saving ? 'Saving...' : 'Record Payment'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
