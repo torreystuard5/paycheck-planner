@@ -8,6 +8,7 @@ import {
   BarChart3,
   Settings,
   HelpCircle,
+  Heart,
   LogOut,
   X,
   Wallet,
@@ -23,6 +24,7 @@ const links = [
   { to: '/payments', label: 'Payments', icon: DollarSign },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/household', label: 'Household', icon: Users },
+  { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
 ];
@@ -56,8 +58,21 @@ export default function Sidebar({ open, onClose }) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {links.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} className={linkClass} onClick={onClose}>
+        {links.map(({ to, label, icon: Icon, warm }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : warm
+                    ? 'text-rose-500 hover:bg-rose-50 hover:text-rose-600'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`
+            }
+            onClick={onClose}
+          >
             <Icon className="h-5 w-5 shrink-0" />
             {label}
           </NavLink>

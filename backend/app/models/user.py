@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -36,6 +36,20 @@ class User(Base):
     updated_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    # Supporter fields
+    subscription_tier: Mapped[str] = mapped_column(
+        String(20), server_default=text("'early_access'")
+    )
+    supporter_months_banked: Mapped[int] = mapped_column(
+        Integer, server_default=text("0")
+    )
+    promo_code_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("promo_codes.id"),
+        nullable=True,
+    )
+    is_supporter: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 
     # Relationships
     household = relationship("Household", back_populates="members", foreign_keys=[household_id])

@@ -1,3 +1,4 @@
+from app.models.promo_code import PromoCode
 from app.models.user import User
 from app.models.household import Household
 from app.models.income import IncomeSource
@@ -7,8 +8,10 @@ from app.models.savings_goal import SavingsContribution, SavingsGoal
 from app.models.transaction import Payment
 from app.models.support_ticket import SupportTicket
 from app.models.activity_log import ActivityLog
+from app.models.supporter import Supporter
 
 __all__ = [
+    "PromoCode",
     "User",
     "Household",
     "IncomeSource",
@@ -19,4 +22,5 @@ __all__ = [
     "Payment",
     "SupportTicket",
     "ActivityLog",
+    "Supporter",
 ]

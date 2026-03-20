@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, User, Bell, DollarSign, Download, Loader2 } from 'lucide-react';
+import { Save, User, Bell, DollarSign, Download, Loader2, Heart, Star } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -11,6 +11,7 @@ export default function Settings() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [supporterStatus, setSupporterStatus] = useState(null);
   const [profile, setProfile] = useState({
     first_name: '',
     last_name: '',
@@ -28,6 +29,7 @@ export default function Settings() {
 
   useEffect(() => {
     fetchProfile();
+    fetchSupporterStatus();
   }, []);
 
   const fetchProfile = async () => {
@@ -57,6 +59,15 @@ export default function Settings() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSupporterStatus = async () => {
+    try {
+      const res = await api.get('/api/v1/supporter/status');
+      setSupporterStatus(res.data);
+    } catch {
+      // Supporter status not available, that's ok
     }
   };
 
@@ -122,6 +133,15 @@ export default function Settings() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <User className="w-5 h-5 text-blue-500" />
             Profile
+            {supporterStatus?.subscription_tier === 'lifetime' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                <Star className="w-3 h-3" /> Lifetime Pro
+              </span>
+            ) : supporterStatus?.is_supporter ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700">
+                <Heart className="w-3 h-3" /> Supporter
+              </span>
+            ) : null}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
