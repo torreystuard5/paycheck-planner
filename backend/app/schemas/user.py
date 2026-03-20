@@ -1,0 +1,43 @@
+from datetime import date, datetime
+from decimal import Decimal
+from uuid import UUID
+
+from pydantic import BaseModel, EmailStr, Field
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    pay_frequency: str = Field(..., pattern="^(weekly|biweekly|semi_monthly|monthly)$")
+    next_pay_date: date
+    net_pay_amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
+    currency: str = Field(default="USD", max_length=3)
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: UUID
+    email: str
+    first_name: str
+    last_name: str
+    currency: str
+    pay_frequency: str
+    next_pay_date: date
+    net_pay_amount: Decimal
+    household_id: UUID | None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
