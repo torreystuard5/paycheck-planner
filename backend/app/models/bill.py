@@ -43,6 +43,9 @@ class Bill(Base):
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     auto_pay: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     reminder_days: Mapped[int] = mapped_column(Integer, server_default=text("3"))
+    is_paid: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
+    paid_date: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_amount: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

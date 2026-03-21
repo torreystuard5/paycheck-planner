@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift } from 'lucide-react';
+import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle } from 'lucide-react';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -88,9 +88,21 @@ export default function Dashboard() {
   const totalDebt = Array.isArray(debts) ? debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0) : 0;
   const savingsCount = Array.isArray(savingsGoals) ? savingsGoals.length : 0;
 
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const billsThisMonth = Array.isArray(bills) ? bills.filter(() => true) : [];
+  const paidThisMonth = billsThisMonth.filter((b) => {
+    if (!b.is_paid || !b.paid_date) return false;
+    const pd = new Date(b.paid_date);
+    return pd.getMonth() === currentMonth && pd.getFullYear() === currentYear;
+  });
+  const paidCount = paidThisMonth.length;
+  const totalBillCount = billsThisMonth.length;
+
   const summaryCards = [
     { label: 'Total Income', value: totalIncome, icon: DollarSign, color: 'text-green-500', bg: 'bg-green-50' },
-    { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50' },
+    { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50', subtitle: totalBillCount > 0 ? `${paidCount}/${totalBillCount} paid` : null },
     { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50' },
     { label: 'Savings Goals', value: null, count: savingsCount, icon: PiggyBank, color: 'text-purple-500', bg: 'bg-purple-50' },
   ];
@@ -134,6 +146,12 @@ export default function Dashboard() {
                   <CurrencyDisplay amount={card.value} className="text-2xl font-bold text-gray-900 mt-1 block" />
                 ) : (
                   <p className="text-2xl font-bold text-gray-900 mt-1">{card.count}</p>
+                )}
+                {card.subtitle && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    {card.subtitle}
+                  </p>
                 )}
               </div>
               <div className={`${card.bg} p-3 rounded-lg`}>
@@ -252,6 +270,17 @@ export default function Dashboard() {
                 <span className="text-gray-600">Active Debts</span>
                 <span className="font-medium text-gray-900">{Array.isArray(debts) ? debts.length : 0}</span>
               </div>
+              {totalBillCount > 0 && (
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-gray-600 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                    Bills Paid This Month
+                  </span>
+                  <span className={`font-medium ${paidCount === totalBillCount ? 'text-green-600' : 'text-gray-900'}`}>
+                    {paidCount} of {totalBillCount}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

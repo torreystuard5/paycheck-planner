@@ -30,6 +30,11 @@ class BillUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class BillPayRequest(BaseModel):
+    paid_amount: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
+    paid_date: datetime | None = None
+
+
 class BillResponse(BaseModel):
     id: UUID
     user_id: UUID
@@ -41,6 +46,9 @@ class BillResponse(BaseModel):
     category: str | None
     auto_pay: bool
     reminder_days: int
+    is_paid: bool
+    paid_date: datetime | None
+    paid_amount: Decimal | None
     is_active: bool
     created_at: datetime
     updated_at: datetime

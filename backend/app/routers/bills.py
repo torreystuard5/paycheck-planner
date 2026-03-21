@@ -1,13 +1,14 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.user import User
-from app.schemas.bill import BillCreate, BillResponse, BillUpdate
+from app.schemas.bill import BillCreate, BillPayRequest, BillResponse, BillUpdate
 from app.services.household_service import log_activity
 from app.utils.security import get_current_user
 
@@ -55,6 +56,7 @@ async def create_bill(
 @router.get("", response_model=list[BillResponse])
 async def list_bills(
     active_only: bool = True,
+    status: str | None = Query(default=None, pattern="^(paid|unpaid)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -69,6 +71,10 @@ async def list_bills(
         query = select(Bill).where(Bill.user_id == current_user.id)
     if active_only:
         query = query.where(Bill.is_active.is_(True))
+    if status == "paid":
+        query = query.where(Bill.is_paid.is_(True))
+    elif status == "unpaid":
+        query = query.where(Bill.is_paid.is_(False))
     query = query.order_by(Bill.due_day)
     result = await db.execute(query)
     return result.scalars().all()
@@ -162,3 +168,78 @@ async def delete_bill(
             )
         except Exception:
             pass
+
+
+@router.patch("/{bill_id}/pay", response_model=BillResponse)
+async def pay_bill(
+    bill_id: UUID,
+    data: BillPayRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+    )
+    bill = result.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    bill.is_paid = True
+    bill.paid_date = (data.paid_date if data and data.paid_date else datetime.now(timezone.utc))
+    bill.paid_amount = (data.paid_amount if data and data.paid_amount else bill.amount)
+
+    await db.flush()
+    await db.refresh(bill)
+
+    if current_user.household_id:
+        try:
+            await log_activity(
+                household_id=current_user.household_id,
+                user_id=current_user.id,
+                action="paid",
+                entity_type="bill",
+                entity_name=bill.name,
+                details=f"${bill.paid_amount}",
+                db=db,
+            )
+        except Exception:
+            pass
+
+    return bill
+
+
+@router.patch("/{bill_id}/unpay", response_model=BillResponse)
+async def unpay_bill(
+    bill_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+    )
+    bill = result.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    bill.is_paid = False
+    bill.paid_date = None
+    bill.paid_amount = None
+
+    await db.flush()
+    await db.refresh(bill)
+
+    if current_user.household_id:
+        try:
+            await log_activity(
+                household_id=current_user.household_id,
+                user_id=current_user.id,
+                action="unpaid",
+                entity_type="bill",
+                entity_name=bill.name,
+                details=None,
+                db=db,
+            )
+        except Exception:
+            pass
+
+    return bill

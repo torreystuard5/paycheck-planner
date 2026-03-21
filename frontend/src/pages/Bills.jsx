@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, X, AlertCircle, CheckCircle } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, X, AlertCircle, CheckCircle, Undo2 } from 'lucide-react';
+import { formatDistanceToNow, format } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
@@ -28,8 +28,10 @@ export default function Bills() {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingBill, setEditingBill] = useState(null);
   const [form, setForm] = useState(defaultForm);
@@ -40,22 +42,27 @@ export default function Bills() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [payTarget, setPayTarget] = useState(null);
+  const [payForm, setPayForm] = useState({ paid_amount: '', paid_date: '' });
+  const [paying, setPaying] = useState(false);
   const exportRef = useRef(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchBills(true);
-  }, []);
+  }, [statusFilter]);
 
   const pollBills = useCallback(async () => {
     try {
-      const res = await api.get('/api/v1/bills');
+      const params = statusFilter ? `?status=${statusFilter}` : '';
+      const res = await api.get(`/api/v1/bills${params}`);
       setBills(Array.isArray(res.data) ? res.data : []);
       setLastUpdated(new Date());
     } catch {
       // silent poll failure
     }
-  }, []);
+  }, [statusFilter]);
 
   usePolling(pollBills, 30000, !!user?.household_id);
 
@@ -73,13 +80,19 @@ export default function Bills() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const res = await api.get('/api/v1/bills');
+      const params = statusFilter ? `?status=${statusFilter}` : '';
+      const res = await api.get(`/api/v1/bills${params}`);
       setBills(Array.isArray(res.data) ? res.data : []);
     } catch {
       setError('Failed to load bills.');
     } finally {
       if (showLoading) setLoading(false);
     }
+  };
+
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 3000);
   };
 
   const openAdd = () => {
@@ -100,6 +113,45 @@ export default function Bills() {
       reminder_days: bill.reminder_days ?? 3,
     });
     setShowModal(true);
+  };
+
+  const openPayModal = (bill) => {
+    setPayTarget(bill);
+    setPayForm({
+      paid_amount: String(Number(bill.amount) || ''),
+      paid_date: format(new Date(), 'yyyy-MM-dd'),
+    });
+    setShowPayModal(true);
+  };
+
+  const handlePay = async (e) => {
+    e.preventDefault();
+    if (!payTarget) return;
+    setPaying(true);
+    try {
+      const payload = {};
+      if (payForm.paid_amount) payload.paid_amount = parseFloat(payForm.paid_amount);
+      if (payForm.paid_date) payload.paid_date = new Date(payForm.paid_date).toISOString();
+      await api.patch(`/api/v1/bills/${payTarget.id}/pay`, payload);
+      setShowPayModal(false);
+      setPayTarget(null);
+      fetchBills();
+      showSuccess('Bill marked as paid!');
+    } catch {
+      setError('Failed to mark bill as paid.');
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handleUnpay = async (bill) => {
+    try {
+      await api.patch(`/api/v1/bills/${bill.id}/unpay`);
+      fetchBills();
+      showSuccess('Bill marked as unpaid.');
+    } catch {
+      setError('Failed to undo payment.');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -189,6 +241,11 @@ export default function Bills() {
   if (loading) return <LoadingSpinner />;
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
+  const statusTabs = [
+    { label: 'All', value: '' },
+    { label: 'Unpaid', value: 'unpaid' },
+    { label: 'Paid', value: 'paid' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -239,6 +296,29 @@ export default function Bills() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
       )}
 
+      {successMsg && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 shrink-0" />
+          {successMsg}
+        </div>
+      )}
+
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+        {statusTabs.map((tab) => (
+          <button
+            key={tab.value}
+            onClick={() => setStatusFilter(tab.value)}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              statusFilter === tab.value
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -265,10 +345,10 @@ export default function Bills() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((bill) => (
-            <div key={bill.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div key={bill.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${bill.is_paid ? 'opacity-80' : ''}`}>
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{bill.name}</h3>
+                  <h3 className={`font-semibold text-gray-900 ${bill.is_paid ? 'line-through text-gray-500' : ''}`}>{bill.name}</h3>
                   <p className="text-sm text-gray-500">{bill.category || 'Uncategorized'}</p>
                 </div>
                 <div className="flex gap-1">
@@ -286,10 +366,69 @@ export default function Bills() {
                 {bill.auto_pay && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Auto-pay</span>}
               </div>
               <p className="text-xs text-gray-400 mt-2 capitalize">{bill.frequency || 'monthly'}</p>
+
+              <div className="mt-4 pt-3 border-t border-gray-100">
+                {bill.is_paid ? (
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Paid {bill.paid_date ? format(new Date(bill.paid_date), 'MMM d') : ''}
+                    </span>
+                    <button
+                      onClick={() => handleUnpay(bill)}
+                      className="text-xs text-gray-500 hover:text-gray-700 transition-colors flex items-center gap-1"
+                    >
+                      <Undo2 className="w-3 h-3" />
+                      Undo
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => openPayModal(bill)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Mark as Paid
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
       )}
+
+      <Modal isOpen={showPayModal} onClose={() => { setShowPayModal(false); setPayTarget(null); }} title="Mark as Paid">
+        <form onSubmit={handlePay} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Paid Amount</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              value={payForm.paid_amount}
+              onChange={(e) => setPayForm({ ...payForm, paid_amount: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Paid Date</label>
+            <input
+              type="date"
+              required
+              value={payForm.paid_date}
+              onChange={(e) => setPayForm({ ...payForm, paid_date: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => { setShowPayModal(false); setPayTarget(null); }} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={paying} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
+              {paying ? 'Saving...' : 'Confirm'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingBill ? 'Edit Bill' : 'Add Bill'}>
         <form onSubmit={handleSubmit} className="space-y-4">
