@@ -13,7 +13,7 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('access_token');
     if (token) {
       api
-        .get('/auth/me')
+        .get('/api/v1/auth/me')
         .then(({ data }) => {
           setUser(data);
           setIsAuthenticated(true);
@@ -31,27 +31,27 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password });
+    const { data } = await api.post('/api/v1/auth/login', { email, password });
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
-    const me = await api.get('/auth/me');
+    const me = await api.get('/api/v1/auth/me');
     setUser(me.data);
     setIsAuthenticated(true);
     return me.data;
   };
 
   const register = async (payload) => {
-    const { data } = await api.post('/auth/register', payload);
+    const { data } = await api.post('/api/v1/auth/register', payload);
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
-    const me = await api.get('/auth/me');
+    const me = await api.get('/api/v1/auth/me');
     setUser(me.data);
     setIsAuthenticated(true);
     return me.data;
   };
 
   const logout = () => {
-    api.post('/auth/logout').catch(() => {});
+    api.post('/api/v1/auth/logout').catch(() => {});
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     setUser(null);
@@ -61,7 +61,7 @@ export function AuthProvider({ children }) {
   const refreshToken = async () => {
     const rt = localStorage.getItem('refresh_token');
     if (!rt) return;
-    const { data } = await api.post('/auth/refresh', null, {
+    const { data } = await api.post('/api/v1/auth/refresh', null, {
       params: { refresh_token: rt },
     });
     localStorage.setItem('access_token', data.access_token);

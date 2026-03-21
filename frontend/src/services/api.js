@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
+  baseURL: import.meta.env.VITE_API_URL || '',
 });
 
 // Attach access token to every request
@@ -55,7 +55,7 @@ api.interceptors.response.use(
 
       try {
         const { data } = await axios.post(
-          `${api.defaults.baseURL}/auth/refresh`,
+          `${api.defaults.baseURL}/api/v1/auth/refresh`,
           null,
           { params: { refresh_token: refreshToken } }
         );
