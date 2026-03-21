@@ -10,9 +10,16 @@ app = FastAPI(
     description="Budgeting SaaS for paycheck-based financial planning",
 )
 
+# Build CORS origins list from FRONTEND_URL (supports comma-separated values)
+_raw = settings.FRONTEND_URL.strip()
+if _raw:
+    origins = [o.strip() for o in _raw.split(",") if o.strip()]
+else:
+    origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -27,4 +27,4 @@ services:
       - key: SUPPORT_EMAIL
         value: spsoftwaresolutionsllc@gmail.com
       - key: FRONTEND_URL
-        value: https://paydrift.onrender.com
+        value: https://paydrift.netlify.app
