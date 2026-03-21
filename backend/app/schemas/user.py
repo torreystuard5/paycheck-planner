@@ -38,6 +38,16 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserUpdate(BaseModel):
+    first_name: str | None = Field(None, min_length=1, max_length=100)
+    last_name: str | None = Field(None, min_length=1, max_length=100)
+    email: EmailStr | None = None
+    pay_frequency: str | None = Field(None, pattern="^(weekly|biweekly|semi_monthly|monthly)$")
+    next_pay_date: date | None = None
+    net_pay_amount: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=2)
+    currency: str | None = Field(None, max_length=3)
+
+
 class UserDateFormatUpdate(BaseModel):
     date_format: str = Field(..., pattern="^(MM/DD/YYYY|DD/MM/YYYY|YYYY-MM-DD)$")
 

@@ -51,8 +51,8 @@ export default function Reports() {
   }, []);
 
   const monthlyPayments = payments.reduce((acc, payment) => {
-    if (!payment.payment_date) return acc;
-    const month = payment.payment_date.substring(0, 7);
+    if (!payment.paid_date) return acc;
+    const month = payment.paid_date.substring(0, 7);
     const existing = acc.find((item) => item.month === month);
     if (existing) {
       existing.amount += payment.amount || 0;
@@ -165,8 +165,8 @@ export default function Reports() {
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, '']} />
                 <Legend />
-                <Area type="monotone" dataKey="balance" stroke="#3b82f6" fill="#93c5fd" fillOpacity={0.3} name="Balance" />
-                <Area type="monotone" dataKey="interest" stroke="#ef4444" fill="#fca5a5" fillOpacity={0.3} name="Interest" />
+                <Area type="monotone" dataKey="total_remaining_balance" stroke="#3b82f6" fill="#93c5fd" fillOpacity={0.3} name="Balance" />
+                <Area type="monotone" dataKey="cumulative_interest" stroke="#ef4444" fill="#fca5a5" fillOpacity={0.3} name="Interest" />
               </AreaChart>
             </ResponsiveContainer>
           )}

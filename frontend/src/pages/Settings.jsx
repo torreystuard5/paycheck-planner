@@ -81,9 +81,13 @@ export default function Settings() {
     setSuccess(false);
     try {
       await api.put('/api/v1/auth/me', {
-        ...profile,
-        ...preferences,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        email: profile.email,
+        pay_frequency: preferences.pay_frequency,
+        next_pay_date: preferences.next_pay_date || undefined,
         net_pay_amount: preferences.net_pay_amount ? parseFloat(preferences.net_pay_amount) : undefined,
+        currency: preferences.currency,
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
