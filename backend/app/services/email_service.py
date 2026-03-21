@@ -86,6 +86,48 @@ async def send_support_email(
         return False
 
 
+async def send_ticket_reply_email(
+    to_email: str, subject: str, reply_message: str
+) -> bool:
+    try:
+        if not SUPPORT_SMTP_USER or not SUPPORT_SMTP_PASSWORD:
+            logger.warning("Support SMTP credentials not configured — email sending disabled")
+            return False
+        conf = ConnectionConfig(
+            MAIL_USERNAME=SUPPORT_SMTP_USER,
+            MAIL_PASSWORD=SUPPORT_SMTP_PASSWORD,
+            MAIL_FROM=SUPPORT_SMTP_USER,
+            MAIL_PORT=SUPPORT_SMTP_PORT,
+            MAIL_SERVER=SUPPORT_SMTP_HOST,
+            MAIL_STARTTLS=True,
+            MAIL_SSL_TLS=False,
+            USE_CREDENTIALS=True,
+            VALIDATE_CERTS=True,
+        )
+
+        html_body = f"""
+        <h2>Re: {subject}</h2>
+        <p>{reply_message}</p>
+        <hr>
+        <p><small>PayDrift Support Team</small></p>
+        """
+
+        msg = MessageSchema(
+            subject=f"Re: {subject}",
+            recipients=[to_email],
+            body=html_body,
+            subtype=MessageType.html,
+        )
+
+        fm = FastMail(conf)
+        await fm.send_message(msg)
+        logger.info("Ticket reply email sent to %s", to_email)
+        return True
+    except Exception:
+        logger.exception("Failed to send ticket reply email to %s", to_email)
+        return False
+
+
 async def send_bill_reminder(
     user_email: str,
     user_name: str,

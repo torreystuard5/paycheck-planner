@@ -32,6 +32,7 @@ class SupportTicket(Base):
 
     # Relationships
     user = relationship("User", back_populates="support_tickets")
+    replies = relationship("SupportTicketReply", back_populates="ticket", order_by="SupportTicketReply.created_at")
 
     __table_args__ = (
         Index("ix_support_tickets_user_id", "user_id"),

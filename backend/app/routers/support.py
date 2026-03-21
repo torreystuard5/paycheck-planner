@@ -1,15 +1,24 @@
 import logging
 from typing import Optional
+from uuid import UUID as PyUUID
 
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.support_ticket import SupportTicket
+from app.models.support_ticket_reply import SupportTicketReply
 from app.models.user import User
-from app.schemas.support import SupportTicketCreate, SupportTicketRead
-from app.services.email_service import send_support_email
+from app.schemas.support import (
+    SupportTicketCreate,
+    SupportTicketDetail,
+    SupportTicketRead,
+    TicketReplyCreate,
+    TicketReplyRead,
+)
+from app.services.email_service import send_support_email, send_ticket_reply_email
 from app.utils.security import get_current_user, decode_token
 
 logger = logging.getLogger(__name__)
@@ -34,7 +43,6 @@ async def get_optional_user(
         user_id = payload.get("sub")
         if not user_id:
             return None
-        from uuid import UUID as PyUUID
         result = await db.execute(select(User).where(User.id == PyUUID(user_id)))
         user = result.scalar_one_or_none()
         if user and user.is_active:
@@ -81,7 +89,60 @@ async def list_support_tickets(
 ):
     result = await db.execute(
         select(SupportTicket)
+        .options(selectinload(SupportTicket.replies))
         .order_by(SupportTicket.created_at.desc())
         .limit(100)
     )
     return result.scalars().all()
+
+
+@router.get("/{ticket_id}", response_model=SupportTicketDetail)
+async def get_support_ticket(
+    ticket_id: PyUUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(SupportTicket)
+        .options(selectinload(SupportTicket.replies))
+        .where(SupportTicket.id == ticket_id)
+    )
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return ticket
+
+
+@router.post("/{ticket_id}/reply", response_model=TicketReplyRead, status_code=status.HTTP_201_CREATED)
+async def reply_to_ticket(
+    ticket_id: PyUUID,
+    data: TicketReplyCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(SupportTicket).where(SupportTicket.id == ticket_id)
+    )
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    reply = SupportTicketReply(
+        ticket_id=ticket_id,
+        reply_message=data.message,
+        replied_by=current_user.id,
+    )
+    db.add(reply)
+    await db.flush()
+    await db.refresh(reply)
+
+    try:
+        await send_ticket_reply_email(
+            to_email=ticket.email,
+            subject=ticket.subject,
+            reply_message=data.message,
+        )
+    except Exception:
+        logger.exception("Reply email failed for ticket %s", ticket_id)
+
+    return reply
