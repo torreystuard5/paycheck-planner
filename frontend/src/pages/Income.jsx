@@ -28,11 +28,11 @@ export default function Income() {
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
-    fetchIncomes();
+    fetchIncomes(true);
   }, []);
 
-  const fetchIncomes = async () => {
-    setLoading(true);
+  const fetchIncomes = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const res = await api.get('/api/v1/income');
@@ -40,7 +40,7 @@ export default function Income() {
     } catch {
       setError('Failed to load income sources.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -100,8 +100,8 @@ export default function Income() {
   const totalMonthlyIncome = incomes.reduce((sum, inc) => {
     const amt = Number(inc.amount) || 0;
     switch (inc.frequency) {
-      case 'weekly': return sum + amt * 52 / 12;
-      case 'biweekly': return sum + amt * 26 / 12;
+      case 'weekly': return sum + (amt * 52) / 12;
+      case 'biweekly': return sum + (amt * 26) / 12;
       case 'semi_monthly': return sum + amt * 2;
       case 'monthly': return sum + amt;
       default: return sum + amt;

@@ -29,7 +29,7 @@ export default function Savings() {
   const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
-    fetchData();
+    fetchData(true);
   }, []);
 
   const pollData = useCallback(async () => {
@@ -54,8 +54,8 @@ export default function Savings() {
 
   usePolling(pollData, 30000, !!user?.household_id);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const goalsRes = await api.get('/api/v1/savings/goals');
@@ -73,7 +73,7 @@ export default function Savings() {
     } catch {
       setError('Failed to load savings data.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -184,7 +184,9 @@ export default function Savings() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {goals.map((goal) => {
-            const progress = goal.target_amount > 0 ? Math.min((goal.current_amount || 0) / goal.target_amount * 100, 100) : 0;
+            const target = Number(goal.target_amount) || 0;
+            const current = Number(goal.current_amount) || 0;
+            const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0;
             return (
               <div key={goal.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div className="flex items-start justify-between mb-3">

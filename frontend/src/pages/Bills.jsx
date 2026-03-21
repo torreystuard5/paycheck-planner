@@ -44,7 +44,7 @@ export default function Bills() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    fetchBills();
+    fetchBills(true);
   }, []);
 
   const pollBills = useCallback(async () => {
@@ -69,8 +69,8 @@ export default function Bills() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchBills = async () => {
-    setLoading(true);
+  const fetchBills = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const res = await api.get('/api/v1/bills');
@@ -78,7 +78,7 @@ export default function Bills() {
     } catch {
       setError('Failed to load bills.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 

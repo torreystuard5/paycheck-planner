@@ -82,9 +82,9 @@ export default function Dashboard() {
 
   if (loading) return <LoadingSpinner />;
 
-  const totalIncome = Array.isArray(income) ? income.reduce((sum, i) => sum + (i.amount || 0), 0) : 0;
-  const totalBills = Array.isArray(bills) ? bills.reduce((sum, b) => sum + (b.amount || 0), 0) : 0;
-  const totalDebt = Array.isArray(debts) ? debts.reduce((sum, d) => sum + (d.balance || 0), 0) : 0;
+  const totalIncome = Array.isArray(income) ? income.reduce((sum, i) => sum + (Number(i.amount) || 0), 0) : 0;
+  const totalBills = Array.isArray(bills) ? bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0) : 0;
+  const totalDebt = Array.isArray(debts) ? debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0) : 0;
   const savingsCount = Array.isArray(savingsGoals) ? savingsGoals.length : 0;
 
   const summaryCards = [

@@ -53,7 +53,7 @@ export default function Debts() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    fetchDebts();
+    fetchDebts(true);
   }, []);
 
   const pollDebts = useCallback(async () => {
@@ -83,8 +83,8 @@ export default function Debts() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchDebts = async () => {
-    setLoading(true);
+  const fetchDebts = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const res = await api.get('/api/v1/debts');
@@ -92,7 +92,7 @@ export default function Debts() {
     } catch {
       setError('Failed to load debts.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -240,8 +240,8 @@ export default function Debts() {
     }
   };
 
-  const totalDebt = debts.reduce((sum, d) => sum + (d.balance || 0), 0);
-  const totalMinPayment = debts.reduce((sum, d) => sum + (d.minimum_payment || 0), 0);
+  const totalDebt = debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
+  const totalMinPayment = debts.reduce((sum, d) => sum + (Number(d.minimum_payment) || 0), 0);
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 

@@ -35,7 +35,7 @@ export default function Payments() {
   const exportRef = useRef(null);
 
   useEffect(() => {
-    fetchAll();
+    fetchAll(true);
   }, []);
 
   const pollPayments = useCallback(async () => {
@@ -66,8 +66,8 @@ export default function Payments() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchAll = async () => {
-    setLoading(true);
+  const fetchAll = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const [paymentsRes, billsRes, debtsRes] = await Promise.allSettled([
@@ -81,7 +81,7 @@ export default function Payments() {
     } catch {
       setError('Failed to load payment data.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
