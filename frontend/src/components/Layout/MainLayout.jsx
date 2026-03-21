@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 import EarlyAccessBanner from '../EarlyAccessBanner';
+import Footer from '../Footer';
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -31,6 +32,9 @@ export default function MainLayout() {
         <main className="p-4 md:p-6">
           <Outlet />
         </main>
+        <div className="px-4 md:px-6">
+          <Footer />
+        </div>
       </div>
     </div>
   );

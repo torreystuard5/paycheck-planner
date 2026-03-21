@@ -21,6 +21,7 @@ class User(Base):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), server_default=text("'USD'"))
+    date_format: Mapped[str] = mapped_column(String(20), server_default=text("'MM/DD/YYYY'"))
     pay_frequency: Mapped[str] = mapped_column(String(20), nullable=False)
     next_pay_date: Mapped[str] = mapped_column(Date, nullable=False)
     net_pay_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)

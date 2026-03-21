@@ -7,6 +7,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import StatusBadge from '../components/StatusBadge';
 import usePolling from '../hooks/usePolling';
+import { formatDate } from '../utils/dateFormat';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -155,7 +156,7 @@ export default function Dashboard() {
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Next Paycheck</span>
                   <span className="font-medium text-gray-900">
-                    {format(parseISO(paycheckPlan.next_paycheck_date), 'MMM d, yyyy')}
+                    {formatDate(paycheckPlan.next_paycheck_date, user?.date_format)}
                   </span>
                 </div>
               )}
@@ -258,7 +259,7 @@ export default function Dashboard() {
                 {recentPayments.map((payment) => (
                   <tr key={payment.id} className="border-b border-gray-100">
                     <td className="py-3 text-gray-900">
-                      {payment.payment_date ? format(parseISO(payment.payment_date), 'MMM d, yyyy') : '--'}
+                      {payment.payment_date ? formatDate(payment.payment_date, user?.date_format) : '--'}
                     </td>
                     <td className="py-3 text-gray-700">{payment.notes || payment.bill_name || payment.debt_name || 'Payment'}</td>
                     <td className="py-3 text-right">

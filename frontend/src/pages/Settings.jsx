@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Save, User, Bell, DollarSign, Download, Loader2, Heart, Star } from 'lucide-react';
+import { Save, User, Bell, DollarSign, Download, Loader2, Heart, Star, Calendar } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { getFormatPreview } from '../utils/dateFormat';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -17,6 +18,7 @@ export default function Settings() {
     last_name: '',
     email: '',
   });
+  const [dateFormat, setDateFormat] = useState('MM/DD/YYYY');
   const [preferences, setPreferences] = useState({
     pay_frequency: 'biweekly',
     next_pay_date: '',
@@ -42,6 +44,7 @@ export default function Settings() {
         last_name: data.last_name || '',
         email: data.email || '',
       });
+      setDateFormat(data.date_format || 'MM/DD/YYYY');
       setPreferences((prev) => ({
         ...prev,
         pay_frequency: data.pay_frequency || 'biweekly',
@@ -237,6 +240,35 @@ export default function Settings() {
               <option value="CAD">CAD</option>
               <option value="AUD">AUD</option>
             </select>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-indigo-500" />
+            Date Format
+          </h2>
+          <div className="max-w-xs">
+            <label htmlFor="s-datefmt" className="block text-sm font-medium text-gray-700 mb-1">Display Format</label>
+            <select
+              id="s-datefmt"
+              value={dateFormat}
+              onChange={async (e) => {
+                const newFormat = e.target.value;
+                setDateFormat(newFormat);
+                try {
+                  await api.patch('/api/v1/auth/me/date-format', { date_format: newFormat });
+                } catch {}
+              }}
+              className={inputClass}
+            >
+              <option value="MM/DD/YYYY">MM/DD/YYYY (US)</option>
+              <option value="DD/MM/YYYY">DD/MM/YYYY (International)</option>
+              <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
+            </select>
+            <p className="mt-2 text-sm text-gray-500">
+              Preview: <span className="font-medium text-gray-700">{getFormatPreview(dateFormat)}</span>
+            </p>
           </div>
         </div>
 

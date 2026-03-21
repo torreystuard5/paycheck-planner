@@ -27,6 +27,7 @@ class UserResponse(BaseModel):
     first_name: str
     last_name: str
     currency: str
+    date_format: str = "MM/DD/YYYY"
     pay_frequency: str
     next_pay_date: date
     net_pay_amount: Decimal
@@ -35,6 +36,10 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class UserDateFormatUpdate(BaseModel):
+    date_format: str = Field(..., pattern="^(MM/DD/YYYY|DD/MM/YYYY|YYYY-MM-DD)$")
 
 
 class TokenResponse(BaseModel):

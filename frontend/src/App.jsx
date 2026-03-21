@@ -16,6 +16,10 @@ import Support from './pages/Support';
 import Supporter from './pages/Supporter';
 import Household from './pages/Household';
 import NotFound from './pages/NotFound';
+import TermsOfService from './pages/legal/TermsOfService';
+import PrivacyPolicy from './pages/legal/PrivacyPolicy';
+import CookiePolicy from './pages/legal/CookiePolicy';
+import Disclaimer from './pages/legal/Disclaimer';
 
 export default function App() {
   return (
@@ -25,6 +29,10 @@ export default function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/cookies" element={<CookiePolicy />} />
+          <Route path="/disclaimer" element={<Disclaimer />} />
 
           {/* Protected routes */}
           <Route
