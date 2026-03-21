@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+let baseURL = import.meta.env.VITE_API_URL || '';
+// Prevent mixed-content errors: upgrade http to https in production
+if (baseURL.startsWith('http://') && typeof window !== 'undefined' && window.location.protocol === 'https:') {
+  baseURL = baseURL.replace('http://', 'https://');
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL,
 });
 
 // Attach access token to every request
