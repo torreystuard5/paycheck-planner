@@ -8,6 +8,7 @@ app = FastAPI(
     title="PayDrift API",
     version="1.0.0",
     description="Budgeting SaaS for paycheck-based financial planning",
+    redirect_slashes=False,
 )
 
 # Build CORS origins list from FRONTEND_URL (supports comma-separated values)

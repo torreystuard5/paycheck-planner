@@ -34,7 +34,7 @@ class SupportTicketResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.post("/", response_model=SupportTicketResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=SupportTicketResponse, status_code=status.HTTP_201_CREATED)
 async def create_support_ticket(
     data: SupportTicketCreate,
     db: AsyncSession = Depends(get_db),

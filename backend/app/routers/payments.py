@@ -17,7 +17,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
 
-@router.post("/", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def create_payment(
     data: PaymentCreate,
     db: AsyncSession = Depends(get_db),
@@ -89,7 +89,7 @@ async def create_payment(
     return payment
 
 
-@router.get("/", response_model=list[PaymentResponse])
+@router.get("", response_model=list[PaymentResponse])
 async def list_payments(
     pay_period_date: date | None = Query(default=None),
     start_date: date | None = Query(default=None),

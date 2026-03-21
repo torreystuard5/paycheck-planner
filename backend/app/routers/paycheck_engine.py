@@ -63,7 +63,7 @@ async def _fetch_user_data(db: AsyncSession, user: User):
     return income_sources, bills, debts
 
 
-@router.get("/", response_model=PaycheckPlanResponse)
+@router.get("", response_model=PaycheckPlanResponse)
 async def get_paycheck_plan(
     periods: int = Query(default=4, ge=1, le=12),
     db: AsyncSession = Depends(get_db),

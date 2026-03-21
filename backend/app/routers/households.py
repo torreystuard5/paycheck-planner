@@ -24,7 +24,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/households", tags=["Households"])
 
 
-@router.post("/", response_model=HouseholdResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=HouseholdResponse, status_code=status.HTTP_201_CREATED)
 async def create_household_endpoint(
     data: HouseholdCreate,
     db: AsyncSession = Depends(get_db),

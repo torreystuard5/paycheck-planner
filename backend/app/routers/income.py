@@ -13,7 +13,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/income", tags=["Income Sources"])
 
 
-@router.post("/", response_model=IncomeResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=IncomeResponse, status_code=status.HTTP_201_CREATED)
 async def create_income(
     data: IncomeCreate,
     db: AsyncSession = Depends(get_db),
@@ -32,7 +32,7 @@ async def create_income(
     return income
 
 
-@router.get("/", response_model=list[IncomeResponse])
+@router.get("", response_model=list[IncomeResponse])
 async def list_income(
     active_only: bool = True,
     db: AsyncSession = Depends(get_db),

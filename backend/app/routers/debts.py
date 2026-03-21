@@ -120,7 +120,7 @@ async def get_interest_projection(
 # ── Standard CRUD (keep /{debt_id} routes AFTER analytical routes) ─
 
 
-@router.post("/", response_model=DebtResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=DebtResponse, status_code=status.HTTP_201_CREATED)
 async def create_debt(
     data: DebtCreate,
     db: AsyncSession = Depends(get_db),
@@ -160,7 +160,7 @@ async def create_debt(
     return debt
 
 
-@router.get("/", response_model=list[DebtResponse])
+@router.get("", response_model=list[DebtResponse])
 async def list_debts(
     active_only: bool = True,
     db: AsyncSession = Depends(get_db),

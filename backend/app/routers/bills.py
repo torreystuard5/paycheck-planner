@@ -14,7 +14,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/bills", tags=["Bills"])
 
 
-@router.post("/", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
 async def create_bill(
     data: BillCreate,
     db: AsyncSession = Depends(get_db),
@@ -52,7 +52,7 @@ async def create_bill(
     return bill
 
 
-@router.get("/", response_model=list[BillResponse])
+@router.get("", response_model=list[BillResponse])
 async def list_bills(
     active_only: bool = True,
     db: AsyncSession = Depends(get_db),
