@@ -21,8 +21,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 def _generate_referral_code() -> str:
-    """Generate an 8-character URL-safe referral code."""
-    return secrets.token_urlsafe(6)[:8]
+    """Generate an 8-character URL-safe uppercase alphanumeric referral code."""
+    return secrets.token_urlsafe(6)[:8].upper()
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

@@ -1,4 +1,4 @@
-import os
+import secrets
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -14,12 +14,39 @@ from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/referrals", tags=["Referrals"])
 
+FALLBACK_FRONTEND_URL = "https://paydrift.netlify.app"
+
+
+async def _ensure_referral_code(user: User, db: AsyncSession) -> str:
+    """Return the user's referral code, generating one if missing."""
+    if user.referral_code:
+        return user.referral_code
+
+    for _ in range(10):
+        code = secrets.token_urlsafe(6)[:8].upper()
+        existing = await db.execute(
+            select(User.id).where(User.referral_code == code)
+        )
+        if not existing.scalar_one_or_none():
+            break
+    else:
+        code = secrets.token_urlsafe(8)[:8].upper()
+
+    user.referral_code = code
+    db.add(user)
+    await db.flush()
+    await db.refresh(user)
+    return user.referral_code
+
 
 @router.get("/me", response_model=ReferralInfoResponse)
 async def get_referral_info(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Ensure the user has a referral code (backfill for pre-existing users)
+    referral_code = await _ensure_referral_code(current_user, db)
+
     # Count referred users
     referred_count_result = await db.execute(
         select(func.count()).select_from(User).where(
@@ -46,11 +73,11 @@ async def get_referral_info(
     )
     pending_rewards = pending_result.scalar() or 0
 
-    frontend_url = settings.FRONTEND_URL.split(",")[0].strip()
-    referral_link = f"{frontend_url}/register?ref={current_user.referral_code}"
+    frontend_url = settings.FRONTEND_URL.split(",")[0].strip() or FALLBACK_FRONTEND_URL
+    referral_link = f"{frontend_url}/register?ref={referral_code}"
 
     return ReferralInfoResponse(
-        referral_code=current_user.referral_code or "",
+        referral_code=referral_code,
         referral_link=referral_link,
         total_referred_count=total_referred_count,
         total_rewards_earned=total_rewards_earned,
