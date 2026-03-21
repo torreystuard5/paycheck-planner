@@ -20,7 +20,10 @@ from app.models import (  # noqa: F401 — ensure all models are registered
 )
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
+# settings.DATABASE_URL is already normalized to postgresql+asyncpg:// by config.py
+db_url = settings.DATABASE_URL
+config.set_main_option("sqlalchemy.url", db_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
