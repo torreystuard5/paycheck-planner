@@ -214,7 +214,7 @@ export default function Savings() {
                       style={{ width: `${progress}%` }}
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1 text-right">{progress.toFixed(1)}%</p>
+                  <p className="text-xs text-gray-500 mt-1 text-right">{(isFinite(progress) ? progress : 0).toFixed(1)}%</p>
                 </div>
 
                 {goal.target_date && (

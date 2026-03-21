@@ -482,7 +482,7 @@ export default function Debts() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, '']} />
+                      <Tooltip formatter={(value) => { const n = Number(value); return [`$${(isFinite(n) ? n : 0).toFixed(2)}`, '']; }} />
                       <Area type="monotone" dataKey="total_remaining_balance" stroke="#3b82f6" fill="#93c5fd" fillOpacity={0.3} name="Balance" />
                       <Area type="monotone" dataKey="cumulative_interest" stroke="#ef4444" fill="#fca5a5" fillOpacity={0.3} name="Interest" />
                     </AreaChart>
@@ -532,7 +532,7 @@ export default function Debts() {
                         <div>
                           <div className="flex justify-between text-sm mb-1">
                             <span className="text-gray-600">Credit Utilization</span>
-                            <span className="font-medium text-gray-900">{Number(creditData.overall_utilization_pct).toFixed(1)}%</span>
+                            <span className="font-medium text-gray-900">{(isFinite(Number(creditData.overall_utilization_pct)) ? Number(creditData.overall_utilization_pct) : 0).toFixed(1)}%</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2.5">
                             <div className={`h-2.5 rounded-full ${getScoreBg(100 - Number(creditData.overall_utilization_pct))}`} style={{ width: `${Math.min(Number(creditData.overall_utilization_pct), 100)}%` }} />

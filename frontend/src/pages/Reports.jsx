@@ -5,6 +5,11 @@ import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 
+const toSafeNumber = (value) => {
+  const num = typeof value === 'number' ? value : Number(value ?? 0);
+  return isFinite(num) ? num : 0;
+};
+
 const TABS = ['Monthly Summary', 'Trends', 'Interest'];
 const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
@@ -43,9 +48,9 @@ export default function Reports() {
     const cat = bill.category || 'Other';
     const existing = acc.find((item) => item.name === cat);
     if (existing) {
-      existing.value += bill.amount || 0;
+      existing.value += toSafeNumber(bill.amount);
     } else {
-      acc.push({ name: cat, value: bill.amount || 0 });
+      acc.push({ name: cat, value: toSafeNumber(bill.amount) });
     }
     return acc;
   }, []);
@@ -55,9 +60,9 @@ export default function Reports() {
     const month = payment.paid_date.substring(0, 7);
     const existing = acc.find((item) => item.month === month);
     if (existing) {
-      existing.amount += payment.amount || 0;
+      existing.amount += toSafeNumber(payment.amount);
     } else {
-      acc.push({ month, amount: payment.amount || 0 });
+      acc.push({ month, amount: toSafeNumber(payment.amount) });
     }
     return acc;
   }, []).sort((a, b) => a.month.localeCompare(b.month));
@@ -106,13 +111,13 @@ export default function Reports() {
                     cy="50%"
                     outerRadius={100}
                     dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name} ${(toSafeNumber(percent) * 100).toFixed(0)}%`}
                   >
                     {categoryData.map((_, idx) => (
                       <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Amount']} />
+                  <Tooltip formatter={(value) => [`$${toSafeNumber(value).toFixed(2)}`, 'Amount']} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -123,7 +128,7 @@ export default function Reports() {
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                       <span className="text-gray-700">{cat.name}</span>
                     </div>
-                    <span className="font-medium text-gray-900">${cat.value.toFixed(2)}</span>
+                    <span className="font-medium text-gray-900">${toSafeNumber(cat.value).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
@@ -143,7 +148,7 @@ export default function Reports() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Amount']} />
+                <Tooltip formatter={(value) => [`$${toSafeNumber(value).toFixed(2)}`, 'Amount']} />
                 <Legend />
                 <Bar dataKey="amount" fill="#3b82f6" name="Total Payments" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -163,7 +168,7 @@ export default function Reports() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, '']} />
+                <Tooltip formatter={(value) => [`$${toSafeNumber(value).toFixed(2)}`, '']} />
                 <Legend />
                 <Area type="monotone" dataKey="total_remaining_balance" stroke="#3b82f6" fill="#93c5fd" fillOpacity={0.3} name="Balance" />
                 <Area type="monotone" dataKey="cumulative_interest" stroke="#ef4444" fill="#fca5a5" fillOpacity={0.3} name="Interest" />

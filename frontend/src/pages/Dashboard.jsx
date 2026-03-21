@@ -212,7 +212,7 @@ export default function Dashboard() {
                   <div className="mt-3">
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-600">Credit Utilization</span>
-                      <span className="text-gray-900">{Number(creditScore.overall_utilization_pct).toFixed(1)}%</span>
+                      <span className="text-gray-900">{(isFinite(Number(creditScore.overall_utilization_pct)) ? Number(creditScore.overall_utilization_pct) : 0).toFixed(1)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
