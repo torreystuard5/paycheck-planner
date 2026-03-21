@@ -13,6 +13,7 @@ import {
   X,
   Wallet,
   Users,
+  MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -28,6 +29,7 @@ const links = [
   { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
+  { to: '/admin/tickets', label: 'Support Tickets', icon: MessageSquare },
 ];
 
 export default function Sidebar({ open, onClose }) {

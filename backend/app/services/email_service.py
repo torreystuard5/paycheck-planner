@@ -14,6 +14,13 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL", "spsoftwaresolutionsllc@gmail.com")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+# Support-specific SMTP overrides (fall back to main SMTP settings)
+SUPPORT_SMTP_HOST = os.getenv("SUPPORT_SMTP_HOST", SMTP_HOST)
+SUPPORT_SMTP_PORT = int(os.getenv("SUPPORT_SMTP_PORT", str(SMTP_PORT)))
+SUPPORT_SMTP_USER = os.getenv("SUPPORT_SMTP_USER", SMTP_USER)
+SUPPORT_SMTP_PASSWORD = os.getenv("SUPPORT_SMTP_PASSWORD", SMTP_PASSWORD)
+SUPPORT_NOTIFICATION_EMAIL = os.getenv("SUPPORT_NOTIFICATION_EMAIL", SUPPORT_EMAIL)
+
 
 def _get_mail_config() -> ConnectionConfig | None:
     if not SMTP_USER or not SMTP_PASSWORD:
@@ -36,10 +43,22 @@ async def send_support_email(
     subject: str, message: str, user_email: str, user_name: str
 ) -> bool:
     try:
-        conf = _get_mail_config()
-        if conf is None:
+        if not SUPPORT_SMTP_USER or not SUPPORT_SMTP_PASSWORD:
+            logger.warning("Support SMTP credentials not configured — email sending disabled")
             return False
+        conf = ConnectionConfig(
+            MAIL_USERNAME=SUPPORT_SMTP_USER,
+            MAIL_PASSWORD=SUPPORT_SMTP_PASSWORD,
+            MAIL_FROM=SUPPORT_SMTP_USER,
+            MAIL_PORT=SUPPORT_SMTP_PORT,
+            MAIL_SERVER=SUPPORT_SMTP_HOST,
+            MAIL_STARTTLS=True,
+            MAIL_SSL_TLS=False,
+            USE_CREDENTIALS=True,
+            VALIDATE_CERTS=True,
+        )
 
+        now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
         html_body = f"""
         <h2>New Support Request</h2>
         <p><strong>From:</strong> {user_name} ({user_email})</p>
@@ -47,12 +66,12 @@ async def send_support_email(
         <p><strong>Message:</strong></p>
         <p>{message}</p>
         <hr>
-        <p><small>Sent at {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</small></p>
+        <p><small>Sent at {now_str}</small></p>
         """
 
         msg = MessageSchema(
-            subject=f"[PayDrift Support] {subject}",
-            recipients=[SUPPORT_EMAIL],
+            subject=f"New PayDrift support request: {subject}",
+            recipients=[SUPPORT_NOTIFICATION_EMAIL],
             body=html_body,
             subtype=MessageType.html,
             reply_to=[user_email],

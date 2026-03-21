@@ -16,6 +16,7 @@ import Support from './pages/Support';
 import Supporter from './pages/Supporter';
 import Household from './pages/Household';
 import Income from './pages/Income';
+import AdminTickets from './pages/AdminTickets';
 import NotFound from './pages/NotFound';
 import TermsOfService from './pages/legal/TermsOfService';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="supporter" element={<Supporter />} />
             <Route path="household" element={<Household />} />
             <Route path="income" element={<Income />} />
+            <Route path="admin/tickets" element={<AdminTickets />} />
           </Route>
 
           {/* 404 */}

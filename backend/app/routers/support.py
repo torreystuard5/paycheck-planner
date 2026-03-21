@@ -1,47 +1,59 @@
 import logging
-from datetime import datetime
-from uuid import UUID
+from typing import Optional
 
-from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.support_ticket import SupportTicket
 from app.models.user import User
+from app.schemas.support import SupportTicketCreate, SupportTicketRead
 from app.services.email_service import send_support_email
-from app.utils.security import get_current_user
+from app.utils.security import get_current_user, decode_token
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/support", tags=["Support"])
 
 
-class SupportTicketCreate(BaseModel):
-    subject: str = Field(..., min_length=1, max_length=200)
-    message: str = Field(..., min_length=1)
+async def get_optional_user(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """Extract user from token if present, otherwise return None."""
+    if not authorization:
+        return None
+    try:
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            return None
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            return None
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        from uuid import UUID as PyUUID
+        result = await db.execute(select(User).where(User.id == PyUUID(user_id)))
+        user = result.scalar_one_or_none()
+        if user and user.is_active:
+            return user
+    except Exception:
+        pass
+    return None
 
 
-class SupportTicketResponse(BaseModel):
-    id: UUID
-    user_id: UUID
-    subject: str
-    message: str
-    status: str
-    created_at: datetime
-    email_sent: bool = False
-
-    model_config = {"from_attributes": True}
-
-
-@router.post("", response_model=SupportTicketResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=SupportTicketRead, status_code=status.HTTP_201_CREATED)
 async def create_support_ticket(
     data: SupportTicketCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     ticket = SupportTicket(
-        user_id=current_user.id,
+        user_id=current_user.id if current_user else None,
+        name=data.name,
+        email=data.email,
         subject=data.subject,
         message=data.message,
     )
@@ -49,24 +61,27 @@ async def create_support_ticket(
     await db.flush()
     await db.refresh(ticket)
 
-    email_sent = False
     try:
-        email_sent = await send_support_email(
+        await send_support_email(
             subject=data.subject,
             message=data.message,
-            user_email=current_user.email,
-            user_name=f"{current_user.first_name} {current_user.last_name}",
+            user_email=data.email,
+            user_name=data.name,
         )
     except Exception:
         logger.exception("Email send failed for support ticket %s", ticket.id)
 
-    response = SupportTicketResponse(
-        id=ticket.id,
-        user_id=ticket.user_id,
-        subject=ticket.subject,
-        message=ticket.message,
-        status=ticket.status,
-        created_at=ticket.created_at,
-        email_sent=email_sent,
+    return ticket
+
+
+@router.get("", response_model=list[SupportTicketRead])
+async def list_support_tickets(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(SupportTicket)
+        .order_by(SupportTicket.created_at.desc())
+        .limit(100)
     )
-    return response
+    return result.scalars().all()

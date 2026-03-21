@@ -50,6 +50,8 @@ export default function Support() {
     setSent(false);
     try {
       await api.post('/api/v1/support', {
+        name: form.name,
+        email: form.email,
         subject: form.subject,
         message: form.message,
       });
