@@ -151,10 +151,10 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">12. Governing Law</h2>
               <p>
-                These Terms shall be governed by and construed in accordance with the laws of the State of Georgia, United
+                These Terms shall be governed by and construed in accordance with the laws of the State of Tennessee, United
                 States of America, without regard to its conflict of law provisions. Any legal action or proceeding arising
                 out of or relating to these Terms or the Service shall be brought exclusively in the state or federal courts
-                located in the State of Georgia, and you consent to the personal jurisdiction of such courts.
+                located in the State of Tennessee, and you consent to the personal jurisdiction of such courts.
               </p>
             </section>
 
