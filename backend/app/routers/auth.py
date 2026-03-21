@@ -1,8 +1,11 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.referral import ReferralReward
 from app.models.user import User
 from app.schemas.user import TokenResponse, UserCreate, UserDateFormatUpdate, UserLogin, UserResponse, UserUpdate
 from app.utils.security import (
@@ -17,6 +20,11 @@ from app.utils.security import (
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+def _generate_referral_code() -> str:
+    """Generate an 8-character URL-safe referral code."""
+    return secrets.token_urlsafe(6)[:8]
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -25,6 +33,28 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
         )
+
+    # Look up referrer if ref code provided
+    referrer = None
+    if user_data.ref:
+        ref_result = await db.execute(
+            select(User).where(User.referral_code == user_data.ref)
+        )
+        referrer = ref_result.scalar_one_or_none()
+        # Prevent self-referral by email
+        if referrer and referrer.email == user_data.email:
+            referrer = None
+
+    # Generate a unique referral code
+    for _ in range(10):
+        code = _generate_referral_code()
+        existing = await db.execute(
+            select(User).where(User.referral_code == code)
+        )
+        if not existing.scalar_one_or_none():
+            break
+    else:
+        code = secrets.token_urlsafe(8)[:8]
 
     user = User(
         email=user_data.email,
@@ -35,10 +65,22 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         next_pay_date=user_data.next_pay_date,
         net_pay_amount=user_data.net_pay_amount,
         currency=user_data.currency,
+        referral_code=code,
+        referred_by_user_id=referrer.id if referrer else None,
     )
     db.add(user)
     await db.flush()
     await db.refresh(user)
+
+    # Create ReferralReward row if referred
+    if referrer:
+        reward = ReferralReward(
+            referrer_id=referrer.id,
+            referred_user_id=user.id,
+            reward_status="pending",
+        )
+        db.add(reward)
+        await db.flush()
 
     token_data = {"sub": str(user.id)}
     return TokenResponse(

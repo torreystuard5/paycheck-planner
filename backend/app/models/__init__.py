@@ -10,6 +10,7 @@ from app.models.support_ticket import SupportTicket
 from app.models.support_ticket_reply import SupportTicketReply
 from app.models.activity_log import ActivityLog
 from app.models.supporter import Supporter
+from app.models.referral import ReferralReward
 
 __all__ = [
     "PromoCode",
@@ -25,4 +26,5 @@ __all__ = [
     "SupportTicketReply",
     "ActivityLog",
     "Supporter",
+    "ReferralReward",
 ]

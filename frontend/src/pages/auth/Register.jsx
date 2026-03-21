@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Wallet, Loader2 } from 'lucide-react';
 
@@ -15,6 +15,8 @@ const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD'];
 export default function Register() {
   const navigate = useNavigate();
   const { register } = useAuth();
+  const [searchParams] = useSearchParams();
+  const refCode = searchParams.get('ref') || '';
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
@@ -54,6 +56,9 @@ export default function Register() {
     try {
       const { confirm_password, ...payload } = form;
       payload.net_pay_amount = parseFloat(payload.net_pay_amount);
+      if (refCode) {
+        payload.ref = refCode;
+      }
       await register(payload);
       navigate('/dashboard', { replace: true });
     } catch (err) {
@@ -92,6 +97,12 @@ export default function Register() {
           {error && (
             <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
               {error}
+            </div>
+          )}
+
+          {refCode && (
+            <div className="mb-4 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">
+              You were referred by a friend! You&apos;ll get your first month free when you subscribe.
             </div>
           )}
 

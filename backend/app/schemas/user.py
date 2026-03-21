@@ -14,6 +14,7 @@ class UserCreate(BaseModel):
     next_pay_date: date
     net_pay_amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
     currency: str = Field(default="USD", max_length=3)
+    ref: str | None = Field(default=None, max_length=10)
 
 
 class UserLogin(BaseModel):

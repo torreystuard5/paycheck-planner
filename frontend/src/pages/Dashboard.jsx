@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift } from 'lucide-react';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -142,6 +143,22 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      <Link
+        to="/refer"
+        className="block bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:border-blue-300 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-50 p-2 rounded-lg">
+            <Gift className="w-5 h-5 text-blue-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900">Get free months &mdash; Refer a friend</p>
+            <p className="text-xs text-gray-500">Share PayDrift and earn rewards for each friend who subscribes</p>
+          </div>
+          <span className="text-blue-600 text-sm font-medium shrink-0">&rarr;</span>
+        </div>
+      </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

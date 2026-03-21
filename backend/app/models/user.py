@@ -52,6 +52,22 @@ class User(Base):
     )
     is_supporter: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 
+    # Referral fields
+    referral_code: Mapped[str | None] = mapped_column(
+        String(10), unique=True, nullable=True
+    )
+    referred_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    free_month_credits: Mapped[int] = mapped_column(
+        Integer, server_default=text("0")
+    )
+    next_billing_date: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Relationships
     household = relationship("Household", back_populates="members", foreign_keys=[household_id])
     income_sources = relationship("IncomeSource", back_populates="user", cascade="all, delete-orphan")
@@ -60,3 +76,13 @@ class User(Base):
     savings_goals = relationship("SavingsGoal", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
     support_tickets = relationship("SupportTicket", back_populates="user", cascade="all, delete-orphan")
+    referrals_given = relationship(
+        "ReferralReward",
+        back_populates="referrer",
+        foreign_keys="[ReferralReward.referrer_id]",
+    )
+    referrals_received = relationship(
+        "ReferralReward",
+        back_populates="referred_user",
+        foreign_keys="[ReferralReward.referred_user_id]",
+    )
