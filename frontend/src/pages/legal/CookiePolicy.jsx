@@ -7,7 +7,7 @@ export default function CookiePolicy() {
       <div className="max-w-4xl mx-auto">
         <Link to="/" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-500 mb-6">
           <ArrowLeft className="w-4 h-4" />
-          Back to Paycheck Planner
+          Back to PayDrift
         </Link>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8">
@@ -17,7 +17,7 @@ export default function CookiePolicy() {
           <div className="space-y-8 text-gray-700 leading-relaxed">
             <p>
               This Cookie Policy explains how SP Software Solutions LLC (&ldquo;Company,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo;
-              or &ldquo;our&rdquo;) uses cookies and similar technologies when you use Paycheck Planner (the &ldquo;Service&rdquo;).
+              or &ldquo;our&rdquo;) uses cookies and similar technologies when you use PayDrift (the &ldquo;Service&rdquo;).
               This policy should be read together with our <Link to="/privacy" className="text-blue-600 hover:text-blue-500">Privacy Policy</Link>.
             </p>
 
@@ -87,7 +87,7 @@ export default function CookiePolicy() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">4. Analytics Cookies</h2>
               <p>
-                At the current time, Paycheck Planner does not use any analytics cookies or third-party tracking scripts. We
+                At the current time, PayDrift does not use any analytics cookies or third-party tracking scripts. We
                 do not use services such as Google Analytics, Mixpanel, or similar tools. If we introduce analytics cookies in
                 the future, we will update this Cookie Policy and notify you in advance. Any future analytics implementation
                 will be designed to respect your privacy and will offer an opt-out mechanism where required by law.
@@ -97,7 +97,7 @@ export default function CookiePolicy() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">5. Third-Party Cookies</h2>
               <p>
-                If you visit Ko-fi through a link in the Service to make a donation or support Paycheck Planner, Ko-fi may
+                If you visit Ko-fi through a link in the Service to make a donation or support PayDrift, Ko-fi may
                 set its own cookies on your device. These third-party cookies are governed by Ko-fi&apos;s own cookie and privacy
                 policies, and we have no control over them. We encourage you to review Ko-fi&apos;s policies before making a
                 donation. Other than Ko-fi links, the Service does not embed third-party content or widgets that would set

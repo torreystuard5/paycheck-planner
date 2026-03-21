@@ -7,7 +7,7 @@ export default function PrivacyPolicy() {
       <div className="max-w-4xl mx-auto">
         <Link to="/" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-500 mb-6">
           <ArrowLeft className="w-4 h-4" />
-          Back to Paycheck Planner
+          Back to PayDrift
         </Link>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8">
@@ -17,7 +17,7 @@ export default function PrivacyPolicy() {
           <div className="space-y-8 text-gray-700 leading-relaxed">
             <p>
               SP Software Solutions LLC (&ldquo;Company,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;) operates
-              Paycheck Planner (the &ldquo;Service&rdquo;). This Privacy Policy explains how we collect, use, disclose, and
+              PayDrift (the &ldquo;Service&rdquo;). This Privacy Policy explains how we collect, use, disclose, and
               safeguard your information when you use our Service. Please read this policy carefully. By using the Service,
               you consent to the data practices described in this policy.
             </p>
@@ -85,7 +85,7 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">4. Ko-fi Donations</h2>
               <p>
-                If you choose to support Paycheck Planner through Ko-fi, your donation is processed entirely by Ko-fi. We
+                If you choose to support PayDrift through Ko-fi, your donation is processed entirely by Ko-fi. We
                 receive your email address and donation amount from Ko-fi to credit your account with any applicable supporter
                 benefits (such as early access features or promo codes). We do not receive or store your payment card details.
                 Ko-fi&apos;s processing of your payment is governed by Ko-fi&apos;s own Privacy Policy and Terms of Service, which we

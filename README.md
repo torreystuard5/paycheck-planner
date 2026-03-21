@@ -1,4 +1,4 @@
-# Paycheck Planner
+# PayDrift
 
 Budgeting SaaS for paycheck-based financial planning. Allocate every dollar of your paycheck to bills, debts, and savings goals before you get paid.
 

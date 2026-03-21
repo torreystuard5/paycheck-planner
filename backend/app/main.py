@@ -5,7 +5,7 @@ from app.config import settings
 from app.routers import auth, bills, debts, households, import_export, income, paycheck_engine, payments, reminders, savings, support, supporter
 
 app = FastAPI(
-    title="Paycheck Planner API",
+    title="PayDrift API",
     version="1.0.0",
     description="Budgeting SaaS for paycheck-based financial planning",
 )

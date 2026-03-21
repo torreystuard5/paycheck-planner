@@ -157,7 +157,7 @@ async def export_all(
     return StreamingResponse(
         buf,
         media_type=EXCEL_CONTENT_TYPE,
-        headers={"Content-Disposition": 'attachment; filename="paycheck_planner_export.xlsx"'},
+        headers={"Content-Disposition": 'attachment; filename="paydrift_export.xlsx"'},
     )
 
 

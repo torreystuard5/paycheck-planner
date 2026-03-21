@@ -7,7 +7,7 @@ export default function Disclaimer() {
       <div className="max-w-4xl mx-auto">
         <Link to="/" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-500 mb-6">
           <ArrowLeft className="w-4 h-4" />
-          Back to Paycheck Planner
+          Back to PayDrift
         </Link>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8">
@@ -16,7 +16,7 @@ export default function Disclaimer() {
 
           <div className="space-y-8 text-gray-700 leading-relaxed">
             <p>
-              The following disclaimer applies to your use of Paycheck Planner, operated by SP Software Solutions LLC
+              The following disclaimer applies to your use of PayDrift, operated by SP Software Solutions LLC
               (&ldquo;Company,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;). Please read this
               disclaimer carefully before using the Service.
             </p>
@@ -24,7 +24,7 @@ export default function Disclaimer() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">1. Not Financial Advice</h2>
               <p>
-                Paycheck Planner is a budgeting, planning, and organizational tool designed to help you manage your personal
+                PayDrift is a budgeting, planning, and organizational tool designed to help you manage your personal
                 finances. The Service is NOT a financial advisor, investment advisor, tax advisor, or credit counselor.
                 Nothing in the Service — including paycheck allocation plans, debt payoff projections, credit efficiency
                 scores, savings calculations, or any other output — should be construed as financial, investment, tax, or
@@ -52,12 +52,12 @@ export default function Disclaimer() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">3. Early Access</h2>
               <p>
-                Paycheck Planner is currently in an early access phase. This means the Service is under active development
+                PayDrift is currently in an early access phase. This means the Service is under active development
                 and has not yet reached its final production-ready state. During this period, you may encounter software bugs,
                 incomplete features, user interface changes, data processing errors, or temporary service interruptions.
                 While we take reasonable steps to ensure reliability, we cannot guarantee uninterrupted or error-free
                 operation of the Service during early access. Features may be added, modified, or removed without prior notice.
-                We strongly recommend maintaining your own records and not relying solely on Paycheck Planner as your only
+                We strongly recommend maintaining your own records and not relying solely on PayDrift as your only
                 source of financial tracking during this period.
               </p>
             </section>
@@ -65,7 +65,7 @@ export default function Disclaimer() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">4. No Guarantee of Results</h2>
               <p>
-                Using Paycheck Planner does not guarantee any particular financial outcomes. The Service provides tools to
+                Using PayDrift does not guarantee any particular financial outcomes. The Service provides tools to
                 help you organize and plan your finances, but the results you achieve depend entirely on your own financial
                 decisions, discipline, circumstances, and factors outside our control. Past financial performance or projected
                 outcomes shown within the Service are not indicative of future results. SP Software Solutions LLC makes no

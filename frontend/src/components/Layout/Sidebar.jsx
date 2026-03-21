@@ -45,7 +45,7 @@ export default function Sidebar({ open, onClose }) {
       <div className="flex items-center justify-between px-4 py-5 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <Wallet className="h-7 w-7 text-blue-600" />
-          <span className="text-lg font-bold text-gray-900">Paycheck Planner</span>
+          <span className="text-lg font-bold text-gray-900">PayDrift</span>
         </div>
         <button
           onClick={onClose}

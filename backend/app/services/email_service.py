@@ -51,7 +51,7 @@ async def send_support_email(
         """
 
         msg = MessageSchema(
-            subject=f"[Paycheck Planner Support] {subject}",
+            subject=f"[PayDrift Support] {subject}",
             recipients=[SUPPORT_EMAIL],
             body=html_body,
             subtype=MessageType.html,
@@ -91,7 +91,7 @@ async def send_bill_reminder(
         </ul>
         <p><a href="{FRONTEND_URL}/dashboard">View your budget</a></p>
         <hr>
-        <p><small>Paycheck Planner — Keeping your finances on track</small></p>
+        <p><small>PayDrift — Keeping your finances on track</small></p>
         """
 
         msg = MessageSchema(
@@ -134,7 +134,7 @@ async def send_debt_reminder(
         </ul>
         <p><a href="{FRONTEND_URL}/dashboard">View your budget</a></p>
         <hr>
-        <p><small>Paycheck Planner — Keeping your finances on track</small></p>
+        <p><small>PayDrift — Keeping your finances on track</small></p>
         """
 
         msg = MessageSchema(

@@ -25,7 +25,7 @@ export default function MainLayout() {
             <Menu className="h-5 w-5" />
           </button>
           <span className="ml-3 text-sm font-semibold text-gray-900">
-            Paycheck Planner
+            PayDrift
           </span>
         </div>
 

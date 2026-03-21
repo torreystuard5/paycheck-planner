@@ -80,7 +80,7 @@ export default function Register() {
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2 mb-2">
             <Wallet className="h-9 w-9 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">Paycheck Planner</span>
+            <span className="text-2xl font-bold text-gray-900">PayDrift</span>
           </div>
           <p className="text-sm text-gray-500">Create your account to get started</p>
         </div>

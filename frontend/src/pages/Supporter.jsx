@@ -62,12 +62,12 @@ export default function Supporter() {
         <div className="inline-flex items-center justify-center w-16 h-16 bg-rose-50 rounded-full mb-4">
           <Heart className="h-8 w-8 text-rose-500" />
         </div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-3">Support Paycheck Planner</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-3">Support PayDrift</h1>
         <p className="text-gray-600 max-w-xl mx-auto mb-6">
           Everything is free during early access. Donate to bank free months for when Pro launches.
         </p>
         <a
-          href="https://ko-fi.com/paycheckplanner"
+          href="https://ko-fi.com/paydrift"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold text-lg hover:from-amber-600 hover:to-orange-600 transition-all shadow-md"
@@ -125,7 +125,7 @@ export default function Supporter() {
               <CheckCircle className="h-6 w-6 text-green-600" />
               <div>
                 <p className="font-semibold text-gray-900">You're a Supporter!</p>
-                <p className="text-sm text-gray-600">Thank you for supporting Paycheck Planner.</p>
+                <p className="text-sm text-gray-600">Thank you for supporting PayDrift.</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

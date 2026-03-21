@@ -7,7 +7,7 @@ export default function TermsOfService() {
       <div className="max-w-4xl mx-auto">
         <Link to="/" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-500 mb-6">
           <ArrowLeft className="w-4 h-4" />
-          Back to Paycheck Planner
+          Back to PayDrift
         </Link>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8">
@@ -18,7 +18,7 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">1. Acceptance of Terms</h2>
               <p>
-                By accessing or using Paycheck Planner (the &ldquo;Service&rdquo;), you agree to be bound by these Terms of Service
+                By accessing or using PayDrift (the &ldquo;Service&rdquo;), you agree to be bound by these Terms of Service
                 (&ldquo;Terms&rdquo;). If you do not agree to all of these Terms, you may not access or use the Service. These Terms
                 constitute a legally binding agreement between you and SP Software Solutions LLC (&ldquo;Company,&rdquo; &ldquo;we,&rdquo;
                 &ldquo;us,&rdquo; or &ldquo;our&rdquo;). We reserve the right to update or modify these Terms at any time, and your
@@ -29,10 +29,10 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">2. Description of Service</h2>
               <p>
-                Paycheck Planner is a budgeting and financial planning tool operated by SP Software Solutions LLC. The Service
+                PayDrift is a budgeting and financial planning tool operated by SP Software Solutions LLC. The Service
                 allows users to track income, bills, debts, and savings goals, generate paycheck allocation plans, record
                 payments, and view financial reports. The Service is designed to help you organize your personal finances and
-                is provided as a planning and organizational tool only. Paycheck Planner does not provide financial advice,
+                is provided as a planning and organizational tool only. PayDrift does not provide financial advice,
                 investment recommendations, or tax guidance.
               </p>
             </section>
@@ -92,7 +92,7 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">7. Early Access Disclaimer</h2>
               <p>
-                Paycheck Planner is currently in early access. This means the Service is still under active development.
+                PayDrift is currently in early access. This means the Service is still under active development.
                 Features may be added, modified, or removed at any time without prior notice. While we strive to maintain
                 reliability, you may experience bugs, incomplete features, or service interruptions during this period. Early
                 access features, including any promotional offers or supporter benefits, are subject to change. We appreciate
