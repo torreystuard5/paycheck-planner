@@ -27,7 +27,7 @@ export default function EarlyAccessBanner() {
             Early Access — All features free!
           </span>
           <a
-            href="https://ko-fi.com/paydrift"
+            href="https://ko-fi.com/spsoftwaresolutions"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-full text-xs font-semibold transition-colors shrink-0"

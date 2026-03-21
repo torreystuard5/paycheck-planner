@@ -67,7 +67,7 @@ export default function Supporter() {
           Everything is free during early access. Donate to bank free months for when Pro launches.
         </p>
         <a
-          href="https://ko-fi.com/paydrift"
+          href="https://ko-fi.com/spsoftwaresolutions"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold text-lg hover:from-amber-600 hover:to-orange-600 transition-all shadow-md"
