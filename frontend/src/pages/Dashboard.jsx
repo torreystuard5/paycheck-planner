@@ -5,7 +5,6 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
-import StatusBadge from '../components/StatusBadge';
 import usePolling from '../hooks/usePolling';
 import { formatDate } from '../utils/dateFormat';
 
@@ -150,47 +149,46 @@ export default function Dashboard() {
             <Calendar className="w-5 h-5 text-blue-500" />
             Current Paycheck Plan
           </h2>
-          {paycheckPlan ? (
+          {paycheckPlan && Array.isArray(paycheckPlan.paychecks) && paycheckPlan.paychecks.length > 0 ? (
             <div className="space-y-3">
-              {paycheckPlan.next_paycheck_date && (
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Next Paycheck</span>
-                  <span className="font-medium text-gray-900">
-                    {formatDate(paycheckPlan.next_paycheck_date, user?.date_format)}
-                  </span>
-                </div>
-              )}
-              {paycheckPlan.net_pay != null && (
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Net Pay</span>
-                  <CurrencyDisplay amount={paycheckPlan.net_pay} className="font-medium text-gray-900" />
-                </div>
-              )}
-              {paycheckPlan.allocated_amount != null && (
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Allocated</span>
-                  <CurrencyDisplay amount={paycheckPlan.allocated_amount} className="font-medium text-gray-900" />
-                </div>
-              )}
-              {paycheckPlan.remaining_amount != null && (
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Remaining</span>
-                  <CurrencyDisplay amount={paycheckPlan.remaining_amount} className="font-medium text-green-600" />
-                </div>
-              )}
-              {Array.isArray(paycheckPlan.bills) && paycheckPlan.bills.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Allocated Bills</p>
-                  <div className="space-y-2">
-                    {paycheckPlan.bills.map((bill, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-sm">
-                        <span className="text-gray-600">{bill.name}</span>
-                        <CurrencyDisplay amount={bill.amount} className="text-gray-900" />
+              {(() => {
+                const next = paycheckPlan.paychecks[0];
+                return (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Next Paycheck</span>
+                      <span className="font-medium text-gray-900">
+                        {formatDate(next.paycheck_date, user?.date_format)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Paycheck Amount</span>
+                      <CurrencyDisplay amount={next.paycheck_amount} className="font-medium text-gray-900" />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Total Due</span>
+                      <CurrencyDisplay amount={next.total_due} className="font-medium text-gray-900" />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Remaining</span>
+                      <CurrencyDisplay amount={next.remaining} className={`font-medium ${Number(next.remaining) >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                    </div>
+                    {Array.isArray(next.assigned_items) && next.assigned_items.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Assigned Items</p>
+                        <div className="space-y-2">
+                          {next.assigned_items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-center text-sm">
+                              <span className="text-gray-600">{item.name} <span className="text-xs text-gray-400">({item.item_type})</span></span>
+                              <CurrencyDisplay amount={item.amount} className="text-gray-900" />
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    )}
+                  </>
+                );
+              })()}
             </div>
           ) : (
             <p className="text-gray-500 text-sm">No paycheck plan configured yet.</p>
@@ -206,20 +204,20 @@ export default function Dashboard() {
             {creditScore && (
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-600">Credit Efficiency Score</span>
-                  <span className="text-2xl font-bold text-gray-900">{creditScore.score ?? '--'}</span>
+                  <span className="text-gray-600">Credit Utilization</span>
+                  <span className="text-2xl font-bold text-gray-900">{creditScore.overall_utilization_pct != null ? `${creditScore.overall_utilization_pct}%` : '--'}</span>
                 </div>
-                {creditScore.rating && <StatusBadge status={creditScore.rating} />}
-                {creditScore.utilization_ratio != null && (
+                {creditScore.overall_tier && <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 capitalize">{creditScore.overall_tier}</span>}
+                {creditScore.overall_utilization_pct != null && (
                   <div className="mt-3">
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-600">Credit Utilization</span>
-                      <span className="text-gray-900">{(creditScore.utilization_ratio * 100).toFixed(1)}%</span>
+                      <span className="text-gray-900">{Number(creditScore.overall_utilization_pct).toFixed(1)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-blue-500 h-2 rounded-full"
-                        style={{ width: `${Math.min(creditScore.utilization_ratio * 100, 100)}%` }}
+                        style={{ width: `${Math.min(Number(creditScore.overall_utilization_pct), 100)}%` }}
                       />
                     </div>
                   </div>
@@ -250,22 +248,23 @@ export default function Dashboard() {
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-2 text-gray-600 font-medium">Date</th>
-                  <th className="text-left py-2 text-gray-600 font-medium">Description</th>
+                  <th className="text-left py-2 text-gray-600 font-medium">Type</th>
                   <th className="text-right py-2 text-gray-600 font-medium">Amount</th>
-                  <th className="text-left py-2 text-gray-600 font-medium">Method</th>
                 </tr>
               </thead>
               <tbody>
                 {recentPayments.map((payment) => (
                   <tr key={payment.id} className="border-b border-gray-100">
                     <td className="py-3 text-gray-900">
-                      {payment.payment_date ? formatDate(payment.payment_date, user?.date_format) : '--'}
+                      {payment.paid_date ? formatDate(payment.paid_date, user?.date_format) : '--'}
                     </td>
-                    <td className="py-3 text-gray-700">{payment.notes || payment.bill_name || payment.debt_name || 'Payment'}</td>
+                    <td className="py-3 text-gray-700">
+                      {payment.bill_id ? 'Bill' : payment.debt_id ? 'Debt' : 'Payment'}
+                      {payment.is_extra && <span className="ml-1 text-xs text-purple-600">(extra)</span>}
+                    </td>
                     <td className="py-3 text-right">
                       <CurrencyDisplay amount={payment.amount} className="font-medium text-gray-900" />
                     </td>
-                    <td className="py-3 text-gray-600">{payment.payment_method || '--'}</td>
                   </tr>
                 ))}
               </tbody>

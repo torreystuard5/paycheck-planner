@@ -21,6 +21,7 @@ const links = [
   { to: '/bills', label: 'Bills', icon: Receipt },
   { to: '/debts', label: 'Debts', icon: CreditCard },
   { to: '/savings', label: 'Savings', icon: PiggyBank },
+  { to: '/income', label: 'Income', icon: Wallet },
   { to: '/payments', label: 'Payments', icon: DollarSign },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/household', label: 'Household', icon: Users },

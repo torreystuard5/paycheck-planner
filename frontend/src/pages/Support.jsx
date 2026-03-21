@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Send, Loader2, ChevronDown, ChevronUp, HelpCircle, MessageSquare, BookOpen, AlertCircle } from 'lucide-react';
+import { Send, Loader2, ChevronDown, ChevronUp, HelpCircle, MessageSquare, AlertCircle } from 'lucide-react';
 import api from '../services/api';
 
 const FAQ_ITEMS = [
@@ -29,11 +29,6 @@ const FAQ_ITEMS = [
   },
 ];
 
-const RESOURCES = [
-  { title: 'Getting Started Guide', description: 'Learn the basics of setting up your account and managing your finances.' },
-  { title: 'Budget Planning Tips', description: 'Best practices for creating and maintaining a personal budget.' },
-  { title: 'Debt Payoff Strategies', description: 'Compare different approaches to becoming debt-free faster.' },
-];
 
 export default function Support() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
@@ -111,20 +106,6 @@ export default function Support() {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-green-500" />
-              Help Resources
-            </h2>
-            <div className="space-y-3">
-              {RESOURCES.map((resource, idx) => (
-                <div key={idx} className="p-3 rounded-lg border border-gray-100 hover:border-blue-200 hover:bg-blue-50 transition-colors cursor-pointer">
-                  <h3 className="text-sm font-medium text-gray-900">{resource.title}</h3>
-                  <p className="text-xs text-gray-500 mt-1">{resource.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

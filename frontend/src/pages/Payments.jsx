@@ -9,7 +9,7 @@ import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import usePolling from '../hooks/usePolling';
 
-const PAYMENT_METHODS = ['bank_transfer', 'credit_card', 'debit_card', 'cash', 'check', 'other'];
+// Payment form uses backend fields: bill_id/debt_id (UUID), amount, paid_date, pay_period_date, is_extra
 
 export default function Payments() {
   const { user } = useAuth();
@@ -26,10 +26,9 @@ export default function Payments() {
     bill_id: '',
     debt_id: '',
     amount: '',
-    payment_date: new Date().toISOString().split('T')[0],
-    payment_method: 'bank_transfer',
-    confirmation_number: '',
-    notes: '',
+    paid_date: new Date().toISOString().split('T')[0],
+    pay_period_date: new Date().toISOString().split('T')[0],
+    is_extra: false,
   });
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -109,23 +108,21 @@ export default function Payments() {
     try {
       const payload = {
         amount: parseFloat(form.amount),
-        payment_date: form.payment_date,
-        payment_method: form.payment_method,
-        confirmation_number: form.confirmation_number || undefined,
-        notes: form.notes || undefined,
+        paid_date: form.paid_date,
+        pay_period_date: form.pay_period_date,
+        is_extra: form.is_extra,
       };
-      if (form.bill_id) payload.bill_id = parseInt(form.bill_id, 10);
-      if (form.debt_id) payload.debt_id = parseInt(form.debt_id, 10);
+      if (form.bill_id) payload.bill_id = form.bill_id;
+      if (form.debt_id) payload.debt_id = form.debt_id;
       await api.post('/api/v1/payments', payload);
       setShowModal(false);
       setForm({
         bill_id: '',
         debt_id: '',
         amount: '',
-        payment_date: new Date().toISOString().split('T')[0],
-        payment_method: 'bank_transfer',
-        confirmation_number: '',
-        notes: '',
+        paid_date: new Date().toISOString().split('T')[0],
+        pay_period_date: new Date().toISOString().split('T')[0],
+        is_extra: false,
       });
       fetchAll();
     } catch {
@@ -231,29 +228,37 @@ export default function Payments() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Date</th>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Description</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Paid Date</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Pay Period</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">For</th>
                   <th className="text-right px-6 py-3 text-gray-600 font-medium">Amount</th>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Method</th>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Confirmation</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Type</th>
                 </tr>
               </thead>
               <tbody>
-                {payments.map((payment) => (
-                  <tr key={payment.id} className="border-t border-gray-100 hover:bg-gray-50">
-                    <td className="px-6 py-4 text-gray-900">
-                      {payment.payment_date ? format(parseISO(payment.payment_date), 'MMM d, yyyy') : '--'}
-                    </td>
-                    <td className="px-6 py-4 text-gray-700">
-                      {payment.notes || payment.bill_name || payment.debt_name || 'Payment'}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <CurrencyDisplay amount={payment.amount} className="font-medium text-gray-900" />
-                    </td>
-                    <td className="px-6 py-4 text-gray-600 capitalize">{payment.payment_method?.replace(/_/g, ' ') || '--'}</td>
-                    <td className="px-6 py-4 text-gray-500">{payment.confirmation_number || '--'}</td>
-                  </tr>
-                ))}
+                {payments.map((payment) => {
+                  const billName = payment.bill_id ? bills.find(b => b.id === payment.bill_id)?.name : null;
+                  const debtName = payment.debt_id ? debts.find(d => d.id === payment.debt_id)?.name : null;
+                  return (
+                    <tr key={payment.id} className="border-t border-gray-100 hover:bg-gray-50">
+                      <td className="px-6 py-4 text-gray-900">
+                        {payment.paid_date ? format(parseISO(payment.paid_date), 'MMM d, yyyy') : '--'}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {payment.pay_period_date ? format(parseISO(payment.pay_period_date), 'MMM d, yyyy') : '--'}
+                      </td>
+                      <td className="px-6 py-4 text-gray-700">
+                        {billName || debtName || 'Payment'}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <CurrencyDisplay amount={payment.amount} className="font-medium text-gray-900" />
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {payment.is_extra ? <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">Extra</span> : <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">Regular</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -295,25 +300,19 @@ export default function Payments() {
               <input type="number" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-              <input type="date" required value={form.payment_date} onChange={(e) => setForm({ ...form, payment_date: e.target.value })} className={inputClass} />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Paid Date</label>
+              <input type="date" required value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} className={inputClass} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Method</label>
-              <select value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} className={inputClass}>
-                {PAYMENT_METHODS.map((m) => <option key={m} value={m} className="capitalize">{m.replace(/_/g, ' ')}</option>)}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Pay Period Date</label>
+              <input type="date" required value={form.pay_period_date} onChange={(e) => setForm({ ...form, pay_period_date: e.target.value })} className={inputClass} />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirmation #</label>
-              <input type="text" value={form.confirmation_number} onChange={(e) => setForm({ ...form, confirmation_number: e.target.value })} className={inputClass} placeholder="Optional" />
+            <div className="flex items-center gap-2 pt-6">
+              <input type="checkbox" id="is_extra" checked={form.is_extra} onChange={(e) => setForm({ ...form, is_extra: e.target.checked })} className="rounded border-gray-300" />
+              <label htmlFor="is_extra" className="text-sm text-gray-700">Extra payment</label>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-            <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputClass} placeholder="Optional notes" />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>

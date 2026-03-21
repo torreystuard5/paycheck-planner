@@ -15,6 +15,7 @@ import Settings from './pages/Settings';
 import Support from './pages/Support';
 import Supporter from './pages/Supporter';
 import Household from './pages/Household';
+import Income from './pages/Income';
 import NotFound from './pages/NotFound';
 import TermsOfService from './pages/legal/TermsOfService';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="support" element={<Support />} />
             <Route path="supporter" element={<Supporter />} />
             <Route path="household" element={<Household />} />
+            <Route path="income" element={<Income />} />
           </Route>
 
           {/* 404 */}

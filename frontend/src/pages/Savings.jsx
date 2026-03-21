@@ -10,8 +10,8 @@ import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import usePolling from '../hooks/usePolling';
 
-const defaultGoalForm = { name: '', target_amount: '', current_amount: '', target_date: '', priority: 'medium' };
-const defaultContribForm = { goal_id: '', amount: '', date: '', note: '' };
+const defaultGoalForm = { name: '', target_amount: '', current_amount: '', target_date: '' };
+const defaultContribForm = { goal_id: '', amount: '', pay_period_date: '' };
 
 export default function Savings() {
   const { user } = useAuth();
@@ -34,12 +34,18 @@ export default function Savings() {
 
   const pollData = useCallback(async () => {
     try {
-      const [goalsRes, contribRes] = await Promise.allSettled([
-        api.get('/api/v1/savings/goals'),
-        api.get('/api/v1/savings/contributions'),
-      ]);
-      if (goalsRes.status === 'fulfilled') setGoals(Array.isArray(goalsRes.value.data) ? goalsRes.value.data : []);
-      if (contribRes.status === 'fulfilled') setContributions(Array.isArray(contribRes.value.data) ? contribRes.value.data : []);
+      const goalsRes = await api.get('/api/v1/savings/goals');
+      const goalsData = Array.isArray(goalsRes.data) ? goalsRes.data : [];
+      setGoals(goalsData);
+      const allContribs = [];
+      for (const goal of goalsData.slice(0, 10)) {
+        try {
+          const cRes = await api.get(`/api/v1/savings/contributions/${goal.id}`);
+          const items = Array.isArray(cRes.data) ? cRes.data : [];
+          allContribs.push(...items.map(c => ({ ...c, goal_name: goal.name })));
+        } catch { /* skip */ }
+      }
+      setContributions(allContribs);
       setLastUpdated(new Date());
     } catch {
       // silent poll
@@ -52,12 +58,18 @@ export default function Savings() {
     setLoading(true);
     setError(null);
     try {
-      const [goalsRes, contribRes] = await Promise.allSettled([
-        api.get('/api/v1/savings/goals'),
-        api.get('/api/v1/savings/contributions'),
-      ]);
-      if (goalsRes.status === 'fulfilled') setGoals(Array.isArray(goalsRes.value.data) ? goalsRes.value.data : []);
-      if (contribRes.status === 'fulfilled') setContributions(Array.isArray(contribRes.value.data) ? contribRes.value.data : []);
+      const goalsRes = await api.get('/api/v1/savings/goals');
+      const goalsData = Array.isArray(goalsRes.data) ? goalsRes.data : [];
+      setGoals(goalsData);
+      const allContribs = [];
+      for (const goal of goalsData.slice(0, 10)) {
+        try {
+          const cRes = await api.get(`/api/v1/savings/contributions/${goal.id}`);
+          const items = Array.isArray(cRes.data) ? cRes.data : [];
+          allContribs.push(...items.map(c => ({ ...c, goal_name: goal.name })));
+        } catch { /* skip */ }
+      }
+      setContributions(allContribs);
     } catch {
       setError('Failed to load savings data.');
     } finally {
@@ -73,13 +85,12 @@ export default function Savings() {
       target_amount: goal.target_amount || '',
       current_amount: goal.current_amount || '',
       target_date: goal.target_date || '',
-      priority: goal.priority || 'medium',
     });
     setShowGoalModal(true);
   };
 
   const openAddContrib = () => {
-    setContribForm({ ...defaultContribForm, date: new Date().toISOString().split('T')[0] });
+    setContribForm({ ...defaultContribForm, pay_period_date: new Date().toISOString().split('T')[0] });
     setShowContribModal(true);
   };
 
@@ -88,10 +99,13 @@ export default function Savings() {
     setSaving(true);
     try {
       const payload = {
-        ...goalForm,
+        name: goalForm.name,
         target_amount: parseFloat(goalForm.target_amount),
-        current_amount: parseFloat(goalForm.current_amount || 0),
+        target_date: goalForm.target_date || null,
       };
+      if (editingGoal) {
+        payload.current_amount = parseFloat(goalForm.current_amount || 0);
+      }
       if (editingGoal) {
         await api.put(`/api/v1/savings/goals/${editingGoal.id}`, payload);
       } else {
@@ -111,9 +125,9 @@ export default function Savings() {
     setSaving(true);
     try {
       await api.post('/api/v1/savings/contributions', {
-        ...contribForm,
-        goal_id: parseInt(contribForm.goal_id, 10),
+        goal_id: contribForm.goal_id,
         amount: parseFloat(contribForm.amount),
+        pay_period_date: contribForm.pay_period_date,
       });
       setShowContribModal(false);
       fetchData();
@@ -176,7 +190,6 @@ export default function Savings() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold text-gray-900">{goal.name}</h3>
-                    <p className="text-xs text-gray-500 capitalize">Priority: {goal.priority || 'medium'}</p>
                   </div>
                   <div className="flex gap-1">
                     <button onClick={() => openEditGoal(goal)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
@@ -224,18 +237,16 @@ export default function Savings() {
                   <th className="text-left py-2 text-gray-600 font-medium">Date</th>
                   <th className="text-left py-2 text-gray-600 font-medium">Goal</th>
                   <th className="text-right py-2 text-gray-600 font-medium">Amount</th>
-                  <th className="text-left py-2 text-gray-600 font-medium">Note</th>
                 </tr>
               </thead>
               <tbody>
                 {contributions.map((c) => (
                   <tr key={c.id} className="border-b border-gray-100">
-                    <td className="py-3 text-gray-900">{c.date ? format(parseISO(c.date), 'MMM d, yyyy') : '--'}</td>
+                    <td className="py-3 text-gray-900">{c.pay_period_date ? format(parseISO(c.pay_period_date), 'MMM d, yyyy') : '--'}</td>
                     <td className="py-3 text-gray-700">{c.goal_name || goals.find(g => g.id === c.goal_id)?.name || '--'}</td>
                     <td className="py-3 text-right">
                       <CurrencyDisplay amount={c.amount} className="font-medium text-green-600" />
                     </td>
-                    <td className="py-3 text-gray-500">{c.note || '--'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -260,19 +271,9 @@ export default function Savings() {
               <input type="number" step="0.01" value={goalForm.current_amount} onChange={(e) => setGoalForm({ ...goalForm, current_amount: e.target.value })} className={inputClass} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
-              <input type="date" value={goalForm.target_date} onChange={(e) => setGoalForm({ ...goalForm, target_date: e.target.value })} className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-              <select value={goalForm.priority} onChange={(e) => setGoalForm({ ...goalForm, priority: e.target.value })} className={inputClass}>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
+            <input type="date" value={goalForm.target_date} onChange={(e) => setGoalForm({ ...goalForm, target_date: e.target.value })} className={inputClass} />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowGoalModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
@@ -298,13 +299,9 @@ export default function Savings() {
               <input type="number" step="0.01" required value={contribForm.amount} onChange={(e) => setContribForm({ ...contribForm, amount: e.target.value })} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-              <input type="date" required value={contribForm.date} onChange={(e) => setContribForm({ ...contribForm, date: e.target.value })} className={inputClass} />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Pay Period Date</label>
+              <input type="date" required value={contribForm.pay_period_date} onChange={(e) => setContribForm({ ...contribForm, pay_period_date: e.target.value })} className={inputClass} />
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
-            <input type="text" value={contribForm.note} onChange={(e) => setContribForm({ ...contribForm, note: e.target.value })} className={inputClass} placeholder="Optional note" />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowContribModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>

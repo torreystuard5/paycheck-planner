@@ -7,21 +7,20 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
-import StatusBadge from '../components/StatusBadge';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import usePolling from '../hooks/usePolling';
 
 const CATEGORIES = ['Housing', 'Utilities', 'Insurance', 'Transportation', 'Subscriptions', 'Food', 'Healthcare', 'Other'];
-const FREQUENCIES = ['monthly', 'weekly', 'biweekly', 'quarterly', 'annually'];
+const FREQUENCIES = ['monthly', 'weekly', 'biweekly', 'semi_monthly', 'quarterly', 'annual'];
 
 const defaultForm = {
   name: '',
   amount: '',
   due_day: '',
   category: 'Other',
-  is_recurring: true,
   frequency: 'monthly',
-  status: 'upcoming',
+  auto_pay: false,
+  reminder_days: 3,
 };
 
 export default function Bills() {
@@ -96,9 +95,9 @@ export default function Bills() {
       amount: bill.amount || '',
       due_day: bill.due_day || '',
       category: bill.category || 'Other',
-      is_recurring: bill.is_recurring ?? true,
       frequency: bill.frequency || 'monthly',
-      status: bill.status || 'upcoming',
+      auto_pay: bill.auto_pay ?? false,
+      reminder_days: bill.reminder_days ?? 3,
     });
     setShowModal(true);
   };
@@ -108,9 +107,13 @@ export default function Bills() {
     setSaving(true);
     try {
       const payload = {
-        ...form,
+        name: form.name,
         amount: parseFloat(form.amount),
         due_day: parseInt(form.due_day, 10),
+        category: form.category || null,
+        frequency: form.frequency,
+        auto_pay: form.auto_pay,
+        reminder_days: parseInt(form.reminder_days, 10) || 3,
       };
       if (editingBill) {
         await api.put(`/api/v1/bills/${editingBill.id}`, payload);
@@ -280,11 +283,9 @@ export default function Bills() {
               <CurrencyDisplay amount={bill.amount} className="text-xl font-bold text-gray-900 block mb-2" />
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500">Due day {bill.due_day || '--'}</span>
-                {bill.status && <StatusBadge status={bill.status} />}
+                {bill.auto_pay && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Auto-pay</span>}
               </div>
-              {bill.is_recurring && (
-                <p className="text-xs text-gray-400 mt-2 capitalize">{bill.frequency || 'monthly'}</p>
-              )}
+              <p className="text-xs text-gray-400 mt-2 capitalize">{bill.frequency || 'monthly'}</p>
             </div>
           ))}
         </div>
@@ -316,22 +317,17 @@ export default function Bills() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
               <select value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value })} className={inputClass}>
-                {FREQUENCIES.map((f) => <option key={f} value={f} className="capitalize">{f}</option>)}
+                {FREQUENCIES.map((f) => <option key={f} value={f} className="capitalize">{f.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inputClass}>
-                <option value="upcoming">Upcoming</option>
-                <option value="due_soon">Due Soon</option>
-                <option value="paid">Paid</option>
-                <option value="overdue">Overdue</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Days</label>
+              <input type="number" min="0" max="30" value={form.reminder_days} onChange={(e) => setForm({ ...form, reminder_days: e.target.value })} className={inputClass} />
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <input type="checkbox" id="is_recurring" checked={form.is_recurring} onChange={(e) => setForm({ ...form, is_recurring: e.target.checked })} className="rounded border-gray-300" />
-            <label htmlFor="is_recurring" className="text-sm text-gray-700">Recurring bill</label>
+            <input type="checkbox" id="auto_pay" checked={form.auto_pay} onChange={(e) => setForm({ ...form, auto_pay: e.target.checked })} className="rounded border-gray-300" />
+            <label htmlFor="auto_pay" className="text-sm text-gray-700">Auto-pay enabled</label>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
