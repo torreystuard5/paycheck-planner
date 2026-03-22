@@ -11,6 +11,7 @@ from app.models.support_ticket import SupportTicket
 from app.models.user import User
 from app.schemas.admin import (
     AdminStatsResponse,
+    AdminToggleRequest,
     AdminUserDetailResponse,
     AdminUserListResponse,
     AdminUserSummary,
@@ -150,4 +151,44 @@ async def get_admin_user_detail(
             detail="User not found",
         )
 
+    return AdminUserDetailResponse.model_validate(user)
+
+
+@router.patch("/users/{user_id}/admin", response_model=AdminUserDetailResponse)
+async def toggle_admin(
+    user_id: UUID,
+    body: AdminToggleRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Lockout protection: cannot remove the only admin
+    if not body.is_admin and user.id == current_user.id:
+        admin_count = (
+            await db.execute(
+                select(func.count(User.id)).where(User.is_admin.is_(True))
+            )
+        ).scalar() or 0
+        if admin_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot remove the only admin",
+            )
+
+    user.is_admin = body.is_admin
+    await db.flush()
+    await db.refresh(user)
     return AdminUserDetailResponse.model_validate(user)

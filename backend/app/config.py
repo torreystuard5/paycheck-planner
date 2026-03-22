@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     SUPPORT_EMAIL: str = "spsoftwaresolutionsllc@gmail.com"
     FRONTEND_URL: str = "http://localhost:5173"
     INITIAL_ADMIN_EMAIL: str | None = None
+    NOTES_ENCRYPTION_KEY: str | None = None
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

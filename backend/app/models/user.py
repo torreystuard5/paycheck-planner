@@ -32,6 +32,11 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     is_admin: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+
+    # Secure vault fields
+    pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notes_lock_timeout: Mapped[int] = mapped_column(Integer, server_default=text("5"))
+
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

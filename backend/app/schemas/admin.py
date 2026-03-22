@@ -42,6 +42,10 @@ class AdminUserListResponse(BaseModel):
     per_page: int
 
 
+class AdminToggleRequest(BaseModel):
+    is_admin: bool
+
+
 class AdminUserDetailResponse(BaseModel):
     id: UUID
     email: str

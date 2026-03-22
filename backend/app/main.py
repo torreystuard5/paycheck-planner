@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import async_session
 from app.models.user import User
-from app.routers import admin, auth, billing, bills, debts, households, import_export, income, paycheck_engine, payments, referrals, reminders, savings, support, supporter
+from app.routers import admin, auth, billing, bills, debts, households, import_export, income, notes, passwords, paycheck_engine, payments, referrals, reminders, savings, support, supporter
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,8 @@ app.include_router(import_export.router, prefix="/api/v1")
 app.include_router(supporter.router, prefix="/api/v1")
 app.include_router(referrals.router, prefix="/api/v1")
 app.include_router(billing.router, prefix="/api/v1")
+app.include_router(notes.router, prefix="/api/v1")
+app.include_router(passwords.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 
 
