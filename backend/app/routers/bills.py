@@ -356,9 +356,24 @@ async def update_bill(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
-    )
+    # Allow editing if user owns the bill OR is in the same household
+    if current_user.household_id:
+        result = await db.execute(
+            select(Bill).where(
+                Bill.id == bill_id,
+                or_(
+                    Bill.user_id == current_user.id,
+                    Bill.household_id == current_user.household_id,
+                ),
+            ).options(selectinload(Bill.assigned_member))
+        )
+    else:
+        result = await db.execute(
+            select(Bill).where(
+                Bill.id == bill_id,
+                Bill.user_id == current_user.id,
+            ).options(selectinload(Bill.assigned_member))
+        )
     bill = result.scalar_one_or_none()
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
@@ -412,9 +427,20 @@ async def delete_bill(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
-    )
+    if current_user.household_id:
+        result = await db.execute(
+            select(Bill).where(
+                Bill.id == bill_id,
+                or_(
+                    Bill.user_id == current_user.id,
+                    Bill.household_id == current_user.household_id,
+                ),
+            )
+        )
+    else:
+        result = await db.execute(
+            select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+        )
     bill = result.scalar_one_or_none()
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
@@ -445,10 +471,21 @@ async def pay_bill(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
-            .options(selectinload(Bill.assigned_member))
-    )
+    if current_user.household_id:
+        result = await db.execute(
+            select(Bill).where(
+                Bill.id == bill_id,
+                or_(
+                    Bill.user_id == current_user.id,
+                    Bill.household_id == current_user.household_id,
+                ),
+            ).options(selectinload(Bill.assigned_member))
+        )
+    else:
+        result = await db.execute(
+            select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+                .options(selectinload(Bill.assigned_member))
+        )
     bill = result.scalar_one_or_none()
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
@@ -483,10 +520,21 @@ async def unpay_bill(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
-            .options(selectinload(Bill.assigned_member))
-    )
+    if current_user.household_id:
+        result = await db.execute(
+            select(Bill).where(
+                Bill.id == bill_id,
+                or_(
+                    Bill.user_id == current_user.id,
+                    Bill.household_id == current_user.household_id,
+                ),
+            ).options(selectinload(Bill.assigned_member))
+        )
+    else:
+        result = await db.execute(
+            select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+                .options(selectinload(Bill.assigned_member))
+        )
     bill = result.scalar_one_or_none()
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")

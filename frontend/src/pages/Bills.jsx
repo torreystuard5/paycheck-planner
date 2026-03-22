@@ -188,8 +188,9 @@ export default function Bills() {
       setPayTarget(null);
       fetchBills();
       showSuccess('Bill marked as paid!');
-    } catch {
-      setError('Failed to mark bill as paid.');
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(detail ? `Failed to mark bill as paid: ${detail}` : 'Failed to mark bill as paid.');
     } finally {
       setPaying(false);
     }
@@ -200,8 +201,9 @@ export default function Bills() {
       await api.patch(`/api/v1/bills/${bill.id}/unpay`);
       fetchBills();
       showSuccess('Bill marked as unpaid.');
-    } catch {
-      setError('Failed to undo payment.');
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(detail ? `Failed to undo payment: ${detail}` : 'Failed to undo payment.');
     }
   };
 
@@ -229,8 +231,9 @@ export default function Bills() {
       }
       setShowModal(false);
       fetchBills();
-    } catch {
-      setError('Failed to save bill.');
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(detail ? `Failed to save bill: ${detail}` : 'Failed to save bill.');
     } finally {
       setSaving(false);
     }
@@ -242,8 +245,9 @@ export default function Bills() {
       await api.delete(`/api/v1/bills/${deleteTarget.id}`);
       setDeleteTarget(null);
       fetchBills();
-    } catch {
-      setError('Failed to delete bill.');
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(detail ? `Failed to delete bill: ${detail}` : 'Failed to delete bill.');
     }
   };
 
@@ -330,8 +334,9 @@ export default function Bills() {
       setShowMemberPayModal(false);
       showSuccess('Payment recorded!');
       fetchBills();
-    } catch {
-      setError('Failed to record member payment.');
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(detail ? `Failed to record member payment: ${detail}` : 'Failed to record member payment.');
     } finally {
       setMemberPaying(false);
     }
