@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Gift,
   Shield,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -28,6 +29,7 @@ const links = [
   { to: '/payments', label: 'Payments', icon: DollarSign },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/household', label: 'Household', icon: Users },
+  { to: '/vault', label: 'Secure Vault', icon: Lock },
   { to: '/refer', label: 'Refer a Friend', icon: Gift },
   { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
   { to: '/settings', label: 'Settings', icon: Settings },

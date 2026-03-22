@@ -40,7 +40,9 @@ export const test = base.extend<{ errorCollector: ErrorCollector }>({
         !url.includes('manifest') &&
         !url.includes('/api/v1/households/me') &&  // 404 if no household
         !url.includes('/api/v1/households/activity') &&
-        !url.includes('/api/v1/paycheck-plan')  // may 404 if no plan
+        !url.includes('/api/v1/paycheck-plan') &&  // may 404 if no plan
+        !url.includes('/api/v1/notes/pin/verify') &&  // expected 401/429 for PIN flow
+        !url.includes('/api/v1/notes/pin/setup')  // expected errors during PIN detection
       ) {
         networkErrors.push({
           url,

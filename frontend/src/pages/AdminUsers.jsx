@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react';
+import { Users, ChevronLeft, ChevronRight, ShieldCheck, Loader2 } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
 
 export default function AdminUsers() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -17,6 +19,8 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailUser, setDetailUser] = useState(null);
+  const [togglingAdmin, setTogglingAdmin] = useState(null);
+  const [toggleError, setToggleError] = useState(null);
 
   useEffect(() => {
     fetchUsers();
@@ -59,6 +63,41 @@ export default function AdminUsers() {
   const closeDetail = () => {
     setSelectedUser(null);
     setDetailUser(null);
+  };
+
+  const toggleAdmin = async (e, userId, currentIsAdmin) => {
+    e.stopPropagation();
+    setToggleError(null);
+
+    // Lockout protection: don't allow removing the only admin
+    if (currentIsAdmin) {
+      const adminCount = users.filter((u) => u.is_admin).length;
+      if (adminCount <= 1 && userId === currentUser?.id) {
+        setToggleError('Cannot remove the only admin');
+        setTimeout(() => setToggleError(null), 3000);
+        return;
+      }
+    }
+
+    const newVal = !currentIsAdmin;
+    // Optimistic update
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, is_admin: newVal } : u))
+    );
+    setTogglingAdmin(userId);
+
+    try {
+      await api.patch(`/api/v1/admin/users/${userId}/admin`, { is_admin: newVal });
+    } catch (err) {
+      // Revert on error
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, is_admin: currentIsAdmin } : u))
+      );
+      setToggleError(err.response?.data?.detail || 'Failed to update admin status.');
+      setTimeout(() => setToggleError(null), 3000);
+    } finally {
+      setTogglingAdmin(null);
+    }
   };
 
   if (loading && page === 1) return <LoadingSpinner />;
@@ -141,6 +180,12 @@ export default function AdminUsers() {
         <span className="text-sm text-gray-500 ml-1">({total})</span>
       </div>
 
+      {toggleError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+          {toggleError}
+        </div>
+      )}
+
       {users.length === 0 ? (
         <EmptyState
           icon={Users}
@@ -179,16 +224,25 @@ export default function AdminUsers() {
                         {formatDate(u.created_at)}
                       </td>
                       <td className="px-4 py-3">
-                        {u.is_admin ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                            <ShieldCheck className="h-3 w-3" />
-                            Yes
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-                            No
-                          </span>
-                        )}
+                        <button
+                          onClick={(e) => toggleAdmin(e, u.id, u.is_admin)}
+                          disabled={togglingAdmin === u.id}
+                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                          style={{ backgroundColor: u.is_admin ? '#2563eb' : '#d1d5db' }}
+                          role="switch"
+                          aria-checked={u.is_admin}
+                          aria-label={`Toggle admin for ${u.email}`}
+                          data-testid={`admin-toggle-${u.id}`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              u.is_admin ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                          {togglingAdmin === u.id && (
+                            <Loader2 className="absolute -right-6 h-4 w-4 animate-spin text-blue-600" />
+                          )}
+                        </button>
                       </td>
                     </tr>
                   ))}
