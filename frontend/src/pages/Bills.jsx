@@ -491,6 +491,9 @@ export default function Bills() {
                     )}
                   </div>
                   <p className="text-sm text-gray-500">{bill.category || 'Uncategorized'}</p>
+                  {bill.assigned_member_name && (
+                    <p className="text-xs text-blue-600">Assigned to {bill.assigned_member_name}</p>
+                  )}
                 </div>
                 <div className="flex gap-1">
                   {bill.is_household_bill && (

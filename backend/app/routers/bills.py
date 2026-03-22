@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.bill import Bill
@@ -113,6 +114,10 @@ def _compute_next_due_date(bill: Bill) -> date | None:
 
 def _bill_to_response(bill: Bill) -> BillResponse:
     """Convert a Bill ORM object to BillResponse with is_household_bill flag."""
+    assigned_name = None
+    if bill.assigned_member_id and bill.assigned_member:
+        m = bill.assigned_member
+        assigned_name = f"{m.first_name or ''} {m.last_name or ''}".strip() or m.email
     return BillResponse(
         id=bill.id,
         user_id=bill.user_id,
@@ -130,6 +135,7 @@ def _bill_to_response(bill: Bill) -> BillResponse:
         is_active=bill.is_active,
         payment_mode=bill.payment_mode,
         assigned_member_id=bill.assigned_member_id,
+        assigned_member_name=assigned_name,
         day_of_week=bill.day_of_week,
         start_date=bill.start_date,
         next_due_date=_compute_next_due_date(bill),
@@ -163,6 +169,12 @@ async def create_bill(
     db.add(bill)
     await db.flush()
     await db.refresh(bill)
+    # Eagerly load assigned_member for response
+    if bill.assigned_member_id:
+        result = await db.execute(
+            select(Bill).where(Bill.id == bill.id).options(selectinload(Bill.assigned_member))
+        )
+        bill = result.scalar_one()
 
     if current_user.household_id:
         try:
@@ -203,7 +215,7 @@ async def list_bills(
         query = query.where(Bill.is_paid.is_(True))
     elif status == "unpaid":
         query = query.where(Bill.is_paid.is_(False))
-    query = query.order_by(Bill.due_day)
+    query = query.options(selectinload(Bill.assigned_member)).order_by(Bill.due_day)
     result = await db.execute(query)
     bills = result.scalars().all()
     return [_bill_to_response(b) for b in bills]
@@ -216,7 +228,7 @@ async def get_bill(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Bill).where(Bill.id == bill_id)
+        select(Bill).where(Bill.id == bill_id).options(selectinload(Bill.assigned_member))
     )
     bill = result.scalar_one_or_none()
     if not bill:
@@ -236,7 +248,7 @@ async def get_bill_breakdown_endpoint(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Bill).where(Bill.id == bill_id)
+        select(Bill).where(Bill.id == bill_id).options(selectinload(Bill.assigned_member))
     )
     bill = result.scalar_one_or_none()
     if not bill:
@@ -272,7 +284,7 @@ async def create_member_payment(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Bill).where(Bill.id == bill_id)
+        select(Bill).where(Bill.id == bill_id).options(selectinload(Bill.assigned_member))
     )
     bill = result.scalar_one_or_none()
     if not bill:
@@ -352,11 +364,30 @@ async def update_bill(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
     update_data = data.model_dump(exclude_unset=True)
+
+    # Validate assigned_member_id belongs to the same household
+    if "assigned_member_id" in update_data and update_data["assigned_member_id"] is not None:
+        member_result = await db.execute(
+            select(User).where(User.id == update_data["assigned_member_id"])
+        )
+        member = member_result.scalar_one_or_none()
+        if not member or (
+            current_user.household_id and member.household_id != current_user.household_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Assigned member must belong to the same household",
+            )
+
     for field, value in update_data.items():
         setattr(bill, field, value)
 
     await db.flush()
-    await db.refresh(bill)
+    # Re-fetch with eager loading for assigned_member
+    result = await db.execute(
+        select(Bill).where(Bill.id == bill.id).options(selectinload(Bill.assigned_member))
+    )
+    bill = result.scalar_one()
 
     if current_user.household_id:
         try:
@@ -416,6 +447,7 @@ async def pay_bill(
 ):
     result = await db.execute(
         select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+            .options(selectinload(Bill.assigned_member))
     )
     bill = result.scalar_one_or_none()
     if not bill:
@@ -453,6 +485,7 @@ async def unpay_bill(
 ):
     result = await db.execute(
         select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+            .options(selectinload(Bill.assigned_member))
     )
     bill = result.scalar_one_or_none()
     if not bill:

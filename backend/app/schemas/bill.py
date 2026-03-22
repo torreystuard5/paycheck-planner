@@ -67,6 +67,7 @@ class BillResponse(BaseModel):
     is_active: bool = True
     payment_mode: Optional[str] = "single"
     assigned_member_id: Optional[UUID] = None
+    assigned_member_name: Optional[str] = None
     day_of_week: Optional[int] = None
     start_date: Optional[date] = None
     next_due_date: Optional[date] = None
