@@ -18,6 +18,7 @@ import Household from './pages/Household';
 import Income from './pages/Income';
 import AdminTickets from './pages/AdminTickets';
 import AdminStats from './pages/AdminStats';
+import AdminUsers from './pages/AdminUsers';
 import Refer from './pages/Refer';
 import NotFound from './pages/NotFound';
 import TermsOfService from './pages/legal/TermsOfService';
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="refer" element={<Refer />} />
             <Route path="admin/tickets" element={<AdminTickets />} />
             <Route path="admin/stats" element={<AdminStats />} />
+            <Route path="admin/users" element={<AdminUsers />} />
           </Route>
 
           {/* 404 */}

@@ -33,6 +33,7 @@ const links = [
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
   { to: '/admin/tickets', label: 'Support Tickets', icon: MessageSquare },
+  { to: '/admin/users', label: 'Users', icon: Users, adminOnly: true },
   { to: '/admin/stats', label: 'Admin Stats', icon: Shield, adminOnly: true },
 ];
 
