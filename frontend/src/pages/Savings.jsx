@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import DateInput from '../components/DateInput';
 import usePolling from '../hooks/usePolling';
 
 const defaultGoalForm = { name: '', target_amount: '', current_amount: '', target_date: '' };
@@ -275,7 +276,7 @@ export default function Savings() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
-            <input type="date" value={goalForm.target_date} onChange={(e) => setGoalForm({ ...goalForm, target_date: e.target.value })} className={inputClass} />
+            <DateInput value={goalForm.target_date} onChange={(e) => setGoalForm({ ...goalForm, target_date: e.target.value })} className={inputClass} />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowGoalModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
@@ -302,7 +303,7 @@ export default function Savings() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pay Period Date</label>
-              <input type="date" required value={contribForm.pay_period_date} onChange={(e) => setContribForm({ ...contribForm, pay_period_date: e.target.value })} className={inputClass} />
+              <DateInput required value={contribForm.pay_period_date} onChange={(e) => setContribForm({ ...contribForm, pay_period_date: e.target.value })} className={inputClass} />
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">

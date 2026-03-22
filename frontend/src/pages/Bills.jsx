@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import DateInput from '../components/DateInput';
 import usePolling from '../hooks/usePolling';
 
 const CATEGORIES = ['Housing', 'Utilities', 'Insurance', 'Transportation', 'Subscriptions', 'Food', 'Healthcare', 'Other'];
@@ -413,8 +414,7 @@ export default function Bills() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Paid Date</label>
-            <input
-              type="date"
+            <DateInput
               required
               value={payForm.paid_date}
               onChange={(e) => setPayForm({ ...payForm, paid_date: e.target.value })}

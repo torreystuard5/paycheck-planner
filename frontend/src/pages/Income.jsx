@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import DateInput from '../components/DateInput';
 
 const FREQUENCIES = ['weekly', 'biweekly', 'semi_monthly', 'monthly'];
 
@@ -187,7 +188,7 @@ export default function Income() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Next Pay Date</label>
-            <input type="date" required value={form.next_pay_date} onChange={(e) => setForm({ ...form, next_pay_date: e.target.value })} className={inputClass} />
+            <DateInput required value={form.next_pay_date} onChange={(e) => setForm({ ...form, next_pay_date: e.target.value })} className={inputClass} />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>

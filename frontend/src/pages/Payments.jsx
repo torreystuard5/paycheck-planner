@@ -7,6 +7,7 @@ import Modal from '../components/Modal';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import DateInput from '../components/DateInput';
 import usePolling from '../hooks/usePolling';
 
 // Payment form uses backend fields: bill_id/debt_id (UUID), amount, paid_date, pay_period_date, is_extra
@@ -199,16 +200,14 @@ export default function Payments() {
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="date"
+        <DateInput
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
           aria-label="Start date"
         />
         <span className="text-sm text-gray-400">to</span>
-        <input
-          type="date"
+        <DateInput
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
@@ -301,13 +300,13 @@ export default function Payments() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Paid Date</label>
-              <input type="date" required value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} className={inputClass} />
+              <DateInput required value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} className={inputClass} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pay Period Date</label>
-              <input type="date" required value={form.pay_period_date} onChange={(e) => setForm({ ...form, pay_period_date: e.target.value })} className={inputClass} />
+              <DateInput required value={form.pay_period_date} onChange={(e) => setForm({ ...form, pay_period_date: e.target.value })} className={inputClass} />
             </div>
             <div className="flex items-center gap-2 pt-6">
               <input type="checkbox" id="is_extra" checked={form.is_extra} onChange={(e) => setForm({ ...form, is_extra: e.target.checked })} className="rounded border-gray-300" />
