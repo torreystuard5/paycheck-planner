@@ -34,6 +34,7 @@ class UserResponse(BaseModel):
     net_pay_amount: Decimal
     household_id: UUID | None
     is_active: bool
+    is_admin: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -15,6 +15,7 @@ import {
   Users,
   MessageSquare,
   Gift,
+  Shield,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -32,6 +33,7 @@ const links = [
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
   { to: '/admin/tickets', label: 'Support Tickets', icon: MessageSquare },
+  { to: '/admin/stats', label: 'Admin Stats', icon: Shield, adminOnly: true },
 ];
 
 export default function Sidebar({ open, onClose }) {
@@ -63,7 +65,7 @@ export default function Sidebar({ open, onClose }) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {links.map(({ to, label, icon: Icon, warm }) => (
+        {links.filter(l => !l.adminOnly || user?.is_admin).map(({ to, label, icon: Icon, warm }) => (
           <NavLink
             key={to}
             to={to}

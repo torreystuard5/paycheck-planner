@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, billing, bills, debts, households, import_export, income, paycheck_engine, payments, referrals, reminders, savings, support, supporter
+from app.routers import admin, auth, billing, bills, debts, households, import_export, income, paycheck_engine, payments, referrals, reminders, savings, support, supporter
 
 app = FastAPI(
     title="PayDrift API",
@@ -40,6 +40,7 @@ app.include_router(import_export.router, prefix="/api/v1")
 app.include_router(supporter.router, prefix="/api/v1")
 app.include_router(referrals.router, prefix="/api/v1")
 app.include_router(billing.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
 
 
 @app.get("/health")
