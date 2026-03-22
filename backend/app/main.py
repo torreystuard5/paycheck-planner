@@ -49,8 +49,12 @@ TOS_EXEMPT_PATHS = {
 
 @app.middleware("http")
 async def tos_check_middleware(request: Request, call_next):
+    # Skip preflight / non-mutating CORS requests
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     path = request.url.path
-    if path in TOS_EXEMPT_PATHS:
+    if path in TOS_EXEMPT_PATHS or path.startswith("/docs") or path.startswith("/redoc") or path == "/openapi.json":
         return await call_next(request)
 
     auth_header = request.headers.get("authorization", "")
@@ -70,9 +74,13 @@ async def tos_check_middleware(request: Request, call_next):
     if not user_id:
         return await call_next(request)
 
-    async with async_session() as session:
-        result = await session.execute(select(User.tos_version).where(User.id == user_id))
-        tos_version = result.scalar_one_or_none()
+    try:
+        async with async_session() as session:
+            result = await session.execute(select(User.tos_version).where(User.id == user_id))
+            tos_version = result.scalar_one_or_none()
+    except Exception:
+        logger.exception("TOS middleware DB lookup failed — allowing request through")
+        return await call_next(request)
 
     if tos_version is None or tos_version < settings.CURRENT_TOS_VERSION:
         return JSONResponse(

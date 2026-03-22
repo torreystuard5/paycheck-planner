@@ -13,7 +13,15 @@ if not _key:
     )
     _key = Fernet.generate_key().decode()
 
-_fernet = Fernet(_key if isinstance(_key, bytes) else _key.encode())
+try:
+    _fernet = Fernet(_key if isinstance(_key, bytes) else _key.encode())
+except Exception:
+    logger.exception(
+        "Invalid NOTES_ENCRYPTION_KEY — falling back to generated key. "
+        "Existing encrypted data will be unreadable until the correct key is restored!"
+    )
+    _key = Fernet.generate_key().decode()
+    _fernet = Fernet(_key.encode())
 
 
 def encrypt(plaintext: str | None) -> str | None:
