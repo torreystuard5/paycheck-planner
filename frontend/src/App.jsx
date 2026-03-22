@@ -30,12 +30,10 @@ import Disclaimer from './pages/legal/Disclaimer';
 
 function TosGate({ children }) {
   const { tosRequired, clearTosRequired } = useAuth();
-  return (
-    <>
-      {tosRequired && <TosOverlay version={tosRequired} onAccepted={clearTosRequired} />}
-      {children}
-    </>
-  );
+  if (tosRequired) {
+    return <TosOverlay version={tosRequired} onAccepted={clearTosRequired} />;
+  }
+  return children;
 }
 
 export default function App() {

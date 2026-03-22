@@ -25,6 +25,8 @@ export function AuthProvider({ children }) {
     } catch {
       // ignore
     }
+    // Force a re-render of all pages so they refetch data
+    window.location.href = '/dashboard';
   };
 
   useEffect(() => {
@@ -35,6 +37,10 @@ export function AuthProvider({ children }) {
         .then(({ data }) => {
           setUser(data);
           setIsAuthenticated(true);
+          // Check if user needs to accept TOS
+          if (!data.tos_version || data.tos_version < '1.0') {
+            setTosRequired('1.0');
+          }
         })
         .catch(() => {
           localStorage.removeItem('access_token');
