@@ -1,8 +1,15 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
 
 from app.config import settings
+from app.database import async_session
+from app.models.user import User
 from app.routers import admin, auth, billing, bills, debts, households, import_export, income, paycheck_engine, payments, referrals, reminders, savings, support, supporter
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="PayDrift API",
@@ -41,6 +48,35 @@ app.include_router(supporter.router, prefix="/api/v1")
 app.include_router(referrals.router, prefix="/api/v1")
 app.include_router(billing.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+
+
+@app.on_event("startup")
+async def promote_initial_admin():
+    email = settings.INITIAL_ADMIN_EMAIL
+    if not email:
+        logger.info("INITIAL_ADMIN_EMAIL not set, skipping admin promotion")
+        return
+
+    try:
+        async with async_session() as session:
+            result = await session.execute(
+                select(User).where(User.email == email)
+            )
+            user = result.scalar_one_or_none()
+
+            if user is None:
+                logger.warning("INITIAL_ADMIN_EMAIL %s not found in database, skipping", email)
+                return
+
+            if user.is_admin:
+                logger.info("User %s is already an admin, no action needed", email)
+                return
+
+            user.is_admin = True
+            await session.commit()
+            logger.info("Promoted %s to admin", email)
+    except Exception:
+        logger.exception("Error promoting initial admin %s", email)
 
 
 @app.get("/health")
