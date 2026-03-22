@@ -1,25 +1,25 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
 
 class SupportTicketCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    email: str = Field(..., min_length=1, max_length=320)
-    subject: str = Field(..., min_length=1, max_length=255)
-    message: str = Field(..., min_length=1)
+    name: Optional[str] = Field(default=None, max_length=200)
+    email: Optional[str] = Field(default=None, max_length=320)
+    subject: Optional[str] = Field(default=None, max_length=255)
+    message: Optional[str] = None
 
 
 class SupportTicketRead(BaseModel):
     id: UUID
-    user_id: UUID | None = None
-    name: str
-    email: str
-    subject: str
-    message: str
-    status: str
+    user_id: Optional[UUID] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    subject: Optional[str] = None
+    message: Optional[str] = None
+    status: str = "open"
     created_at: datetime
     reply_count: int = 0
 
@@ -34,14 +34,14 @@ class SupportTicketRead(BaseModel):
 
 
 class TicketReplyCreate(BaseModel):
-    message: str = Field(..., min_length=1)
+    message: Optional[str] = None
 
 
 class TicketReplyRead(BaseModel):
     id: UUID
     ticket_id: UUID
-    reply_message: str
-    replied_by: UUID | None = None
+    reply_message: Optional[str] = None
+    replied_by: Optional[UUID] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

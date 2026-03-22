@@ -100,8 +100,8 @@ export default function Savings() {
     setSaving(true);
     try {
       const payload = {
-        name: goalForm.name,
-        target_amount: parseFloat(goalForm.target_amount),
+        name: goalForm.name || null,
+        target_amount: goalForm.target_amount ? parseFloat(goalForm.target_amount) : null,
         target_date: goalForm.target_date || null,
       };
       if (editingGoal) {
@@ -127,8 +127,8 @@ export default function Savings() {
     try {
       await api.post('/api/v1/savings/contributions', {
         goal_id: contribForm.goal_id,
-        amount: parseFloat(contribForm.amount),
-        pay_period_date: contribForm.pay_period_date,
+        amount: contribForm.amount ? parseFloat(contribForm.amount) : null,
+        pay_period_date: contribForm.pay_period_date || null,
       });
       setShowContribModal(false);
       fetchData();
@@ -262,12 +262,12 @@ export default function Savings() {
         <form onSubmit={handleGoalSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input type="text" required value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} className={inputClass} />
+            <input type="text" value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} className={inputClass} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Target Amount</label>
-              <input type="number" step="0.01" required value={goalForm.target_amount} onChange={(e) => setGoalForm({ ...goalForm, target_amount: e.target.value })} className={inputClass} />
+              <input type="number" step="0.01" value={goalForm.target_amount} onChange={(e) => setGoalForm({ ...goalForm, target_amount: e.target.value })} className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Current Amount</label>
@@ -291,7 +291,7 @@ export default function Savings() {
         <form onSubmit={handleContribSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Goal</label>
-            <select required value={contribForm.goal_id} onChange={(e) => setContribForm({ ...contribForm, goal_id: e.target.value })} className={inputClass}>
+            <select value={contribForm.goal_id} onChange={(e) => setContribForm({ ...contribForm, goal_id: e.target.value })} className={inputClass}>
               <option value="">Select a goal</option>
               {goals.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
@@ -299,11 +299,11 @@ export default function Savings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" required value={contribForm.amount} onChange={(e) => setContribForm({ ...contribForm, amount: e.target.value })} className={inputClass} />
+              <input type="number" step="0.01" value={contribForm.amount} onChange={(e) => setContribForm({ ...contribForm, amount: e.target.value })} className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pay Period Date</label>
-              <DateInput required value={contribForm.pay_period_date} onChange={(e) => setContribForm({ ...contribForm, pay_period_date: e.target.value })} className={inputClass} />
+              <DateInput value={contribForm.pay_period_date} onChange={(e) => setContribForm({ ...contribForm, pay_period_date: e.target.value })} className={inputClass} />
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">

@@ -2,7 +2,6 @@ import uuid
 
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -36,13 +35,13 @@ class Debt(Base):
         ForeignKey("households.id", ondelete="SET NULL"),
         nullable=True,
     )
-    name: Mapped[str] = mapped_column(String(150), nullable=False)
-    type: Mapped[str] = mapped_column(String(30), nullable=False)
-    balance: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(150), nullable=True, server_default=text("'Untitled Debt'"))
+    type: Mapped[str | None] = mapped_column(String(30), nullable=True, server_default=text("'other'"))
+    balance: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True, server_default=text("0"))
     credit_limit: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
-    apr: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    minimum_payment: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    due_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    apr: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True, server_default=text("0"))
+    minimum_payment: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True, server_default=text("0"))
+    due_day: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("1"))
     auto_pay: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     reminder_days: Mapped[int] = mapped_column(Integer, server_default=text("3"))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
@@ -59,7 +58,6 @@ class Debt(Base):
     payments = relationship("Payment", back_populates="debt")
 
     __table_args__ = (
-        CheckConstraint("due_day >= 1 AND due_day <= 31", name="ck_debts_due_day"),
         Index("ix_debts_user_id", "user_id"),
         Index("ix_debts_due_day", "due_day"),
     )

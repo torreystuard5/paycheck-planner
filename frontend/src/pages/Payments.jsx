@@ -108,9 +108,9 @@ export default function Payments() {
     setSaving(true);
     try {
       const payload = {
-        amount: parseFloat(form.amount),
-        paid_date: form.paid_date,
-        pay_period_date: form.pay_period_date,
+        amount: form.amount ? parseFloat(form.amount) : null,
+        paid_date: form.paid_date || null,
+        pay_period_date: form.pay_period_date || null,
         is_extra: form.is_extra,
       };
       if (form.bill_id) payload.bill_id = form.bill_id;
@@ -296,17 +296,17 @@ export default function Payments() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
+              <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Paid Date</label>
-              <DateInput required value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} className={inputClass} />
+              <DateInput value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} className={inputClass} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pay Period Date</label>
-              <DateInput required value={form.pay_period_date} onChange={(e) => setForm({ ...form, pay_period_date: e.target.value })} className={inputClass} />
+              <DateInput value={form.pay_period_date} onChange={(e) => setForm({ ...form, pay_period_date: e.target.value })} className={inputClass} />
             </div>
             <div className="flex items-center gap-2 pt-6">
               <input type="checkbox" id="is_extra" checked={form.is_extra} onChange={(e) => setForm({ ...form, is_extra: e.target.checked })} className="rounded border-gray-300" />

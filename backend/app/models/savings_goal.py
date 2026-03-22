@@ -21,8 +21,8 @@ class SavingsGoal(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    name: Mapped[str] = mapped_column(String(150), nullable=False)
-    target_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(150), nullable=True, server_default=text("'Untitled Goal'"))
+    target_amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True, server_default=text("0"))
     current_amount: Mapped[float] = mapped_column(
         Numeric(12, 2), server_default=text("0")
     )
@@ -59,8 +59,8 @@ class SavingsContribution(Base):
         ForeignKey("savings_goals.id", ondelete="CASCADE"),
         nullable=False,
     )
-    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    pay_period_date: Mapped[str] = mapped_column(Date, nullable=False)
+    amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True, server_default=text("0"))
+    pay_period_date: Mapped[str | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -209,7 +209,6 @@ export default function Household() {
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
                 className={inputClass}
-                required
               />
               <button
                 type="submit"
@@ -234,7 +233,6 @@ export default function Household() {
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
                 className={inputClass}
-                required
                 maxLength={8}
               />
               <button

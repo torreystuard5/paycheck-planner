@@ -21,10 +21,10 @@ class SupportTicket(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    email: Mapped[str] = mapped_column(String(320), nullable=False)
-    subject: Mapped[str] = mapped_column(String(255), nullable=False)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True, server_default=text("'Anonymous'"))
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True, server_default=text("''"))
+    subject: Mapped[str | None] = mapped_column(String(255), nullable=True, server_default=text("'No Subject'"))
+    message: Mapped[str | None] = mapped_column(Text, nullable=True, server_default=text("''"))
     status: Mapped[str] = mapped_column(String(20), server_default=text("'open'"))
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

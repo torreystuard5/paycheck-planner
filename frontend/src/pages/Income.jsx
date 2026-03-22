@@ -68,10 +68,10 @@ export default function Income() {
     setError(null);
     try {
       const payload = {
-        name: form.name,
-        amount: parseFloat(form.amount),
-        frequency: form.frequency,
-        next_pay_date: form.next_pay_date,
+        name: form.name || null,
+        amount: form.amount ? parseFloat(form.amount) : null,
+        frequency: form.frequency || 'monthly',
+        next_pay_date: form.next_pay_date || null,
       };
       if (editingIncome) {
         await api.put(`/api/v1/income/${editingIncome.id}`, payload);
@@ -172,12 +172,12 @@ export default function Income() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} placeholder="e.g. Main Job, Side Gig" />
+            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} placeholder="e.g. Main Job, Side Gig" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" min="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
+              <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
@@ -188,7 +188,7 @@ export default function Income() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Next Pay Date</label>
-            <DateInput required value={form.next_pay_date} onChange={(e) => setForm({ ...form, next_pay_date: e.target.value })} className={inputClass} />
+            <DateInput value={form.next_pay_date} onChange={(e) => setForm({ ...form, next_pay_date: e.target.value })} className={inputClass} />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>

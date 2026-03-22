@@ -6,11 +6,11 @@ from pydantic import BaseModel
 
 
 class HouseholdCreate(BaseModel):
-    name: str
+    name: Optional[str] = None
 
 
 class HouseholdJoin(BaseModel):
-    invite_code: str
+    invite_code: Optional[str] = None
 
 
 class HouseholdMember(BaseModel):
@@ -27,7 +27,7 @@ class HouseholdMember(BaseModel):
 
 class HouseholdResponse(BaseModel):
     id: UUID
-    name: str
+    name: Optional[str] = None
     split_method: Optional[str] = None
     invite_code: str
     created_by: UUID
@@ -53,4 +53,4 @@ class ActivityFeed(BaseModel):
 
 
 class SplitMethodUpdate(BaseModel):
-    split_method: str  # "equal", "proportional", "custom"
+    split_method: Optional[str] = None

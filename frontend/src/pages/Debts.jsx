@@ -165,13 +165,13 @@ export default function Debts() {
     setSaving(true);
     try {
       const payload = {
-        name: form.name,
-        type: form.type,
-        balance: parseFloat(form.balance),
+        name: form.name || null,
+        type: form.type || 'other',
+        balance: form.balance ? parseFloat(form.balance) : null,
         credit_limit: form.credit_limit ? parseFloat(form.credit_limit) : null,
-        apr: parseFloat(form.apr),
-        minimum_payment: parseFloat(form.minimum_payment),
-        due_day: parseInt(form.due_day, 10),
+        apr: form.apr ? parseFloat(form.apr) : null,
+        minimum_payment: form.minimum_payment ? parseFloat(form.minimum_payment) : null,
+        due_day: form.due_day ? parseInt(form.due_day, 10) : null,
         auto_pay: form.auto_pay,
         reminder_days: parseInt(form.reminder_days, 10) || 3,
       };
@@ -584,7 +584,7 @@ export default function Debts() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-              <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
+              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Debt Type</label>
@@ -596,7 +596,7 @@ export default function Debts() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Balance</label>
-              <input type="number" step="0.01" required value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} className={inputClass} />
+              <input type="number" step="0.01" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Credit Limit</label>
@@ -606,17 +606,17 @@ export default function Debts() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">APR (%)</label>
-              <input type="number" step="0.01" required value={form.apr} onChange={(e) => setForm({ ...form, apr: e.target.value })} className={inputClass} />
+              <input type="number" step="0.01" value={form.apr} onChange={(e) => setForm({ ...form, apr: e.target.value })} className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Min Payment</label>
-              <input type="number" step="0.01" required value={form.minimum_payment} onChange={(e) => setForm({ ...form, minimum_payment: e.target.value })} className={inputClass} />
+              <input type="number" step="0.01" value={form.minimum_payment} onChange={(e) => setForm({ ...form, minimum_payment: e.target.value })} className={inputClass} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Due Day</label>
-              <input type="number" min="1" max="31" required value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className={inputClass} />
+              <input type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className={inputClass} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Days</label>

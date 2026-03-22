@@ -16,7 +16,7 @@ class Household(Base):
         primary_key=True,
         server_default=text("gen_random_uuid()"),
     )
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True, server_default=text("'My Household'"))
     split_method: Mapped[str] = mapped_column(String(20), server_default=text("'equal'"))
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

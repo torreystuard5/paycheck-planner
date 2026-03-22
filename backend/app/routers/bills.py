@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -24,6 +24,92 @@ from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
 
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _compute_next_due_date(bill: Bill) -> date | None:
+    """Compute the next due date for a bill based on its frequency."""
+    today = date.today()
+    freq = bill.frequency or "monthly"
+
+    if freq == "one_time":
+        if bill.start_date:
+            return bill.start_date if bill.start_date >= today else None
+        return None
+
+    if freq in ("weekly", "biweekly"):
+        dow = bill.day_of_week
+        if dow is None:
+            return None
+        # Find next occurrence of this day-of-week
+        days_ahead = dow - today.weekday()
+        if days_ahead < 0:
+            days_ahead += 7
+        next_date = today + timedelta(days=days_ahead)
+
+        if freq == "biweekly" and bill.start_date:
+            # Ensure we're on the correct biweekly cadence
+            anchor = bill.start_date
+            delta_days = (next_date - anchor).days
+            weeks_diff = delta_days // 7
+            if weeks_diff % 2 != 0:
+                next_date += timedelta(days=7)
+        return next_date
+
+    if freq == "monthly":
+        due_day = bill.due_day or 1
+        try:
+            candidate = today.replace(day=min(due_day, 28))
+        except ValueError:
+            candidate = today.replace(day=28)
+        if candidate < today:
+            month = candidate.month + 1
+            year = candidate.year
+            if month > 12:
+                month = 1
+                year += 1
+            try:
+                candidate = candidate.replace(year=year, month=month, day=min(due_day, 28))
+            except ValueError:
+                candidate = candidate.replace(year=year, month=month, day=28)
+        return candidate
+
+    if freq == "quarterly":
+        due_day = bill.due_day or 1
+        current_quarter_month = ((today.month - 1) // 3) * 3 + 1
+        for offset in [0, 3, 6, 9]:
+            m = current_quarter_month + offset
+            y = today.year
+            if m > 12:
+                m -= 12
+                y += 1
+            try:
+                candidate = date(y, m, min(due_day, 28))
+            except ValueError:
+                candidate = date(y, m, 28)
+            if candidate >= today:
+                return candidate
+        return None
+
+    if freq in ("annual", "yearly"):
+        due_day = bill.due_day or 1
+        if bill.start_date:
+            m = bill.start_date.month
+        else:
+            m = today.month
+        try:
+            candidate = date(today.year, m, min(due_day, 28))
+        except ValueError:
+            candidate = date(today.year, m, 28)
+        if candidate < today:
+            try:
+                candidate = date(today.year + 1, m, min(due_day, 28))
+            except ValueError:
+                candidate = date(today.year + 1, m, 28)
+        return candidate
+
+    return None
+
 
 def _bill_to_response(bill: Bill) -> BillResponse:
     """Convert a Bill ORM object to BillResponse with is_household_bill flag."""
@@ -42,6 +128,11 @@ def _bill_to_response(bill: Bill) -> BillResponse:
         paid_date=bill.paid_date,
         paid_amount=bill.paid_amount,
         is_active=bill.is_active,
+        payment_mode=bill.payment_mode,
+        assigned_member_id=bill.assigned_member_id,
+        day_of_week=bill.day_of_week,
+        start_date=bill.start_date,
+        next_due_date=_compute_next_due_date(bill),
         created_at=bill.created_at,
         updated_at=bill.updated_at,
         is_household_bill=bill.household_id is not None,
@@ -64,6 +155,10 @@ async def create_bill(
         category=data.category,
         auto_pay=data.auto_pay,
         reminder_days=data.reminder_days,
+        payment_mode=data.payment_mode,
+        assigned_member_id=data.assigned_member_id,
+        day_of_week=data.day_of_week,
+        start_date=data.start_date,
     )
     db.add(bill)
     await db.flush()
@@ -76,8 +171,8 @@ async def create_bill(
                 user_id=current_user.id,
                 action="created",
                 entity_type="bill",
-                entity_name=bill.name,
-                details=f"${bill.amount}",
+                entity_name=bill.name or "Untitled",
+                details=f"${bill.amount}" if bill.amount else None,
                 db=db,
             )
         except Exception:
@@ -225,7 +320,7 @@ async def create_member_payment(
             user_id=current_user.id,
             action="paid",
             entity_type="bill",
-            entity_name=bill.name,
+            entity_name=bill.name or "Untitled",
             details=f"${data.amount_paid} by {member.first_name}",
             db=db,
         )
@@ -270,7 +365,7 @@ async def update_bill(
                 user_id=current_user.id,
                 action="updated",
                 entity_type="bill",
-                entity_name=bill.name,
+                entity_name=bill.name or "Untitled",
                 details=None,
                 db=db,
             )
@@ -304,7 +399,7 @@ async def delete_bill(
                 user_id=current_user.id,
                 action="deleted",
                 entity_type="bill",
-                entity_name=bill_name,
+                entity_name=bill_name or "Untitled",
                 details=None,
                 db=db,
             )
@@ -340,7 +435,7 @@ async def pay_bill(
                 user_id=current_user.id,
                 action="paid",
                 entity_type="bill",
-                entity_name=bill.name,
+                entity_name=bill.name or "Untitled",
                 details=f"${bill.paid_amount}",
                 db=db,
             )
@@ -377,7 +472,7 @@ async def unpay_bill(
                 user_id=current_user.id,
                 action="unpaid",
                 entity_type="bill",
-                entity_name=bill.name,
+                entity_name=bill.name or "Untitled",
                 details=None,
                 db=db,
             )

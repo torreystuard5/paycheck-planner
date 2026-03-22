@@ -22,9 +22,9 @@ class User(Base):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), server_default=text("'USD'"))
     date_format: Mapped[str] = mapped_column(String(20), server_default=text("'MM/DD/YYYY'"))
-    pay_frequency: Mapped[str] = mapped_column(String(20), nullable=False)
-    next_pay_date: Mapped[str] = mapped_column(Date, nullable=False)
-    net_pay_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    pay_frequency: Mapped[str | None] = mapped_column(String(20), nullable=True, server_default=text("'biweekly'"))
+    next_pay_date: Mapped[str | None] = mapped_column(Date, nullable=True)
+    net_pay_amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True, server_default=text("0"))
     household_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("households.id", ondelete="SET NULL"),
@@ -72,7 +72,7 @@ class User(Base):
     # Relationships
     household = relationship("Household", back_populates="members", foreign_keys=[household_id])
     income_sources = relationship("IncomeSource", back_populates="user", cascade="all, delete-orphan")
-    bills = relationship("Bill", back_populates="user", cascade="all, delete-orphan")
+    bills = relationship("Bill", back_populates="user", cascade="all, delete-orphan", foreign_keys="[Bill.user_id]")
     debts = relationship("Debt", back_populates="user", cascade="all, delete-orphan")
     savings_goals = relationship("SavingsGoal", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")

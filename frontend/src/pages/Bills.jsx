@@ -12,7 +12,16 @@ import DateInput from '../components/DateInput';
 import usePolling from '../hooks/usePolling';
 
 const CATEGORIES = ['Housing', 'Utilities', 'Insurance', 'Transportation', 'Subscriptions', 'Food', 'Healthcare', 'Other'];
-const FREQUENCIES = ['monthly', 'weekly', 'biweekly', 'semi_monthly', 'quarterly', 'annual'];
+const FREQUENCIES = [
+  { value: 'one_time', label: 'One-time' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Biweekly' },
+  { value: 'semi_monthly', label: 'Semi-monthly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'annual', label: 'Annual' },
+];
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const defaultForm = {
   name: '',
@@ -22,12 +31,21 @@ const defaultForm = {
   frequency: 'monthly',
   auto_pay: false,
   reminder_days: 3,
+  payment_mode: 'single',
+  assigned_member_id: '',
+  day_of_week: '',
+  start_date: '',
 };
 
 const fmtCurrency = (val) => {
   const n = Number(val);
   const v = isNaN(n) ? 0 : n;
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+};
+
+const freqLabel = (freq) => {
+  const f = FREQUENCIES.find(x => x.value === freq);
+  return f ? f.label : (freq || 'Monthly');
 };
 
 export default function Bills() {
@@ -140,6 +158,10 @@ export default function Bills() {
       frequency: bill.frequency || 'monthly',
       auto_pay: bill.auto_pay ?? false,
       reminder_days: bill.reminder_days ?? 3,
+      payment_mode: bill.payment_mode || 'single',
+      assigned_member_id: bill.assigned_member_id || '',
+      day_of_week: bill.day_of_week != null ? String(bill.day_of_week) : '',
+      start_date: bill.start_date || '',
     });
     setShowModal(true);
   };
@@ -188,13 +210,17 @@ export default function Bills() {
     setSaving(true);
     try {
       const payload = {
-        name: form.name,
-        amount: parseFloat(form.amount),
-        due_day: parseInt(form.due_day, 10),
+        name: form.name || null,
+        amount: form.amount ? parseFloat(form.amount) : null,
+        due_day: form.due_day ? parseInt(form.due_day, 10) : null,
         category: form.category || null,
-        frequency: form.frequency,
+        frequency: form.frequency || 'monthly',
         auto_pay: form.auto_pay,
         reminder_days: parseInt(form.reminder_days, 10) || 3,
+        payment_mode: form.payment_mode || 'single',
+        assigned_member_id: form.assigned_member_id || null,
+        day_of_week: form.day_of_week !== '' ? parseInt(form.day_of_week, 10) : null,
+        start_date: form.start_date || null,
       };
       if (editingBill) {
         await api.put(`/api/v1/bills/${editingBill.id}`, payload);
@@ -278,15 +304,6 @@ export default function Bills() {
     }
   };
 
-  const refreshBreakdown = async (billId) => {
-    try {
-      const res = await api.get(`/api/v1/bills/${billId}/breakdown`);
-      setBreakdown(res.data);
-    } catch {
-      // silent
-    }
-  };
-
   const openMemberPayModal = () => {
     setMemberPayForm({
       member_id: user?.id || '',
@@ -347,6 +364,16 @@ export default function Bills() {
     { label: 'Unpaid', value: 'unpaid' },
     { label: 'Paid', value: 'paid' },
   ];
+
+  const showPaymentModeToggle = householdMembers.length > 1;
+  const needsDayOfWeek = form.frequency === 'weekly' || form.frequency === 'biweekly';
+
+  // Compute member share preview for split mode
+  const memberSharePreview = () => {
+    if (form.payment_mode !== 'split' || !form.amount || householdMembers.length === 0) return null;
+    const share = (parseFloat(form.amount) / householdMembers.length).toFixed(2);
+    return share;
+  };
 
   return (
     <div className="space-y-6">
@@ -449,12 +476,17 @@ export default function Bills() {
             <div key={bill.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${bill.is_paid ? 'opacity-80' : ''}`}>
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className={`font-semibold text-gray-900 ${bill.is_paid ? 'line-through text-gray-500' : ''}`}>{bill.name}</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className={`font-semibold text-gray-900 ${bill.is_paid ? 'line-through text-gray-500' : ''}`}>{bill.name || 'Untitled'}</h3>
                     {bill.is_household_bill && (
                       <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">
                         <Users className="w-3 h-3" />
                         Shared
+                      </span>
+                    )}
+                    {bill.payment_mode === 'split' && (
+                      <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded-full">
+                        Split
                       </span>
                     )}
                   </div>
@@ -476,10 +508,20 @@ export default function Bills() {
               </div>
               <CurrencyDisplay amount={bill.amount} className="text-xl font-bold text-gray-900 block mb-2" />
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Due day {bill.due_day || '--'}</span>
+                <span className="text-gray-500">
+                  {(bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
+                    ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
+                    : `Due day ${bill.due_day || '--'}`
+                  }
+                </span>
                 {bill.auto_pay && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Auto-pay</span>}
               </div>
-              <p className="text-xs text-gray-400 mt-2 capitalize">{bill.frequency || 'monthly'}</p>
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-xs text-gray-400 capitalize">{freqLabel(bill.frequency)}</p>
+                {bill.next_due_date && (
+                  <p className="text-xs text-gray-500">Next: {bill.next_due_date}</p>
+                )}
+              </div>
 
               <div className="mt-4 pt-3 border-t border-gray-100">
                 {bill.is_paid ? (
@@ -520,7 +562,6 @@ export default function Bills() {
               type="number"
               step="0.01"
               min="0.01"
-              required
               value={payForm.paid_amount}
               onChange={(e) => setPayForm({ ...payForm, paid_amount: e.target.value })}
               className={inputClass}
@@ -529,7 +570,6 @@ export default function Bills() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Paid Date</label>
             <DateInput
-              required
               value={payForm.paid_date}
               onChange={(e) => setPayForm({ ...payForm, paid_date: e.target.value })}
               className={inputClass}
@@ -627,7 +667,6 @@ export default function Bills() {
               value={memberPayForm.member_id}
               onChange={(e) => handleMemberSelect(e.target.value)}
               className={inputClass}
-              required
             >
               <option value="">Select member...</option>
               {householdMembers.map((m) => (
@@ -643,7 +682,6 @@ export default function Bills() {
               type="number"
               step="0.01"
               min="0.01"
-              required
               value={memberPayForm.amount_paid}
               onChange={(e) => setMemberPayForm({ ...memberPayForm, amount_paid: e.target.value })}
               className={inputClass}
@@ -652,7 +690,6 @@ export default function Bills() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <DateInput
-              required
               value={memberPayForm.paid_at}
               onChange={(e) => setMemberPayForm({ ...memberPayForm, paid_at: e.target.value })}
               className={inputClass}
@@ -672,31 +709,125 @@ export default function Bills() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
+            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
+              <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Due Day</label>
-              <input type="number" min="1" max="31" required value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className={inputClass} />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+              <select value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value })} className={inputClass}>
+                {FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
             </div>
           </div>
+
+          {/* Day of week picker for weekly/biweekly */}
+          {needsDayOfWeek ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Day of Week</label>
+              <div className="flex gap-1">
+                {DAY_NAMES.map((day, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setForm({ ...form, day_of_week: String(idx) })}
+                    className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                      form.day_of_week === String(idx)
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+              {form.frequency === 'biweekly' && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date (anchor for biweekly cycle)</label>
+                  <DateInput
+                    value={form.start_date}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                    className={inputClass}
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Due Day</label>
+              <input type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className={inputClass} />
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
             <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={inputClass}>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          {/* Payment mode toggle - only show for multi-member households */}
+          {showPaymentModeToggle && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
-              <select value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value })} className={inputClass}>
-                {FREQUENCIES.map((f) => <option key={f} value={f} className="capitalize">{f.replace(/_/g, ' ')}</option>)}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Payment Mode</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, payment_mode: 'single' })}
+                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                    form.payment_mode === 'single'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Single Pay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, payment_mode: 'split' })}
+                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                    form.payment_mode === 'split'
+                      ? 'bg-purple-600 text-white border-purple-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Split Pay
+                </button>
+              </div>
+
+              {form.payment_mode === 'split' && memberSharePreview() && (
+                <div className="mt-2 p-3 bg-purple-50 rounded-lg">
+                  <p className="text-xs text-purple-700 font-medium mb-1">Member Share Preview</p>
+                  <p className="text-sm text-purple-900">
+                    {fmtCurrency(memberSharePreview())} per member ({householdMembers.length} members)
+                  </p>
+                </div>
+              )}
+
+              {form.payment_mode === 'single' && (
+                <div className="mt-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
+                  <select
+                    value={form.assigned_member_id}
+                    onChange={(e) => setForm({ ...form, assigned_member_id: e.target.value })}
+                    className={inputClass}
+                  >
+                    <option value="">Bill owner (default)</option>
+                    {householdMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.first_name} {m.last_name} {m.id === user?.id ? '(You)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Days</label>
               <input type="number" min="0" max="30" value={form.reminder_days} onChange={(e) => setForm({ ...form, reminder_days: e.target.value })} className={inputClass} />

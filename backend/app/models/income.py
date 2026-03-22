@@ -21,10 +21,10 @@ class IncomeSource(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    frequency: Mapped[str] = mapped_column(String(20), nullable=False)
-    next_pay_date: Mapped[str] = mapped_column(Date, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True, server_default=text("'Untitled Income'"))
+    amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True, server_default=text("0"))
+    frequency: Mapped[str | None] = mapped_column(String(20), nullable=True, server_default=text("'monthly'"))
+    next_pay_date: Mapped[str | None] = mapped_column(Date, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -137,7 +137,6 @@ export default function Support() {
                   id="name"
                   name="name"
                   type="text"
-                  required
                   value={form.name}
                   onChange={handleChange}
                   className={inputClass}
@@ -150,7 +149,6 @@ export default function Support() {
                   id="email"
                   name="email"
                   type="email"
-                  required
                   value={form.email}
                   onChange={handleChange}
                   className={inputClass}
@@ -164,7 +162,6 @@ export default function Support() {
                 id="subject"
                 name="subject"
                 type="text"
-                required
                 value={form.subject}
                 onChange={handleChange}
                 className={inputClass}
@@ -176,7 +173,6 @@ export default function Support() {
               <textarea
                 id="message"
                 name="message"
-                required
                 rows={6}
                 value={form.message}
                 onChange={handleChange}

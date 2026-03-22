@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle, ChevronRight } from 'lucide-react';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ import { formatDate } from '../utils/dateFormat';
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [income, setIncome] = useState([]);
@@ -100,9 +101,36 @@ export default function Dashboard() {
   const paidCount = paidThisMonth.length;
   const totalBillCount = billsThisMonth.length;
 
+  // Build bill subtitle with split/single payment info
+  const getBillSubtitle = () => {
+    if (totalBillCount === 0) return null;
+    const splitBills = billsThisMonth.filter(b => b.payment_mode === 'split' && b.is_household_bill);
+    const singleBills = billsThisMonth.filter(b => b.payment_mode !== 'split' || !b.is_household_bill);
+    const parts = [];
+
+    if (splitBills.length > 0) {
+      const splitPaid = splitBills.filter(b => b.is_paid).length;
+      parts.push(`${splitPaid}/${splitBills.length} split paid`);
+    }
+    if (singleBills.length > 0) {
+      const singlePaid = singleBills.filter(b => b.is_paid).length;
+      parts.push(`${singlePaid}/${singleBills.length} paid`);
+    }
+
+    if (parts.length === 0) return `${paidCount}/${totalBillCount} paid`;
+    return parts.join(' · ');
+  };
+
+  const cardLinks = {
+    'Total Income': '/income',
+    'Total Bills': '/bills',
+    'Total Debt': '/debts',
+    'Savings Goals': '/savings',
+  };
+
   const summaryCards = [
     { label: 'Total Income', value: totalIncome, icon: DollarSign, color: 'text-green-500', bg: 'bg-green-50' },
-    { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50', subtitle: totalBillCount > 0 ? `${paidCount}/${totalBillCount} paid` : null },
+    { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50', subtitle: getBillSubtitle() },
     { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50' },
     { label: 'Savings Goals', value: null, count: savingsCount, icon: PiggyBank, color: 'text-purple-500', bg: 'bg-purple-50' },
   ];
@@ -138,7 +166,11 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map((card) => (
-          <div key={card.label} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div
+            key={card.label}
+            onClick={() => navigate(cardLinks[card.label])}
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 cursor-pointer hover:shadow-md transition-shadow"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">{card.label}</p>
@@ -154,8 +186,11 @@ export default function Dashboard() {
                   </p>
                 )}
               </div>
-              <div className={`${card.bg} p-3 rounded-lg`}>
-                <card.icon className={`w-6 h-6 ${card.color}`} />
+              <div className="flex flex-col items-center gap-2">
+                <div className={`${card.bg} p-3 rounded-lg`}>
+                  <card.icon className={`w-6 h-6 ${card.color}`} />
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
               </div>
             </div>
           </div>

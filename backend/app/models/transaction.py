@@ -2,7 +2,6 @@ import uuid
 
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -40,9 +39,9 @@ class Payment(Base):
         ForeignKey("debts.id", ondelete="SET NULL"),
         nullable=True,
     )
-    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    paid_date: Mapped[str] = mapped_column(Date, nullable=False)
-    pay_period_date: Mapped[str] = mapped_column(Date, nullable=False)
+    amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True, server_default=text("0"))
+    paid_date: Mapped[str | None] = mapped_column(Date, nullable=True)
+    pay_period_date: Mapped[str | None] = mapped_column(Date, nullable=True)
     is_extra: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -54,10 +53,6 @@ class Payment(Base):
     debt = relationship("Debt", back_populates="payments")
 
     __table_args__ = (
-        CheckConstraint(
-            "(bill_id IS NOT NULL AND debt_id IS NULL) OR (bill_id IS NULL AND debt_id IS NOT NULL)",
-            name="ck_payments_bill_or_debt",
-        ),
         Index("ix_payments_user_id", "user_id"),
         Index("ix_payments_pay_period_date", "pay_period_date"),
     )

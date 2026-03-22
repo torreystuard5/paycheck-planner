@@ -1,35 +1,38 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 
 class IncomeCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
-    frequency: str = Field(..., pattern="^(weekly|biweekly|semi_monthly|monthly)$")
-    next_pay_date: date
+    name: Optional[str] = Field(default=None, max_length=100)
+    amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
+    frequency: Optional[str] = Field(
+        default="monthly", pattern="^(weekly|biweekly|semi_monthly|monthly)$"
+    )
+    next_pay_date: Optional[date] = None
 
 
 class IncomeUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=100)
-    amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
-    frequency: str | None = Field(
+    name: Optional[str] = Field(default=None, max_length=100)
+    amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
+    frequency: Optional[str] = Field(
         default=None, pattern="^(weekly|biweekly|semi_monthly|monthly)$"
     )
-    next_pay_date: date | None = None
-    is_active: bool | None = None
+    next_pay_date: Optional[date] = None
+    is_active: Optional[bool] = None
 
 
 class IncomeResponse(BaseModel):
     id: UUID
     user_id: UUID
-    name: str
-    amount: Decimal
-    frequency: str
-    next_pay_date: date
-    is_active: bool
+    name: Optional[str] = None
+    amount: Optional[Decimal] = None
+    frequency: Optional[str] = None
+    next_pay_date: Optional[date] = None
+    is_active: bool = True
     created_at: datetime
     updated_at: datetime
 
