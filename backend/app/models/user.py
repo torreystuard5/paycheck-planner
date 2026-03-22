@@ -33,6 +33,12 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     is_admin: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 
+    # Terms of Service fields
+    tos_accepted_at: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    tos_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     # Secure vault fields
     pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes_lock_timeout: Mapped[int] = mapped_column(Integer, server_default=text("5"))

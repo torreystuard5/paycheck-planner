@@ -10,6 +10,12 @@ const api = axios.create({
   baseURL,
 });
 
+// TOS required state — shared globally
+let tosRequiredCallback = null;
+export function onTosRequired(cb) {
+  tosRequiredCallback = cb;
+}
+
 // Attach access token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
@@ -35,6 +41,16 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
+
+    // Intercept TOS-required 403 responses
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.detail === 'tos_required' &&
+      tosRequiredCallback
+    ) {
+      tosRequiredCallback(error.response.data.version);
+      return Promise.reject(error);
+    }
 
     if (error.response?.status === 401 && !original._retry) {
       if (isRefreshing) {

@@ -1,9 +1,12 @@
 import secrets
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.models.referral import ReferralReward
 from app.models.user import User
@@ -27,6 +30,12 @@ def _generate_referral_code() -> str:
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    if not user_data.tos_accepted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You must accept the Terms of Service to create an account.",
+        )
+
     result = await db.execute(select(User).where(User.email == user_data.email))
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -67,6 +76,8 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         currency=user_data.currency,
         referral_code=code,
         referred_by_user_id=referrer.id if referrer else None,
+        tos_accepted_at=datetime.now(timezone.utc),
+        tos_version=settings.CURRENT_TOS_VERSION,
     )
     db.add(user)
     await db.flush()
@@ -195,3 +206,21 @@ async def update_date_format(
     await db.flush()
     await db.refresh(current_user)
     return current_user
+
+
+class AcceptTosRequest(BaseModel):
+    version: str = Field(..., max_length=20)
+
+
+@router.post("/accept-tos")
+async def accept_tos(
+    body: AcceptTosRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    current_user.tos_accepted_at = datetime.now(timezone.utc)
+    current_user.tos_version = body.version
+    db.add(current_user)
+    await db.flush()
+    await db.refresh(current_user)
+    return {"message": "Terms of Service accepted successfully."}

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { onTosRequired } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -8,6 +9,23 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [tosRequired, setTosRequired] = useState(null);
+
+  useEffect(() => {
+    onTosRequired((version) => {
+      setTosRequired(version);
+    });
+  }, []);
+
+  const clearTosRequired = async () => {
+    setTosRequired(null);
+    try {
+      const { data } = await api.get('/api/v1/auth/me');
+      setUser(data);
+    } catch {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
@@ -70,7 +88,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, isAuthenticated, login, register, logout, refreshToken }}
+      value={{ user, loading, isAuthenticated, login, register, logout, refreshToken, tosRequired, clearTosRequired }}
     >
       {children}
     </AuthContext.Provider>

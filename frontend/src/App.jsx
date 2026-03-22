@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
 import MainLayout from './components/Layout/MainLayout';
+import TosOverlay from './components/TosOverlay';
 
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -27,10 +28,21 @@ import PrivacyPolicy from './pages/legal/PrivacyPolicy';
 import CookiePolicy from './pages/legal/CookiePolicy';
 import Disclaimer from './pages/legal/Disclaimer';
 
+function TosGate({ children }) {
+  const { tosRequired, clearTosRequired } = useAuth();
+  return (
+    <>
+      {tosRequired && <TosOverlay version={tosRequired} onAccepted={clearTosRequired} />}
+      {children}
+    </>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <TosGate>
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
@@ -70,6 +82,7 @@ export default function App() {
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </TosGate>
       </AuthProvider>
     </BrowserRouter>
   );

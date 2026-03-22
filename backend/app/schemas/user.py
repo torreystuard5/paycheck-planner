@@ -15,6 +15,7 @@ class UserCreate(BaseModel):
     net_pay_amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
     currency: str = Field(default="USD", max_length=3)
     ref: str | None = Field(default=None, max_length=10)
+    tos_accepted: bool = False
 
 
 class UserLogin(BaseModel):
@@ -35,6 +36,8 @@ class UserResponse(BaseModel):
     household_id: UUID | None
     is_active: bool
     is_admin: bool = False
+    tos_accepted_at: datetime | None = None
+    tos_version: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,7 +1,9 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from jose import JWTError, jwt
 from sqlalchemy import select
 
 from app.config import settings
@@ -32,6 +34,57 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Paths exempt from the TOS version check
+TOS_EXEMPT_PATHS = {
+    "/api/v1/auth/accept-tos",
+    "/api/v1/auth/me",
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/logout",
+    "/health",
+}
+
+
+@app.middleware("http")
+async def tos_check_middleware(request: Request, call_next):
+    path = request.url.path
+    if path in TOS_EXEMPT_PATHS:
+        return await call_next(request)
+
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return await call_next(request)
+
+    token = auth_header.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        return await call_next(request)
+
+    if payload.get("type") != "access":
+        return await call_next(request)
+
+    user_id = payload.get("sub")
+    if not user_id:
+        return await call_next(request)
+
+    async with async_session() as session:
+        result = await session.execute(select(User.tos_version).where(User.id == user_id))
+        tos_version = result.scalar_one_or_none()
+
+    if tos_version is None or tos_version < settings.CURRENT_TOS_VERSION:
+        return JSONResponse(
+            status_code=403,
+            content={
+                "detail": "tos_required",
+                "version": settings.CURRENT_TOS_VERSION,
+            },
+        )
+
+    return await call_next(request)
+
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(income.router, prefix="/api/v1")

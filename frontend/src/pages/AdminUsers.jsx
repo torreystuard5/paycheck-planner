@@ -167,6 +167,8 @@ export default function AdminUsers() {
         { label: 'Referred By', value: detailUser.referred_by_user_id || '—' },
         { label: 'Free Month Credits', value: detailUser.free_month_credits },
         { label: 'Next Billing Date', value: formatDateTime(detailUser.next_billing_date) },
+        { label: 'TOS Version', value: detailUser.tos_version || '—' },
+        { label: 'TOS Accepted At', value: formatDateTime(detailUser.tos_accepted_at) },
         { label: 'Created At', value: formatDateTime(detailUser.created_at) },
         { label: 'Updated At', value: formatDateTime(detailUser.updated_at) },
       ]

@@ -66,6 +66,8 @@ class AdminUserDetailResponse(BaseModel):
     referred_by_user_id: UUID | None
     free_month_credits: int
     next_billing_date: datetime | None
+    tos_accepted_at: datetime | None = None
+    tos_version: str | None = None
     created_at: datetime
     updated_at: datetime
 

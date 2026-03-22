@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     INITIAL_ADMIN_EMAIL: str | None = None
     NOTES_ENCRYPTION_KEY: str | None = None
+    CURRENT_TOS_VERSION: str = "1.0"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
