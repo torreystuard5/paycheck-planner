@@ -7,12 +7,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.bill import Bill
+from app.models.bill_member_payment import BillMemberPayment
 from app.models.user import User
-from app.schemas.bill import BillCreate, BillPayRequest, BillResponse, BillUpdate
+from app.schemas.bill import (
+    BillBreakdownResponse,
+    BillCreate,
+    BillPayRequest,
+    BillResponse,
+    BillUpdate,
+    MemberPaymentRequest,
+    MemberShareResponse,
+)
+from app.services.household_billing import get_bill_breakdown
 from app.services.household_service import log_activity
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
+
+
+def _bill_to_response(bill: Bill) -> BillResponse:
+    """Convert a Bill ORM object to BillResponse with is_household_bill flag."""
+    return BillResponse(
+        id=bill.id,
+        user_id=bill.user_id,
+        household_id=bill.household_id,
+        name=bill.name,
+        amount=bill.amount,
+        due_day=bill.due_day,
+        frequency=bill.frequency,
+        category=bill.category,
+        auto_pay=bill.auto_pay,
+        reminder_days=bill.reminder_days,
+        is_paid=bill.is_paid,
+        paid_date=bill.paid_date,
+        paid_amount=bill.paid_amount,
+        is_active=bill.is_active,
+        created_at=bill.created_at,
+        updated_at=bill.updated_at,
+        is_household_bill=bill.household_id is not None,
+    )
 
 
 @router.post("", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
@@ -50,7 +83,7 @@ async def create_bill(
         except Exception:
             pass
 
-    return bill
+    return _bill_to_response(bill)
 
 
 @router.get("", response_model=list[BillResponse])
@@ -77,7 +110,8 @@ async def list_bills(
         query = query.where(Bill.is_paid.is_(False))
     query = query.order_by(Bill.due_day)
     result = await db.execute(query)
-    return result.scalars().all()
+    bills = result.scalars().all()
+    return [_bill_to_response(b) for b in bills]
 
 
 @router.get("/{bill_id}", response_model=BillResponse)
@@ -97,7 +131,115 @@ async def get_bill(
         not current_user.household_id or bill.household_id != current_user.household_id
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
-    return bill
+    return _bill_to_response(bill)
+
+
+@router.get("/{bill_id}/breakdown", response_model=BillBreakdownResponse)
+async def get_bill_breakdown_endpoint(
+    bill_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Bill).where(Bill.id == bill_id)
+    )
+    bill = result.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    # Verify access
+    if bill.user_id != current_user.id and (
+        not current_user.household_id or bill.household_id != current_user.household_id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    if not bill.household_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bill is not a household bill",
+        )
+
+    breakdown = await get_bill_breakdown(bill, db)
+
+    return BillBreakdownResponse(
+        bill=_bill_to_response(bill),
+        total_paid=breakdown["total_paid"],
+        total_remaining=breakdown["total_remaining"],
+        members=[MemberShareResponse(**m) for m in breakdown["members"]],
+    )
+
+
+@router.post("/{bill_id}/member-payment", response_model=BillBreakdownResponse)
+async def create_member_payment(
+    bill_id: UUID,
+    data: MemberPaymentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Bill).where(Bill.id == bill_id)
+    )
+    bill = result.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    # Verify access
+    if bill.user_id != current_user.id and (
+        not current_user.household_id or bill.household_id != current_user.household_id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    if not bill.household_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bill is not a household bill",
+        )
+
+    # Determine paying member — default to current user
+    member_id = data.member_id if data.member_id else current_user.id
+
+    # Validate member is in the same household
+    member_result = await db.execute(
+        select(User).where(User.id == member_id)
+    )
+    member = member_result.scalar_one_or_none()
+    if not member or member.household_id != bill.household_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Member is not in the same household as the bill",
+        )
+
+    payment = BillMemberPayment(
+        bill_id=bill.id,
+        member_id=member_id,
+        amount_paid=data.amount_paid,
+        paid_at=data.paid_at if data.paid_at else datetime.now(timezone.utc),
+    )
+    db.add(payment)
+    await db.flush()
+
+    # Log activity
+    try:
+        await log_activity(
+            household_id=bill.household_id,
+            user_id=current_user.id,
+            action="paid",
+            entity_type="bill",
+            entity_name=bill.name,
+            details=f"${data.amount_paid} by {member.first_name}",
+            db=db,
+        )
+    except Exception:
+        pass
+
+    breakdown = await get_bill_breakdown(bill, db)
+
+    return BillBreakdownResponse(
+        bill=_bill_to_response(bill),
+        total_paid=breakdown["total_paid"],
+        total_remaining=breakdown["total_remaining"],
+        members=[MemberShareResponse(**m) for m in breakdown["members"]],
+    )
 
 
 @router.put("/{bill_id}", response_model=BillResponse)
@@ -135,7 +277,7 @@ async def update_bill(
         except Exception:
             pass
 
-    return bill
+    return _bill_to_response(bill)
 
 
 @router.delete("/{bill_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -205,7 +347,7 @@ async def pay_bill(
         except Exception:
             pass
 
-    return bill
+    return _bill_to_response(bill)
 
 
 @router.patch("/{bill_id}/unpay", response_model=BillResponse)
@@ -242,4 +384,4 @@ async def unpay_bill(
         except Exception:
             pass
 
-    return bill
+    return _bill_to_response(bill)

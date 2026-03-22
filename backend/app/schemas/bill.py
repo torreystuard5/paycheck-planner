@@ -52,5 +52,27 @@ class BillResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    is_household_bill: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class MemberPaymentRequest(BaseModel):
+    member_id: UUID | None = None
+    amount_paid: Decimal = Field(..., gt=0, max_digits=10, decimal_places=2)
+    paid_at: datetime | None = None
+
+
+class MemberShareResponse(BaseModel):
+    member_id: UUID
+    member_name: str
+    share: Decimal
+    paid: Decimal
+    balance: Decimal
+
+
+class BillBreakdownResponse(BaseModel):
+    bill: BillResponse
+    total_paid: Decimal
+    total_remaining: Decimal
+    members: list[MemberShareResponse]

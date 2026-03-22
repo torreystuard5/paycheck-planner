@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Copy, LogOut, Activity, Clock, Settings, CheckCircle } from 'lucide-react';
+import { Users, UserPlus, Copy, LogOut, Activity, Clock, Settings, CheckCircle, DollarSign } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ConfirmDialog from '../components/ConfirmDialog';
 import usePolling from '../hooks/usePolling';
+
+const fmtCurrency = (val) => {
+  const n = Number(val);
+  const v = isNaN(n) ? 0 : n;
+  return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+};
 
 export default function Household() {
   const { user } = useAuth();
@@ -20,6 +26,8 @@ export default function Household() {
   const [copied, setCopied] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [householdBills, setHouseholdBills] = useState([]);
+  const [billBreakdowns, setBillBreakdowns] = useState({});
 
   const fetchHousehold = useCallback(async () => {
     try {
@@ -43,10 +51,36 @@ export default function Household() {
     }
   }, []);
 
+  const fetchHouseholdBills = useCallback(async () => {
+    try {
+      const res = await api.get('/api/v1/bills');
+      const bills = Array.isArray(res.data) ? res.data : [];
+      const shared = bills.filter((b) => b.is_household_bill && b.is_active);
+      setHouseholdBills(shared);
+
+      // Fetch breakdowns for each household bill
+      const breakdowns = {};
+      await Promise.allSettled(
+        shared.map(async (bill) => {
+          try {
+            const bdRes = await api.get(`/api/v1/bills/${bill.id}/breakdown`);
+            breakdowns[bill.id] = bdRes.data;
+          } catch {
+            // skip failed breakdowns
+          }
+        })
+      );
+      setBillBreakdowns(breakdowns);
+    } catch {
+      // silent
+    }
+  }, []);
+
   const fetchAll = useCallback(async () => {
     await fetchHousehold();
     await fetchActivity();
-  }, [fetchHousehold, fetchActivity]);
+    await fetchHouseholdBills();
+  }, [fetchHousehold, fetchActivity, fetchHouseholdBills]);
 
   useEffect(() => {
     const init = async () => {
@@ -99,6 +133,8 @@ export default function Household() {
       await api.post('/api/v1/households/leave');
       setHousehold(null);
       setActivities([]);
+      setHouseholdBills([]);
+      setBillBreakdowns({});
       setSuccess('Left household.');
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to leave household.');
@@ -312,6 +348,70 @@ export default function Household() {
           )}
         </div>
       </div>
+
+      {/* Household Bills Breakdown */}
+      {householdBills.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <DollarSign className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Shared Bills</h2>
+          </div>
+          <div className="space-y-4">
+            {householdBills.map((bill) => {
+              const bd = billBreakdowns[bill.id];
+              return (
+                <div key={bill.id} className="border border-gray-100 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">{bill.name}</h3>
+                      <p className="text-xs text-gray-500">{bill.category || 'Uncategorized'} &middot; Due day {bill.due_day}</p>
+                    </div>
+                    <span className="text-sm font-bold text-gray-900">{fmtCurrency(bill.amount)}</span>
+                  </div>
+
+                  {bd ? (
+                    <>
+                      {/* Summary */}
+                      <div className="flex gap-4 mb-3 text-xs">
+                        <span className="text-green-600">Paid: {fmtCurrency(bd.total_paid)}</span>
+                        <span className="text-amber-600">Remaining: {fmtCurrency(bd.total_remaining)}</span>
+                      </div>
+                      {/* Per-member */}
+                      <div className="space-y-1.5">
+                        {bd.members?.map((member) => {
+                          const balance = Number(member.balance);
+                          const isPaid = balance <= 0;
+                          return (
+                            <div key={member.member_id} className="flex items-center justify-between text-sm">
+                              <span className="text-gray-700">{member.member_name}</span>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="text-gray-500">Share: {fmtCurrency(member.share)}</span>
+                                <span className="text-gray-500">Paid: {fmtCurrency(member.paid)}</span>
+                                {isPaid ? (
+                                  <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-0.5 rounded-full font-medium">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Paid
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-600 font-medium">
+                                    {fmtCurrency(balance)} due
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-400">Loading breakdown...</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Activity Feed */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

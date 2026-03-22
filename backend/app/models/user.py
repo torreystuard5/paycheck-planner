@@ -87,3 +87,4 @@ class User(Base):
         back_populates="referred_user",
         foreign_keys="[ReferralReward.referred_user_id]",
     )
+    bill_member_payments = relationship("BillMemberPayment", back_populates="member", cascade="all, delete-orphan")

@@ -58,6 +58,7 @@ class Bill(Base):
     user = relationship("User", back_populates="bills")
     household = relationship("Household", back_populates="bills")
     payments = relationship("Payment", back_populates="bill")
+    member_payments = relationship("BillMemberPayment", back_populates="bill", cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint("due_day >= 1 AND due_day <= 31", name="ck_bills_due_day"),

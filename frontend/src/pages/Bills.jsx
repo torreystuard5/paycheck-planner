@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, X, AlertCircle, CheckCircle, Undo2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, X, AlertCircle, CheckCircle, Undo2, Users, DollarSign } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +22,12 @@ const defaultForm = {
   frequency: 'monthly',
   auto_pay: false,
   reminder_days: 3,
+};
+
+const fmtCurrency = (val) => {
+  const n = Number(val);
+  const v = isNaN(n) ? 0 : n;
+  return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
 export default function Bills() {
@@ -50,6 +56,19 @@ export default function Bills() {
   const exportRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  // Breakdown state
+  const [showBreakdownModal, setShowBreakdownModal] = useState(false);
+  const [breakdownBill, setBreakdownBill] = useState(null);
+  const [breakdown, setBreakdown] = useState(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownError, setBreakdownError] = useState(null);
+
+  // Member payment state
+  const [showMemberPayModal, setShowMemberPayModal] = useState(false);
+  const [memberPayForm, setMemberPayForm] = useState({ member_id: '', amount_paid: '', paid_at: '' });
+  const [memberPaying, setMemberPaying] = useState(false);
+  const [householdMembers, setHouseholdMembers] = useState([]);
+
   useEffect(() => {
     fetchBills(true);
   }, [statusFilter]);
@@ -76,6 +95,15 @@ export default function Bills() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Fetch household members when user is in a household
+  useEffect(() => {
+    if (user?.household_id) {
+      api.get('/api/v1/households/me')
+        .then((res) => setHouseholdMembers(res.data.members || []))
+        .catch(() => setHouseholdMembers([]));
+    }
+  }, [user?.household_id]);
 
   const fetchBills = async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -233,6 +261,78 @@ export default function Bills() {
     }
   };
 
+  // Breakdown functions
+  const openBreakdown = async (bill) => {
+    setBreakdownBill(bill);
+    setBreakdown(null);
+    setBreakdownError(null);
+    setBreakdownLoading(true);
+    setShowBreakdownModal(true);
+    try {
+      const res = await api.get(`/api/v1/bills/${bill.id}/breakdown`);
+      setBreakdown(res.data);
+    } catch {
+      setBreakdownError('Failed to load bill breakdown.');
+    } finally {
+      setBreakdownLoading(false);
+    }
+  };
+
+  const refreshBreakdown = async (billId) => {
+    try {
+      const res = await api.get(`/api/v1/bills/${billId}/breakdown`);
+      setBreakdown(res.data);
+    } catch {
+      // silent
+    }
+  };
+
+  const openMemberPayModal = () => {
+    setMemberPayForm({
+      member_id: user?.id || '',
+      amount_paid: '',
+      paid_at: format(new Date(), 'yyyy-MM-dd'),
+    });
+    setShowMemberPayModal(true);
+  };
+
+  const handleMemberPayment = async (e) => {
+    e.preventDefault();
+    if (!breakdownBill) return;
+    setMemberPaying(true);
+    try {
+      const payload = {
+        member_id: memberPayForm.member_id || undefined,
+        amount_paid: parseFloat(memberPayForm.amount_paid),
+      };
+      if (memberPayForm.paid_at) {
+        payload.paid_at = new Date(memberPayForm.paid_at).toISOString();
+      }
+      const res = await api.post(`/api/v1/bills/${breakdownBill.id}/member-payment`, payload);
+      setBreakdown(res.data);
+      setShowMemberPayModal(false);
+      showSuccess('Payment recorded!');
+      fetchBills();
+    } catch {
+      setError('Failed to record member payment.');
+    } finally {
+      setMemberPaying(false);
+    }
+  };
+
+  // Pre-fill member payment amount with remaining balance
+  const handleMemberSelect = (memberId) => {
+    setMemberPayForm((prev) => {
+      const member = breakdown?.members?.find((m) => m.member_id === memberId);
+      const remaining = member ? Number(member.balance) : 0;
+      return {
+        ...prev,
+        member_id: memberId,
+        amount_paid: remaining > 0 ? remaining.toFixed(2) : prev.amount_paid,
+      };
+    });
+  };
+
   const filtered = bills.filter((b) => {
     const matchSearch = !search || b.name?.toLowerCase().includes(search.toLowerCase());
     const matchCategory = !filterCategory || b.category === filterCategory;
@@ -349,10 +449,23 @@ export default function Bills() {
             <div key={bill.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${bill.is_paid ? 'opacity-80' : ''}`}>
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className={`font-semibold text-gray-900 ${bill.is_paid ? 'line-through text-gray-500' : ''}`}>{bill.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-semibold text-gray-900 ${bill.is_paid ? 'line-through text-gray-500' : ''}`}>{bill.name}</h3>
+                    {bill.is_household_bill && (
+                      <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                        <Users className="w-3 h-3" />
+                        Shared
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-500">{bill.category || 'Uncategorized'}</p>
                 </div>
                 <div className="flex gap-1">
+                  {bill.is_household_bill && (
+                    <button onClick={() => openBreakdown(bill)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors" title="View split breakdown">
+                      <DollarSign className="w-4 h-4" />
+                    </button>
+                  )}
                   <button onClick={() => openEdit(bill)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
                     <Edit className="w-4 h-4" />
                   </button>
@@ -398,6 +511,7 @@ export default function Bills() {
         </div>
       )}
 
+      {/* Pay Bill Modal */}
       <Modal isOpen={showPayModal} onClose={() => { setShowPayModal(false); setPayTarget(null); }} title="Mark as Paid">
         <form onSubmit={handlePay} className="space-y-4">
           <div>
@@ -430,6 +544,130 @@ export default function Bills() {
         </form>
       </Modal>
 
+      {/* Bill Breakdown Modal */}
+      <Modal isOpen={showBreakdownModal} onClose={() => { setShowBreakdownModal(false); setBreakdownBill(null); setBreakdown(null); }} title={`Split Breakdown: ${breakdownBill?.name || ''}`}>
+        {breakdownLoading ? (
+          <div className="flex justify-center py-8"><LoadingSpinner /></div>
+        ) : breakdownError ? (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{breakdownError}</div>
+        ) : breakdown ? (
+          <div className="space-y-5">
+            {/* Summary bar */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500 mb-1">Total</p>
+                <p className="text-lg font-bold text-gray-900">{fmtCurrency(breakdown.bill?.amount)}</p>
+              </div>
+              <div className="bg-green-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-green-600 mb-1">Paid</p>
+                <p className="text-lg font-bold text-green-700">{fmtCurrency(breakdown.total_paid)}</p>
+              </div>
+              <div className="bg-amber-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-amber-600 mb-1">Remaining</p>
+                <p className="text-lg font-bold text-amber-700">{fmtCurrency(breakdown.total_remaining)}</p>
+              </div>
+            </div>
+
+            {/* Per-member breakdown */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Per-Member Breakdown</h3>
+              <div className="space-y-2">
+                {breakdown.members?.map((member) => {
+                  const balance = Number(member.balance);
+                  const isPaid = balance <= 0;
+                  return (
+                    <div key={member.member_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium shrink-0">
+                          {(member.member_name || '?')[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{member.member_name}</p>
+                          <p className="text-xs text-gray-500">
+                            Share: {fmtCurrency(member.share)} | Paid: {fmtCurrency(member.paid)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 ml-3">
+                        {isPaid ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                            <CheckCircle className="w-3 h-3" />
+                            Paid
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-amber-600">
+                            {fmtCurrency(balance)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Record Payment button */}
+            <button
+              onClick={openMemberPayModal}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <DollarSign className="w-4 h-4" />
+              Record Payment
+            </button>
+          </div>
+        ) : null}
+      </Modal>
+
+      {/* Member Payment Modal */}
+      <Modal isOpen={showMemberPayModal} onClose={() => setShowMemberPayModal(false)} title="Record Member Payment">
+        <form onSubmit={handleMemberPayment} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Paid By</label>
+            <select
+              value={memberPayForm.member_id}
+              onChange={(e) => handleMemberSelect(e.target.value)}
+              className={inputClass}
+              required
+            >
+              <option value="">Select member...</option>
+              {householdMembers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.first_name} {m.last_name} {m.id === user?.id ? '(You)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              value={memberPayForm.amount_paid}
+              onChange={(e) => setMemberPayForm({ ...memberPayForm, amount_paid: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <DateInput
+              required
+              value={memberPayForm.paid_at}
+              onChange={(e) => setMemberPayForm({ ...memberPayForm, paid_at: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setShowMemberPayModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={memberPaying} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {memberPaying ? 'Saving...' : 'Record Payment'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Add/Edit Bill Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingBill ? 'Edit Bill' : 'Add Bill'}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -477,6 +715,7 @@ export default function Bills() {
         </form>
       </Modal>
 
+      {/* Import Modal */}
       <Modal isOpen={showImportModal} onClose={() => setShowImportModal(false)} title="Import Bills from CSV">
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
