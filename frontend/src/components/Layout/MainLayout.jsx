@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, Link } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 import EarlyAccessBanner from '../EarlyAccessBanner';
 import Footer from '../Footer';
+import logo from '../../assets/PayDrift-Logo.jpg';
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -24,9 +25,10 @@ export default function MainLayout() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="ml-3 text-sm font-semibold text-gray-900">
-            PayDrift
-          </span>
+          <Link to="/" className="ml-3 flex items-center gap-2">
+            <img src={logo} alt="PayDrift logo" className="h-8 w-auto" />
+            <span className="text-sm font-semibold text-gray-900">PayDrift</span>
+          </Link>
         </div>
 
         <main className="p-4 md:p-6">

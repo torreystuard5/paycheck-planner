@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Wallet, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import logo from '../../assets/PayDrift-Logo.jpg';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -37,10 +38,8 @@ export default function Login() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center gap-2 mb-2">
-            <Wallet className="h-9 w-9 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">PayDrift</span>
-          </div>
+          <img src={logo} alt="PayDrift logo" className="h-16 w-auto mb-2" />
+          <span className="text-2xl font-bold text-gray-900">PayDrift</span>
           <p className="text-sm text-gray-500">Sign in to manage your finances</p>
         </div>
 

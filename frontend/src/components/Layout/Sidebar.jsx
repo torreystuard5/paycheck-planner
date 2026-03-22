@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Receipt,
@@ -19,6 +19,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import logo from '../../assets/PayDrift-Logo.jpg';
 
 const links = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -53,10 +54,13 @@ export default function Sidebar({ open, onClose }) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-5 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <Wallet className="h-7 w-7 text-blue-600" />
-          <span className="text-lg font-bold text-gray-900">PayDrift</span>
-        </div>
+        <Link to="/" className="flex items-center gap-2">
+          <img src={logo} alt="PayDrift logo" className="h-8 w-auto lg:h-10" />
+          <div className="flex flex-col">
+            <span className="text-lg font-bold text-gray-900">PayDrift</span>
+            <span className="text-[10px] text-gray-400 leading-tight">Budget · Bills · Savings</span>
+          </div>
+        </Link>
         <button
           onClick={onClose}
           className="lg:hidden p-1 text-gray-400 hover:text-gray-600"
