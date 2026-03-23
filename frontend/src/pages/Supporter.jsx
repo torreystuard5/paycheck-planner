@@ -42,7 +42,7 @@ export default function Supporter() {
     try {
       const res = await api.post('/api/v1/supporter/apply-promo', { code: promoCode.trim() });
       setStatus(res.data);
-      setPromoSuccess('Code applied! You have lifetime Pro access.');
+      setPromoSuccess('Code applied! You have lifetime access to upcoming paid features.');
       setPromoCode('');
     } catch (err) {
       setPromoError(err.response?.data?.detail || 'Invalid or expired code.');
@@ -64,7 +64,7 @@ export default function Supporter() {
         </div>
         <h1 className="text-3xl font-bold text-gray-900 mb-3">Support PayDrift</h1>
         <p className="text-gray-600 max-w-xl mx-auto mb-6">
-          Everything is free during early access. Donate to bank free months for when Pro launches.
+          Everything is free during early access. Donate to bank free months toward upcoming paid features.
         </p>
         <a
           href="https://ko-fi.com/spsoftwaresolutions"
@@ -86,14 +86,14 @@ export default function Supporter() {
               <DollarSign className="h-6 w-6 text-green-600" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">$5 = 1 Month Free</h3>
-            <p className="text-sm text-gray-600">Every $5 you donate banks one free month of Pro.</p>
+            <p className="text-sm text-gray-600">Every $5 you donate banks one free month of upcoming paid features.</p>
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">
             <div className="inline-flex items-center justify-center w-12 h-12 bg-amber-50 rounded-full mb-3">
               <Gift className="h-6 w-6 text-amber-600" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">$20 = 5 Months Free</h3>
-            <p className="text-sm text-gray-600">Donate $20 and get a bonus month — 5 months instead of 4.</p>
+            <p className="text-sm text-gray-600">Donate $20 and get a bonus month — 5 months of upcoming paid features instead of 4.</p>
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">
             <div className="inline-flex items-center justify-center w-12 h-12 bg-rose-50 rounded-full mb-3">
@@ -115,7 +115,7 @@ export default function Supporter() {
           <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
             <Star className="h-6 w-6 text-amber-500" />
             <div>
-              <p className="font-semibold text-gray-900">Lifetime Pro</p>
+              <p className="font-semibold text-gray-900">Lifetime Access</p>
               <p className="text-sm text-gray-600">You have permanent free access — thank you!</p>
             </div>
           </div>
@@ -147,7 +147,7 @@ export default function Supporter() {
       {/* Promo Code Section */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-2">Have a promo code?</h2>
-        <p className="text-sm text-gray-600 mb-4">Enter your promo code below to unlock Pro access.</p>
+        <p className="text-sm text-gray-600 mb-4">Enter your promo code below to unlock access to upcoming paid features.</p>
 
         {promoSuccess && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 mb-4 flex items-center gap-2">

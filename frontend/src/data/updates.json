@@ -1,5 +1,10 @@
 [
   {
+    "id": "2026-03-23-donation-text",
+    "date": "2026-03-23",
+    "message": "Updated Support PayDrift page to reference upcoming paid features instead of Pro."
+  },
+  {
     "id": "2026-03-23-command-center",
     "date": "2026-03-23",
     "message": "Admin Command Center with dashboard, user management, support, settings, and audit log tabs. Added sort options across all pages."
