@@ -8,6 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import usePolling from '../hooks/usePolling';
 import { formatDate } from '../utils/dateFormat';
+import RecentUpdates from '../components/RecentUpdates';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -156,6 +157,8 @@ export default function Dashboard() {
           </p>
         )}
       </div>
+
+      <RecentUpdates />
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">

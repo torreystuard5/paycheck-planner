@@ -1,0 +1,32 @@
+[
+  {
+    "id": "2026-03-23-bill-history",
+    "date": "2026-03-23",
+    "message": "Added bill history log to track all bill changes and payments"
+  },
+  {
+    "id": "2026-03-23-household-visibility",
+    "date": "2026-03-23",
+    "message": "All household members can now see every household bill"
+  },
+  {
+    "id": "2026-03-23-bill-share",
+    "date": "2026-03-23",
+    "message": "Bills now show your share instead of the full amount for split bills"
+  },
+  {
+    "id": "2026-03-23-expandable-cards",
+    "date": "2026-03-23",
+    "message": "Bill cards are now expandable to see per-person breakdown"
+  },
+  {
+    "id": "2026-03-22-support-tickets",
+    "date": "2026-03-22",
+    "message": "Support tickets system added — submit and track requests"
+  },
+  {
+    "id": "2026-03-22-stability",
+    "date": "2026-03-22",
+    "message": "Backend stability fix — resolved API loading issues"
+  }
+]
