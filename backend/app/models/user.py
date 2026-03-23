@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -38,6 +38,19 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
     tos_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Account management fields
+    last_login_at: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, server_default=text("0")
+    )
+    account_status: Mapped[str] = mapped_column(
+        String(20), server_default=text("'active'")
+    )
+    account_status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Secure vault fields
     pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)

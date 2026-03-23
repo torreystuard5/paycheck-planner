@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, User, Bell, DollarSign, Download, Loader2, Heart, Star, Calendar } from 'lucide-react';
+import { Save, User, Bell, DollarSign, Download, Loader2, Heart, Star, Calendar, HelpCircle, CheckCircle } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -13,6 +13,10 @@ export default function Settings() {
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [supporterStatus, setSupporterStatus] = useState(null);
+  const [supportForm, setSupportForm] = useState({ email: '', message: '', cant_access_email: false });
+  const [supportSubmitting, setSupportSubmitting] = useState(false);
+  const [supportSuccess, setSupportSuccess] = useState(false);
+  const [supportError, setSupportError] = useState('');
   const [profile, setProfile] = useState({
     first_name: '',
     last_name: '',
@@ -33,6 +37,30 @@ export default function Settings() {
     fetchProfile();
     fetchSupporterStatus();
   }, []);
+
+  useEffect(() => {
+    if (profile.email && !supportForm.email) {
+      setSupportForm((prev) => ({ ...prev, email: profile.email }));
+    }
+  }, [profile.email]);
+
+  const handleSupportSubmit = async (e) => {
+    e.preventDefault();
+    setSupportSubmitting(true);
+    setSupportError('');
+    try {
+      await api.post('/api/v1/support/auth-issue', {
+        ...supportForm,
+        email: supportForm.email || profile.email,
+      });
+      setSupportSuccess(true);
+      setTimeout(() => setSupportSuccess(false), 5000);
+    } catch (err) {
+      setSupportError(err.response?.data?.detail || 'Failed to submit request.');
+    } finally {
+      setSupportSubmitting(false);
+    }
+  };
 
   const fetchProfile = async () => {
     setLoading(true);
@@ -350,6 +378,84 @@ export default function Settings() {
               </>
             )}
           </button>
+        </div>
+      </div>
+
+      <div className="max-w-2xl">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+            <HelpCircle className="w-5 h-5 text-blue-500" />
+            Contact Support
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Having trouble with your account? Send us a message and we'll help.
+          </p>
+
+          {supportSuccess && (
+            <div className="mb-4 flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+              <CheckCircle className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-green-700">Your request has been submitted. We'll get back to you.</p>
+            </div>
+          )}
+          {supportError && (
+            <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              {supportError}
+            </div>
+          )}
+
+          <form onSubmit={handleSupportSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="cs-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                id="cs-email"
+                type="email"
+                required
+                value={supportForm.email}
+                onChange={(e) => setSupportForm({ ...supportForm, email: e.target.value })}
+                className={inputClass}
+                placeholder="Your account email"
+              />
+            </div>
+            <div>
+              <label htmlFor="cs-message" className="block text-sm font-medium text-gray-700 mb-1">
+                Message <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <textarea
+                id="cs-message"
+                rows={3}
+                value={supportForm.message}
+                onChange={(e) => setSupportForm({ ...supportForm, message: e.target.value })}
+                className={inputClass}
+                placeholder="Describe your issue..."
+              />
+            </div>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={supportForm.cant_access_email}
+                onChange={(e) => setSupportForm({ ...supportForm, cant_access_email: e.target.checked })}
+                className="rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">I can't access this email</span>
+            </label>
+            <button
+              type="submit"
+              disabled={supportSubmitting}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {supportSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <HelpCircle className="w-4 h-4" />
+                  Submit Request
+                </>
+              )}
+            </button>
+          </form>
         </div>
       </div>
     </div>

@@ -106,6 +106,10 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(credentials.password, user.password_hash):
+        # Increment failed login count if user exists but password is wrong
+        if user:
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            await db.flush()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -116,6 +120,23 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated",
         )
+
+    # Check account status
+    if user.account_status == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account suspended. Contact support.",
+        )
+    if user.account_status == "closed":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account closed. Contact support.",
+        )
+
+    # Successful login — update tracking fields
+    user.last_login_at = datetime.now(timezone.utc)
+    user.failed_login_count = 0
+    await db.flush()
 
     token_data = {"sub": str(user.id)}
     return TokenResponse(

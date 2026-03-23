@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
 
 class SignupDay(BaseModel):
@@ -68,7 +68,50 @@ class AdminUserDetailResponse(BaseModel):
     next_billing_date: datetime | None
     tos_accepted_at: datetime | None = None
     tos_version: str | None = None
+    last_login_at: datetime | None = None
+    failed_login_count: int = 0
+    account_status: str = "active"
+    account_status_reason: str | None = None
+    admin_notes: str | None = None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AdminUserStatusUpdate(BaseModel):
+    account_status: str = Field(..., pattern="^(active|suspended|closed)$")
+    reason: str | None = None
+
+
+class AdminUserNotesUpdate(BaseModel):
+    admin_notes: str | None = None
+
+
+class AdminUserEmailUpdate(BaseModel):
+    email: EmailStr
+
+
+class SupportRequestResponse(BaseModel):
+    id: int
+    email: str
+    message: str | None = None
+    cant_access_email: bool = False
+    status: str = "open"
+    admin_notes: str | None = None
+    created_at: datetime
+    resolved_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SupportRequestListResponse(BaseModel):
+    requests: list[SupportRequestResponse]
+    total: int
+    page: int
+    per_page: int
+
+
+class SupportRequestUpdate(BaseModel):
+    status: str | None = Field(None, pattern="^(open|in_progress|resolved)$")
+    admin_notes: str | None = None

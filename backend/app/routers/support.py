@@ -7,7 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from pydantic import BaseModel, EmailStr, Field
+
 from app.database import get_db
+from app.models.support_request import SupportRequest
 from app.models.support_ticket import SupportTicket
 from app.models.support_ticket_reply import SupportTicketReply
 from app.models.user import User
@@ -146,3 +149,26 @@ async def reply_to_ticket(
         logger.exception("Reply email failed for ticket %s", ticket_id)
 
     return reply
+
+
+# ── Public auth-issue endpoint (NO auth required) ──────────────────────
+
+class AuthIssueRequest(BaseModel):
+    email: EmailStr = Field(..., max_length=320)
+    message: str | None = Field(None)
+    cant_access_email: bool = False
+
+
+@router.post("/auth-issue", status_code=status.HTTP_201_CREATED)
+async def create_auth_issue(
+    data: AuthIssueRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    request = SupportRequest(
+        email=data.email,
+        message=data.message,
+        cant_access_email=data.cant_access_email,
+    )
+    db.add(request)
+    await db.flush()
+    return {"message": "Your request has been submitted. We'll get back to you."}

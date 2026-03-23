@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -7,15 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.household import Household
+from app.models.support_request import SupportRequest
 from app.models.support_ticket import SupportTicket
 from app.models.user import User
 from app.schemas.admin import (
     AdminStatsResponse,
     AdminToggleRequest,
     AdminUserDetailResponse,
+    AdminUserEmailUpdate,
     AdminUserListResponse,
+    AdminUserNotesUpdate,
+    AdminUserStatusUpdate,
     AdminUserSummary,
     SignupDay,
+    SupportRequestListResponse,
+    SupportRequestResponse,
+    SupportRequestUpdate,
 )
 from app.utils.security import get_current_user
 
@@ -192,3 +199,194 @@ async def toggle_admin(
     await db.flush()
     await db.refresh(user)
     return AdminUserDetailResponse.model_validate(user)
+
+
+@router.patch("/users/{user_id}/status", response_model=AdminUserDetailResponse)
+async def update_user_status(
+    user_id: UUID,
+    body: AdminUserStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.account_status = body.account_status
+    user.account_status_reason = body.reason
+    await db.flush()
+    await db.refresh(user)
+    return AdminUserDetailResponse.model_validate(user)
+
+
+@router.patch("/users/{user_id}/notes", response_model=AdminUserDetailResponse)
+async def update_user_notes(
+    user_id: UUID,
+    body: AdminUserNotesUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.admin_notes = body.admin_notes
+    await db.flush()
+    await db.refresh(user)
+    return AdminUserDetailResponse.model_validate(user)
+
+
+@router.patch("/users/{user_id}/email", response_model=AdminUserDetailResponse)
+async def update_user_email(
+    user_id: UUID,
+    body: AdminUserEmailUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Check email uniqueness
+    existing = await db.execute(
+        select(User).where(User.email == body.email, User.id != user_id)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already in use",
+        )
+
+    user.email = body.email
+    await db.flush()
+    await db.refresh(user)
+    return AdminUserDetailResponse.model_validate(user)
+
+
+@router.get("/support-requests", response_model=SupportRequestListResponse)
+async def list_support_requests(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    status_filter: str | None = Query(None, alias="status"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    query = select(SupportRequest)
+    count_query = select(func.count(SupportRequest.id))
+
+    if status_filter in ("open", "in_progress", "resolved"):
+        query = query.where(SupportRequest.status == status_filter)
+        count_query = count_query.where(SupportRequest.status == status_filter)
+
+    total = (await db.execute(count_query)).scalar() or 0
+    offset = (page - 1) * per_page
+    rows = (
+        await db.execute(
+            query.order_by(SupportRequest.created_at.desc())
+            .offset(offset)
+            .limit(per_page)
+        )
+    ).scalars().all()
+
+    return SupportRequestListResponse(
+        requests=[SupportRequestResponse.model_validate(r) for r in rows],
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
+
+
+@router.get("/support-requests/{request_id}", response_model=SupportRequestResponse)
+async def get_support_request(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(
+        select(SupportRequest).where(SupportRequest.id == request_id)
+    )
+    req = result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Support request not found",
+        )
+
+    return SupportRequestResponse.model_validate(req)
+
+
+@router.patch("/support-requests/{request_id}", response_model=SupportRequestResponse)
+async def update_support_request(
+    request_id: int,
+    body: SupportRequestUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(
+        select(SupportRequest).where(SupportRequest.id == request_id)
+    )
+    req = result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Support request not found",
+        )
+
+    if body.status is not None:
+        req.status = body.status
+        if body.status == "resolved":
+            req.resolved_at = datetime.now(timezone.utc)
+    if body.admin_notes is not None:
+        req.admin_notes = body.admin_notes
+
+    await db.flush()
+    await db.refresh(req)
+    return SupportRequestResponse.model_validate(req)
