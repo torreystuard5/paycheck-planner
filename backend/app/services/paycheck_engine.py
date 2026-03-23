@@ -9,7 +9,7 @@ from __future__ import annotations
 import calendar
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 
 
 # ── Pay-date generation ────────────────────────────────────────────
@@ -157,11 +157,13 @@ def assign_bills_to_paycheck(
         due_dates = _due_dates_in_window(
             bill.due_day, bill.frequency, window_start, window_end
         )
+        full_amount = Decimal(str(bill.amount or 0))
         # Use user_share_amount if set (household-aware), otherwise full amount
-        bill_amount = getattr(bill, "user_share_amount", None)
-        if bill_amount is None:
-            bill_amount = Decimal(str(bill.amount))
+        user_amount = getattr(bill, "user_share_amount", None)
+        if user_amount is None:
+            user_amount = full_amount
         is_split = getattr(bill, "payment_mode", "single") == "split" and bill.household_id is not None
+        split_count = getattr(bill, "split_member_count", 1) or 1
         for due_dt in due_dates:
             days = (due_dt - current_date).days
             items.append(
@@ -169,12 +171,14 @@ def assign_bills_to_paycheck(
                     "id": bill.id,
                     "name": bill.name,
                     "item_type": "bill",
-                    "amount": bill_amount,
+                    "amount": user_amount,
+                    "full_amount": full_amount if is_split else None,
                     "due_date": due_dt,
                     "days_until_due": days,
                     "status": _due_status(days),
                     "auto_pay": bool(bill.auto_pay),
                     "is_split": is_split,
+                    "split_count": split_count if is_split else 1,
                 }
             )
 
@@ -182,6 +186,13 @@ def assign_bills_to_paycheck(
         due_dates = _due_dates_in_window(
             debt.due_day, "monthly", window_start, window_end
         )
+        full_amount = Decimal(str(debt.minimum_payment or 0))
+        # Use user_share_amount if set (split-aware), otherwise full amount
+        user_amount = getattr(debt, "user_share_amount", None)
+        if user_amount is None:
+            user_amount = full_amount
+        is_split = bool(getattr(debt, "is_split", False))
+        split_count = getattr(debt, "split_member_count", 1) or 1
         for due_dt in due_dates:
             days = (due_dt - current_date).days
             items.append(
@@ -189,11 +200,14 @@ def assign_bills_to_paycheck(
                     "id": debt.id,
                     "name": debt.name,
                     "item_type": "debt",
-                    "amount": Decimal(str(debt.minimum_payment)),
+                    "amount": user_amount,
+                    "full_amount": full_amount if is_split else None,
                     "due_date": due_dt,
                     "days_until_due": days,
                     "status": _due_status(days),
                     "auto_pay": bool(debt.auto_pay),
+                    "is_split": is_split,
+                    "split_count": split_count if is_split else 1,
                 }
             )
 
@@ -210,7 +224,7 @@ def build_paycheck_plan(
     bills: list[Any],
     debts: list[Any],
     num_periods: int = 4,
-    current_date: date | None = None,
+    current_date: Optional[date] = None,
 ) -> dict:
     """Build a full paycheck plan across *num_periods* pay periods.
 

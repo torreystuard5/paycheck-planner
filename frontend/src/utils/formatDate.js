@@ -29,6 +29,15 @@ export function formatDate(dateString, formatPreference, humanReadable = false) 
   }
 }
 
+export function formatPaycheckDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return dateStr;
+  const dow = d.toLocaleDateString('en-US', { weekday: 'short' });
+  const rest = formatFriendlyDate(dateStr);
+  return `${dow}, ${rest}`;
+}
+
 export function getFormatPreview(formatPreference) {
   const now = new Date();
   const d = now.getDate().toString().padStart(2, '0');

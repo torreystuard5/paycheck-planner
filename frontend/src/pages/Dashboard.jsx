@@ -1,14 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle, ChevronRight } from 'lucide-react';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle, ChevronRight, Square, CheckSquare } from 'lucide-react';
+import { parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import usePolling from '../hooks/usePolling';
-import { formatDate, formatFriendlyDate } from '../utils/formatDate';
+import { formatDate, formatPaycheckDate } from '../utils/formatDate';
 import RecentUpdates from '../components/RecentUpdates';
+
+const fmtCurrency = (val) => {
+  const n = Number(val);
+  const v = isNaN(n) ? 0 : n;
+  return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -25,6 +31,23 @@ export default function Dashboard() {
   const [household, setHousehold] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [checklist, setChecklist] = useState({});
+  const [checklistLoading, setChecklistLoading] = useState({});
+
+  const fetchChecklist = useCallback(async (payPeriodStart) => {
+    if (!payPeriodStart) return;
+    try {
+      const res = await api.get(`/api/v1/paycheck-checklist?pay_period_start=${payPeriodStart}`);
+      const items = Array.isArray(res.data) ? res.data : res.data?.items || [];
+      const map = {};
+      items.forEach((entry) => {
+        map[`${entry.item_type}_${entry.item_id}`] = entry.is_checked;
+      });
+      setChecklist(map);
+    } catch {
+      setChecklist({});
+    }
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     setError(null);
@@ -48,7 +71,15 @@ export default function Dashboard() {
         api.get('/api/v1/debts/credit-efficiency'),
       ]);
 
-      if (planRes.status === 'fulfilled') setPaycheckPlan(planRes.value.data);
+      if (planRes.status === 'fulfilled') {
+        const planData = planRes.value.data;
+        setPaycheckPlan(planData);
+        if (planData?.paychecks?.[0]) {
+          const pp = planData.paychecks[0];
+          const payPeriodStart = pp.pay_period_start || pp.paycheck_date;
+          if (payPeriodStart) fetchChecklist(payPeriodStart);
+        }
+      }
       if (creditRes.status === 'fulfilled') setCreditScore(creditRes.value.data);
 
       // Household data
@@ -70,7 +101,7 @@ export default function Dashboard() {
     } catch (err) {
       setError('Failed to load dashboard data.');
     }
-  }, []);
+  }, [fetchChecklist]);
 
   useEffect(() => {
     const init = async () => {
@@ -82,6 +113,28 @@ export default function Dashboard() {
   }, [fetchDashboardData]);
 
   usePolling(fetchDashboardData, 30000, !!household);
+
+  const toggleChecklistItem = async (item, payPeriodStart) => {
+    const key = `${item.item_type}_${item.id || item.item_id}`;
+    const currentState = !!checklist[key];
+    const newState = !currentState;
+
+    setChecklist((prev) => ({ ...prev, [key]: newState }));
+    setChecklistLoading((prev) => ({ ...prev, [key]: true }));
+
+    try {
+      await api.put('/api/v1/paycheck-checklist', {
+        item_type: item.item_type,
+        item_id: item.id || item.item_id,
+        pay_period_start: payPeriodStart,
+        is_checked: newState,
+      });
+    } catch {
+      setChecklist((prev) => ({ ...prev, [key]: currentState }));
+    } finally {
+      setChecklistLoading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
 
   if (loading) return <LoadingSpinner />;
 
@@ -226,12 +279,31 @@ export default function Dashboard() {
             <div className="space-y-3">
               {(() => {
                 const next = paycheckPlan.paychecks[0];
+                const payPeriodStart = next.pay_period_start || next.paycheck_date;
+                const assignedItems = Array.isArray(next.assigned_items) ? next.assigned_items : [];
+
+                // Sort: unchecked first, checked last
+                const sortedItems = [...assignedItems].sort((a, b) => {
+                  const aKey = `${a.item_type}_${a.id || a.item_id}`;
+                  const bKey = `${b.item_type}_${b.id || b.item_id}`;
+                  const aChecked = !!checklist[aKey];
+                  const bChecked = !!checklist[bKey];
+                  if (aChecked === bChecked) return 0;
+                  return aChecked ? 1 : -1;
+                });
+
+                const checkedCount = assignedItems.filter(
+                  (item) => !!checklist[`${item.item_type}_${item.id || item.item_id}`]
+                ).length;
+                const totalItems = assignedItems.length;
+                const progressPct = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0;
+
                 return (
                   <>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Next Paycheck</span>
                       <span className="font-medium text-gray-900">
-                        {formatDate(next.paycheck_date, user?.date_format)}
+                        {formatPaycheckDate(next.paycheck_date)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -246,20 +318,60 @@ export default function Dashboard() {
                       <span className="text-gray-600">Remaining</span>
                       <CurrencyDisplay amount={next.remaining} className={`font-medium ${Number(next.remaining) >= 0 ? 'text-green-600' : 'text-red-600'}`} />
                     </div>
-                    {Array.isArray(next.assigned_items) && next.assigned_items.length > 0 && (
+                    {totalItems > 0 && (
                       <div className="mt-4 pt-4 border-t border-gray-100">
-                        <p className="text-sm font-medium text-gray-700 mb-2">Assigned Items</p>
-                        <div className="space-y-2">
-                          {next.assigned_items.map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center text-sm">
-                              <span className="text-gray-600">
-                                {item.name}
-                                {item.is_split && <span className="text-xs text-purple-600 ml-1">(split)</span>}
-                                {' '}<span className="text-xs text-gray-400">({item.item_type})</span>
-                              </span>
-                              <CurrencyDisplay amount={item.amount} className="text-gray-900" />
-                            </div>
-                          ))}
+                        {/* Progress indicator */}
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-medium text-gray-700">Assigned Items</p>
+                          <span className="text-xs font-medium text-gray-500">
+                            {checkedCount}/{totalItems} Paid
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1 mb-3">
+                          <div
+                            className="bg-green-500 h-1 rounded-full transition-all duration-300"
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {sortedItems.map((item) => {
+                            const key = `${item.item_type}_${item.id || item.item_id}`;
+                            const isChecked = !!checklist[key];
+                            const isToggling = !!checklistLoading[key];
+                            const isSplit = item.is_split || (item.split_count && item.split_count > 1);
+
+                            return (
+                              <div
+                                key={key}
+                                className={`flex items-center gap-2 text-sm rounded-md px-1.5 py-1 -mx-1.5 transition-colors ${isChecked ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
+                              >
+                                <button
+                                  onClick={() => toggleChecklistItem(item, payPeriodStart)}
+                                  disabled={isToggling}
+                                  className={`shrink-0 transition-colors ${isToggling ? 'opacity-50' : ''} ${isChecked ? 'text-green-500' : 'text-gray-300 hover:text-gray-400'}`}
+                                >
+                                  {isChecked
+                                    ? <CheckSquare className="w-4 h-4" />
+                                    : <Square className="w-4 h-4" />
+                                  }
+                                </button>
+                                <span className={`flex-1 min-w-0 truncate ${isChecked ? 'line-through text-gray-400' : 'text-gray-600'}`}>
+                                  {item.name}
+                                  {isSplit && <span className="text-xs text-purple-600 ml-1">(your share)</span>}
+                                  {' '}<span className="text-xs text-gray-400">({item.item_type})</span>
+                                </span>
+                                <span className={`shrink-0 text-right ${isChecked ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                                  <CurrencyDisplay amount={item.amount} className="inline" />
+                                </span>
+                                {isSplit && item.full_amount && (
+                                  <span className="shrink-0 text-xs text-gray-400 ml-0.5">
+                                    of {fmtCurrency(item.full_amount)}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

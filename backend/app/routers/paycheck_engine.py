@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -86,6 +87,7 @@ async def _fetch_user_data(db: AsyncSession, user: User):
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             )
             bill.user_share_amount = share
+            bill.split_member_count = member_count
             bills.append(bill)
         elif bill.payment_mode == "single" and is_household:
             if bill.assigned_member_id:
@@ -94,13 +96,50 @@ async def _fetch_user_data(db: AsyncSession, user: User):
                 is_responsible = bill.user_id == user.id
             if is_responsible:
                 bill.user_share_amount = amount
+                bill.split_member_count = 1
                 bills.append(bill)
             # Skip bills assigned to other members
         else:
             bill.user_share_amount = amount
+            bill.split_member_count = 1
             bills.append(bill)
 
-    return income_sources, bills, debts
+    # Compute user share for each debt (split-aware)
+    filtered_debts = []
+    for debt in debts:
+        amount = Decimal(str(debt.minimum_payment or 0))
+
+        if debt.is_split:
+            # Determine split count from split_members JSON or household member count
+            split_count = 1
+            raw_members = debt.split_members
+            if raw_members:
+                try:
+                    parsed = json.loads(raw_members) if isinstance(raw_members, str) else raw_members
+                    if isinstance(parsed, list) and len(parsed) > 0:
+                        split_count = len(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            # Fall back to household member count if no explicit split_members
+            if split_count <= 1 and debt.household_id and member_count > 1:
+                split_count = member_count
+
+            if split_count > 1:
+                share = (amount / split_count).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                debt.user_share_amount = share
+                debt.split_member_count = split_count
+            else:
+                debt.user_share_amount = amount
+                debt.split_member_count = 1
+        else:
+            debt.user_share_amount = amount
+            debt.split_member_count = 1
+
+        filtered_debts.append(debt)
+
+    return income_sources, bills, filtered_debts
 
 
 @router.get("", response_model=PaycheckPlanResponse)

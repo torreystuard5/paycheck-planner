@@ -608,9 +608,9 @@ export default function Bills() {
 
           {/* Line 3: Amount */}
           <div className="mt-2">
-            <CurrencyDisplay amount={displayAmount} className={`text-lg font-bold ${isPaid ? 'text-gray-400' : 'text-gray-900'}`} />
+            <CurrencyDisplay amount={bill.payment_mode === 'split' && bill.is_household_bill ? bill.amount : displayAmount} className={`text-lg font-bold ${isPaid ? 'text-gray-400' : 'text-gray-900'}`} />
             {bill.payment_mode === 'split' && bill.is_household_bill && (
-              <span className="text-xs text-purple-600 ml-1.5">(Your Share: {fmtCurrency(bill.user_share ?? bill.amount)})</span>
+              <span className="block text-sm text-blue-600 mt-0.5">Your Share: {fmtCurrency(bill.user_share ?? bill.amount)}</span>
             )}
           </div>
 

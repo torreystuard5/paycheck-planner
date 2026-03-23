@@ -344,7 +344,7 @@ export default function Debts() {
           <div className="mt-2">
             <CurrencyDisplay amount={debt.balance} className="text-lg font-bold text-gray-900" />
             {yourShare != null && (
-              <span className="text-xs text-purple-600 ml-1.5">(Your Share: {fmtCurrency(yourShare)})</span>
+              <span className="block text-sm text-blue-600 mt-0.5">Your Share: {fmtCurrency(yourShare)}</span>
             )}
           </div>
 
