@@ -157,6 +157,11 @@ def assign_bills_to_paycheck(
         due_dates = _due_dates_in_window(
             bill.due_day, bill.frequency, window_start, window_end
         )
+        # Use user_share_amount if set (household-aware), otherwise full amount
+        bill_amount = getattr(bill, "user_share_amount", None)
+        if bill_amount is None:
+            bill_amount = Decimal(str(bill.amount))
+        is_split = getattr(bill, "payment_mode", "single") == "split" and bill.household_id is not None
         for due_dt in due_dates:
             days = (due_dt - current_date).days
             items.append(
@@ -164,11 +169,12 @@ def assign_bills_to_paycheck(
                     "id": bill.id,
                     "name": bill.name,
                     "item_type": "bill",
-                    "amount": Decimal(str(bill.amount)),
+                    "amount": bill_amount,
                     "due_date": due_dt,
                     "days_until_due": days,
                     "status": _due_status(days),
                     "auto_pay": bool(bill.auto_pay),
+                    "is_split": is_split,
                 }
             )
 

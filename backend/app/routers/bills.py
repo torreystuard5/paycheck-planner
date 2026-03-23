@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,6 +24,17 @@ from app.services.household_service import log_activity
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
+
+
+async def _get_household_member_count(db: AsyncSession, household_id: UUID | None) -> int:
+    """Return the number of members in the household, or 1 if no household."""
+    if not household_id:
+        return 1
+    result = await db.execute(
+        select(func.count()).select_from(User).where(User.household_id == household_id)
+    )
+    count = result.scalar() or 1
+    return max(count, 1)
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -112,12 +123,41 @@ def _compute_next_due_date(bill: Bill) -> date | None:
     return None
 
 
-def _bill_to_response(bill: Bill) -> BillResponse:
-    """Convert a Bill ORM object to BillResponse with is_household_bill flag."""
+def _bill_to_response(
+    bill: Bill,
+    current_user_id: UUID | None = None,
+    household_member_count: int = 1,
+) -> BillResponse:
+    """Convert a Bill ORM object to BillResponse with computed user share."""
     assigned_name = None
     if bill.assigned_member_id and bill.assigned_member:
         m = bill.assigned_member
         assigned_name = f"{m.first_name or ''} {m.last_name or ''}".strip() or m.email
+
+    amount = bill.amount or 0
+    is_household = bill.household_id is not None
+    member_count = household_member_count if is_household else 1
+
+    # Compute user_share and is_user_responsible
+    if bill.payment_mode == "split" and is_household and member_count > 0:
+        from decimal import Decimal, ROUND_HALF_UP
+        user_share = (Decimal(str(amount)) / member_count).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        is_user_responsible = True
+    elif bill.payment_mode == "single" and is_household and current_user_id:
+        user_share = amount
+        if bill.assigned_member_id:
+            is_user_responsible = bill.assigned_member_id == current_user_id
+        else:
+            is_user_responsible = bill.user_id == current_user_id
+        if not is_user_responsible:
+            from decimal import Decimal
+            user_share = Decimal("0")
+    else:
+        user_share = amount
+        is_user_responsible = True
+
     return BillResponse(
         id=bill.id,
         user_id=bill.user_id,
@@ -141,7 +181,10 @@ def _bill_to_response(bill: Bill) -> BillResponse:
         next_due_date=_compute_next_due_date(bill),
         created_at=bill.created_at,
         updated_at=bill.updated_at,
-        is_household_bill=bill.household_id is not None,
+        is_household_bill=is_household,
+        user_share=user_share,
+        is_user_responsible=is_user_responsible,
+        member_count=member_count if is_household else None,
     )
 
 
@@ -190,7 +233,8 @@ async def create_bill(
         except Exception:
             pass
 
-    return _bill_to_response(bill)
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    return _bill_to_response(bill, current_user.id, member_count)
 
 
 @router.get("", response_model=list[BillResponse])
@@ -218,7 +262,8 @@ async def list_bills(
     query = query.options(selectinload(Bill.assigned_member)).order_by(Bill.due_day)
     result = await db.execute(query)
     bills = result.scalars().all()
-    return [_bill_to_response(b) for b in bills]
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    return [_bill_to_response(b, current_user.id, member_count) for b in bills]
 
 
 @router.get("/{bill_id}", response_model=BillResponse)
@@ -238,7 +283,8 @@ async def get_bill(
         not current_user.household_id or bill.household_id != current_user.household_id
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
-    return _bill_to_response(bill)
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    return _bill_to_response(bill, current_user.id, member_count)
 
 
 @router.get("/{bill_id}/breakdown", response_model=BillBreakdownResponse)
@@ -267,9 +313,10 @@ async def get_bill_breakdown_endpoint(
         )
 
     breakdown = await get_bill_breakdown(bill, db)
+    member_count = await _get_household_member_count(db, current_user.household_id)
 
     return BillBreakdownResponse(
-        bill=_bill_to_response(bill),
+        bill=_bill_to_response(bill, current_user.id, member_count),
         total_paid=breakdown["total_paid"],
         total_remaining=breakdown["total_remaining"],
         members=[MemberShareResponse(**m) for m in breakdown["members"]],
@@ -340,9 +387,10 @@ async def create_member_payment(
         pass
 
     breakdown = await get_bill_breakdown(bill, db)
+    member_count = await _get_household_member_count(db, current_user.household_id)
 
     return BillBreakdownResponse(
-        bill=_bill_to_response(bill),
+        bill=_bill_to_response(bill, current_user.id, member_count),
         total_paid=breakdown["total_paid"],
         total_remaining=breakdown["total_remaining"],
         members=[MemberShareResponse(**m) for m in breakdown["members"]],
@@ -418,7 +466,8 @@ async def update_bill(
         except Exception:
             pass
 
-    return _bill_to_response(bill)
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    return _bill_to_response(bill, current_user.id, member_count)
 
 
 @router.delete("/{bill_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -511,7 +560,8 @@ async def pay_bill(
         except Exception:
             pass
 
-    return _bill_to_response(bill)
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    return _bill_to_response(bill, current_user.id, member_count)
 
 
 @router.patch("/{bill_id}/unpay", response_model=BillResponse)
@@ -560,4 +610,5 @@ async def unpay_bill(
         except Exception:
             pass
 
-    return _bill_to_response(bill)
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    return _bill_to_response(bill, current_user.id, member_count)

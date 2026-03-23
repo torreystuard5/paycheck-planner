@@ -168,8 +168,11 @@ export default function Bills() {
 
   const openPayModal = (bill) => {
     setPayTarget(bill);
+    const displayAmount = bill.payment_mode === 'split' && bill.is_household_bill
+      ? Number(bill.user_share ?? bill.amount)
+      : Number(bill.amount);
     setPayForm({
-      paid_amount: String(Number(bill.amount) || ''),
+      paid_amount: String(displayAmount || ''),
       paid_date: format(new Date(), 'yyyy-MM-dd'),
     });
     setShowPayModal(true);
@@ -356,6 +359,7 @@ export default function Bills() {
   };
 
   const filtered = bills.filter((b) => {
+    if (b.is_user_responsible === false) return false;
     const matchSearch = !search || b.name?.toLowerCase().includes(search.toLowerCase());
     const matchCategory = !filterCategory || b.category === filterCategory;
     return matchSearch && matchCategory;
@@ -514,7 +518,12 @@ export default function Bills() {
                   </button>
                 </div>
               </div>
-              <CurrencyDisplay amount={bill.amount} className="text-xl font-bold text-gray-900 block mb-2" />
+              <div className="mb-2">
+                <CurrencyDisplay amount={bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount} className="text-xl font-bold text-gray-900" />
+                {bill.payment_mode === 'split' && bill.is_household_bill && (
+                  <span className="text-xs text-purple-600 ml-1.5">(your share)</span>
+                )}
+              </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500">
                   {(bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null

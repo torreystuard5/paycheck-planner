@@ -1,7 +1,8 @@
 from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -17,7 +18,12 @@ router = APIRouter(prefix="/paycheck-plan", tags=["Paycheck Plan"])
 
 
 async def _fetch_user_data(db: AsyncSession, user: User):
-    """Fetch active income sources, bills, and debts for a user (household-aware)."""
+    """Fetch active income sources, bills, and debts for a user (household-aware).
+
+    For household users, bills are annotated with a `user_share_amount` attribute
+    that reflects the user's portion (split bills divided by member count, single
+    bills assigned to others excluded).
+    """
     income_result = await db.execute(
         select(IncomeSource)
         .where(IncomeSource.user_id == user.id, IncomeSource.is_active.is_(True))
@@ -57,8 +63,42 @@ async def _fetch_user_data(db: AsyncSession, user: User):
             .where(Debt.user_id == user.id, Debt.is_active.is_(True))
         )
 
-    bills = list(bills_result.scalars().all())
+    all_bills = list(bills_result.scalars().all())
     debts = list(debts_result.scalars().all())
+
+    # Compute user share for each bill
+    member_count = 1
+    if user.household_id:
+        count_result = await db.execute(
+            select(func.count()).select_from(User).where(
+                User.household_id == user.household_id
+            )
+        )
+        member_count = max(count_result.scalar() or 1, 1)
+
+    bills = []
+    for bill in all_bills:
+        is_household = bill.household_id is not None
+        amount = Decimal(str(bill.amount or 0))
+
+        if bill.payment_mode == "split" and is_household and member_count > 0:
+            share = (amount / member_count).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            bill.user_share_amount = share
+            bills.append(bill)
+        elif bill.payment_mode == "single" and is_household:
+            if bill.assigned_member_id:
+                is_responsible = bill.assigned_member_id == user.id
+            else:
+                is_responsible = bill.user_id == user.id
+            if is_responsible:
+                bill.user_share_amount = amount
+                bills.append(bill)
+            # Skip bills assigned to other members
+        else:
+            bill.user_share_amount = amount
+            bills.append(bill)
 
     return income_sources, bills, debts
 

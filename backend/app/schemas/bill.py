@@ -74,6 +74,9 @@ class BillResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     is_household_bill: bool = False
+    user_share: Optional[Decimal] = None
+    is_user_responsible: bool = True
+    member_count: Optional[int] = None
 
     model_config = {"from_attributes": True}
 

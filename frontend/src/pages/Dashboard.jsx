@@ -85,14 +85,14 @@ export default function Dashboard() {
   if (loading) return <LoadingSpinner />;
 
   const totalIncome = Array.isArray(income) ? income.reduce((sum, i) => sum + (Number(i.amount) || 0), 0) : 0;
-  const totalBills = Array.isArray(bills) ? bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0) : 0;
+  const totalBills = Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false).reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0) : 0;
   const totalDebt = Array.isArray(debts) ? debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0) : 0;
   const savingsCount = Array.isArray(savingsGoals) ? savingsGoals.length : 0;
 
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
-  const billsThisMonth = Array.isArray(bills) ? bills.filter(() => true) : [];
+  const billsThisMonth = Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false) : [];
   const paidThisMonth = billsThisMonth.filter((b) => {
     if (!b.is_paid || !b.paid_date) return false;
     const pd = new Date(b.paid_date);
@@ -249,7 +249,11 @@ export default function Dashboard() {
                         <div className="space-y-2">
                           {next.assigned_items.map((item, idx) => (
                             <div key={idx} className="flex justify-between items-center text-sm">
-                              <span className="text-gray-600">{item.name} <span className="text-xs text-gray-400">({item.item_type})</span></span>
+                              <span className="text-gray-600">
+                                {item.name}
+                                {item.is_split && <span className="text-xs text-purple-600 ml-1">(split)</span>}
+                                {' '}<span className="text-xs text-gray-400">({item.item_type})</span>
+                              </span>
                               <CurrencyDisplay amount={item.amount} className="text-gray-900" />
                             </div>
                           ))}
@@ -299,7 +303,7 @@ export default function Dashboard() {
             <div className="pt-4 border-t border-gray-100">
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">Monthly Bills</span>
-                <span className="font-medium text-gray-900">{Array.isArray(bills) ? bills.length : 0}</span>
+                <span className="font-medium text-gray-900">{Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false).length : 0}</span>
               </div>
               <div className="flex justify-between items-center mt-2">
                 <span className="text-gray-600">Active Debts</span>

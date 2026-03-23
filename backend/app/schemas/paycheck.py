@@ -14,6 +14,7 @@ class PaycheckItem(BaseModel):
     days_until_due: int
     status: str
     auto_pay: bool
+    is_split: bool = False
 
 
 class PaycheckPlan(BaseModel):
