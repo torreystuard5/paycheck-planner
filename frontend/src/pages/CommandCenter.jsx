@@ -1154,7 +1154,9 @@ function SettingsTab() {
     setSettingsLoading(true);
     try {
       const { data } = await api.get('/api/v1/admin/settings');
-      setMaintenanceMode(!!data.maintenance_mode);
+      const settings = Array.isArray(data) ? data : [];
+      const mm = settings.find((s) => s.key === 'maintenance_mode');
+      setMaintenanceMode(mm ? mm.value === 'true' : false);
     } catch {
       // silent
     } finally {
@@ -1210,7 +1212,7 @@ function SettingsTab() {
     setToggling(true);
     setConfirmMaintenance(false);
     try {
-      await api.put('/api/v1/admin/settings', { maintenance_mode: !maintenanceMode });
+      await api.put('/api/v1/admin/settings/maintenance_mode', { value: String(!maintenanceMode) });
       setMaintenanceMode(!maintenanceMode);
     } catch {
       setError('Failed to update maintenance mode.');
