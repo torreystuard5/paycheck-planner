@@ -20,8 +20,8 @@ class DebtCreate(BaseModel):
     apr: Optional[Decimal] = Field(default=None, ge=0, max_digits=5, decimal_places=2)
     minimum_payment: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     due_day: Optional[int] = Field(default=None, ge=1, le=31)
-    auto_pay: bool = False
-    reminder_days: int = Field(default=3, ge=0, le=30)
+    auto_pay: Optional[bool] = False
+    reminder_days: Optional[int] = Field(default=3, ge=0, le=30)
     is_split: Optional[bool] = None
     split_members: Optional[list] = None
 

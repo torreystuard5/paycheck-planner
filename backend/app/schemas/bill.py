@@ -15,8 +15,8 @@ class BillCreate(BaseModel):
         pattern="^(one_time|weekly|biweekly|semi_monthly|monthly|quarterly|annual|yearly)$",
     )
     category: Optional[str] = Field(default=None, max_length=50)
-    auto_pay: bool = False
-    reminder_days: int = Field(default=3, ge=0, le=30)
+    auto_pay: Optional[bool] = False
+    reminder_days: Optional[int] = Field(default=3, ge=0, le=30)
     payment_mode: Optional[str] = Field(
         default="single", pattern="^(single|split)$"
     )
