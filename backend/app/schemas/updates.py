@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
@@ -17,9 +15,9 @@ class AppUpdateCreate(BaseModel):
 
 
 class AppUpdateUpdate(BaseModel):
-    date: date | None = None
-    description: str | None = None
-    type: str | None = None
+    date: Optional[date] = None
+    description: Optional[str] = None
+    type: Optional[str] = None
 
 
 class AppUpdateOut(BaseModel):
@@ -39,20 +37,20 @@ class AppUpdateOut(BaseModel):
 class ComingSoonCreate(BaseModel):
     feature_name: str
     description: str
-    eta: str | None = None
+    eta: Optional[str] = None
 
 
 class ComingSoonUpdate(BaseModel):
-    feature_name: str | None = None
-    description: str | None = None
-    eta: str | None = None
+    feature_name: Optional[str] = None
+    description: Optional[str] = None
+    eta: Optional[str] = None
 
 
 class ComingSoonOut(BaseModel):
     id: int
     feature_name: str
     description: str
-    eta: str | None = None
+    eta: Optional[str] = None
     created_by: UUID
     created_at: datetime
 
