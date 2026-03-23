@@ -20,7 +20,6 @@ import Income from './pages/Income';
 import AdminTickets from './pages/AdminTickets';
 import AdminStats from './pages/AdminStats';
 import AdminUsers from './pages/AdminUsers';
-import AdminSupportRequests from './pages/AdminSupportRequests';
 import Refer from './pages/Refer';
 import Vault from './pages/Vault';
 import NotFound from './pages/NotFound';
@@ -76,7 +75,6 @@ export default function App() {
             <Route path="admin/tickets" element={<AdminTickets />} />
             <Route path="admin/stats" element={<AdminStats />} />
             <Route path="admin/users" element={<AdminUsers />} />
-            <Route path="admin/support-requests" element={<AdminSupportRequests />} />
           </Route>
 
           {/* 404 */}

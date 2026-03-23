@@ -20,7 +20,10 @@ class SupportTicketRead(BaseModel):
     subject: Optional[str] = None
     message: Optional[str] = None
     status: str = "open"
+    admin_notes: Optional[str] = None
+    cant_access_email: bool = False
     created_at: datetime
+    resolved_at: Optional[datetime] = None
     reply_count: int = 0
 
     model_config = {"from_attributes": True}
@@ -51,3 +54,15 @@ class SupportTicketDetail(SupportTicketRead):
     replies: list[TicketReplyRead] = []
 
     model_config = {"from_attributes": True}
+
+
+class SupportTicketUpdate(BaseModel):
+    status: Optional[str] = Field(None, pattern="^(open|in_progress|resolved)$")
+    admin_notes: Optional[str] = None
+
+
+class SupportTicketListResponse(BaseModel):
+    tickets: list[SupportTicketRead]
+    total: int
+    page: int
+    per_page: int

@@ -17,7 +17,6 @@ import {
   Gift,
   Shield,
   Lock,
-  Inbox,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import logo from '../../assets/PayDrift-Logo.jpg';
@@ -36,9 +35,8 @@ const links = [
   { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
-  { to: '/admin/tickets', label: 'Support Tickets', icon: MessageSquare },
+  { to: '/admin/tickets', label: 'Support Tickets', icon: MessageSquare, adminOnly: true },
   { to: '/admin/users', label: 'Users', icon: Users, adminOnly: true },
-  { to: '/admin/support-requests', label: 'Support Requests', icon: Inbox, adminOnly: true },
   { to: '/admin/stats', label: 'Admin Stats', icon: Shield, adminOnly: true },
 ];
 

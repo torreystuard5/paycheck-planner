@@ -86,28 +86,3 @@ class AdminUserNotesUpdate(BaseModel):
 
 class AdminUserEmailUpdate(BaseModel):
     email: EmailStr
-
-
-class SupportRequestResponse(BaseModel):
-    id: int
-    email: str
-    message: str | None = None
-    cant_access_email: bool = False
-    status: str = "open"
-    admin_notes: str | None = None
-    created_at: datetime
-    resolved_at: datetime | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class SupportRequestListResponse(BaseModel):
-    requests: list[SupportRequestResponse]
-    total: int
-    page: int
-    per_page: int
-
-
-class SupportRequestUpdate(BaseModel):
-    status: str | None = Field(None, pattern="^(open|in_progress|resolved)$")
-    admin_notes: str | None = None

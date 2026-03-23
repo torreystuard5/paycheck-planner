@@ -14,7 +14,6 @@ from app.models.supporter import Supporter
 from app.models.referral import ReferralReward
 from app.models.note import Note
 from app.models.password import Password
-from app.models.support_request import SupportRequest
 
 __all__ = [
     "PromoCode",
@@ -34,5 +33,4 @@ __all__ = [
     "ReferralReward",
     "Note",
     "Password",
-    "SupportRequest",
 ]

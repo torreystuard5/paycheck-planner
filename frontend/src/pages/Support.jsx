@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Send, Loader2, ChevronDown, ChevronUp, HelpCircle, MessageSquare, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Send, Loader2, ChevronDown, ChevronUp, HelpCircle, MessageSquare, AlertCircle, Clock, ArrowRightCircle, CheckCircle2 } from 'lucide-react';
 import api from '../services/api';
 
 const FAQ_ITEMS = [
@@ -29,6 +29,11 @@ const FAQ_ITEMS = [
   },
 ];
 
+const STATUS_CONFIG = {
+  open: { label: 'Open', color: 'bg-amber-100 text-amber-700', icon: Clock },
+  in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700', icon: ArrowRightCircle },
+  resolved: { label: 'Resolved', color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
+};
 
 export default function Support() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
@@ -36,6 +41,28 @@ export default function Support() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState(null);
   const [openFaq, setOpenFaq] = useState(null);
+
+  const [tickets, setTickets] = useState([]);
+  const [ticketsLoading, setTicketsLoading] = useState(true);
+  const [ticketsError, setTicketsError] = useState(null);
+  const [expandedTicket, setExpandedTicket] = useState(null);
+
+  useEffect(() => {
+    fetchTickets();
+  }, []);
+
+  const fetchTickets = async () => {
+    setTicketsLoading(true);
+    setTicketsError(null);
+    try {
+      const res = await api.get('/api/v1/support');
+      setTickets(res.data);
+    } catch {
+      setTicketsError('Failed to load your tickets.');
+    } finally {
+      setTicketsLoading(false);
+    }
+  };
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -57,6 +84,7 @@ export default function Support() {
       });
       setSent(true);
       setForm({ name: '', email: '', subject: '', message: '' });
+      fetchTickets();
     } catch {
       setError('Failed to send message. Please try again.');
     } finally {
@@ -66,6 +94,16 @@ export default function Support() {
 
   const toggleFaq = (idx) => {
     setOpenFaq(openFaq === idx ? null : idx);
+  };
+
+  const formatDate = (dateStr) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
@@ -199,6 +237,128 @@ export default function Support() {
             </button>
           </form>
         </div>
+      </div>
+
+      {/* My Tickets Section */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-blue-500" />
+          My Tickets
+        </h2>
+
+        {ticketsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          </div>
+        ) : ticketsError ? (
+          <div className="flex items-center gap-2 text-red-600 text-sm py-4">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {ticketsError}
+          </div>
+        ) : tickets.length === 0 ? (
+          <p className="text-sm text-gray-500 py-4">You haven&apos;t submitted any tickets yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {tickets.map((ticket) => {
+              const cfg = STATUS_CONFIG[ticket.status] || STATUS_CONFIG.open;
+              const StatusIcon = cfg.icon;
+              const isExpanded = expandedTicket === ticket.id;
+              return (
+                <div key={ticket.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedTicket(isExpanded ? null : ticket.id)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${cfg.color}`}>
+                        <StatusIcon className="w-3 h-3" />
+                        {cfg.label}
+                      </span>
+                      <span className="text-sm font-medium text-gray-900 truncate">{ticket.subject || 'No Subject'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <span className="text-xs text-gray-500">{formatDate(ticket.created_at)}</span>
+                      {isExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-gray-400" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                      )}
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-3">
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Your Message</p>
+                        <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-800 whitespace-pre-wrap">
+                          {ticket.message || 'No message.'}
+                        </div>
+                      </div>
+                      {ticket.reply_count > 0 && (
+                        <TicketReplies ticketId={ticket.id} />
+                      )}
+                      {ticket.reply_count === 0 && (
+                        <p className="text-sm text-gray-400 italic">No replies yet.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TicketReplies({ ticketId }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/api/v1/support/${ticketId}`);
+        if (!cancelled) setDetail(res.data);
+      } catch {
+        // silently fail
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ticketId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-3">
+        <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (!detail?.replies?.length) {
+    return <p className="text-sm text-gray-400 italic">No replies yet.</p>;
+  }
+
+  return (
+    <div>
+      <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
+        Replies ({detail.replies.length})
+      </p>
+      <div className="space-y-2">
+        {detail.replies.map((reply) => (
+          <div key={reply.id} className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+            <p className="text-sm text-gray-800 whitespace-pre-wrap">{reply.reply_message}</p>
+            <p className="text-xs text-gray-500 mt-2">
+              {new Date(reply.created_at).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+              })}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );
