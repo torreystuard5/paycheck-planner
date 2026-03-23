@@ -38,15 +38,27 @@ export default function RecentUpdates() {
       Promise.allSettled([
         api.get('/api/v1/app-updates'),
         api.get('/api/v1/coming-soon'),
-      ]).then(([updatesRes, comingSoonRes]) => {
+        api.get('/api/v1/announcements/active'),
+      ]).then(([updatesRes, comingSoonRes, announcementsRes]) => {
         if (updatesRes.status === 'fulfilled') {
           const data = updatesRes.value.data;
           setUpdates(Array.isArray(data) ? data : []);
         }
+        const csItems = [];
         if (comingSoonRes.status === 'fulfilled') {
           const data = comingSoonRes.value.data;
-          setComingSoon(Array.isArray(data) ? data : []);
+          if (Array.isArray(data)) csItems.push(...data);
         }
+        if (announcementsRes.status === 'fulfilled') {
+          const data = announcementsRes.value.data;
+          if (Array.isArray(data)) {
+            const csAnnouncements = data
+              .filter((a) => a.type === 'coming_soon')
+              .map((a) => ({ id: `ann-${a.id}`, feature_name: a.title || 'Coming Soon', description: a.message, eta: null, created_at: a.created_at }));
+            csItems.push(...csAnnouncements);
+          }
+        }
+        setComingSoon(csItems);
         setFetched(true);
         setLoading(false);
       });

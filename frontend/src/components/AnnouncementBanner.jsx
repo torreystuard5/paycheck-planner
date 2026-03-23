@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Info, AlertTriangle, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, Info, AlertTriangle, CheckCircle, AlertCircle, Rocket } from 'lucide-react';
 import api from '../services/api';
 
 const TYPE_STYLES = {
@@ -7,6 +7,7 @@ const TYPE_STYLES = {
   warning: { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-800', icon: AlertTriangle, iconColor: 'text-amber-500' },
   success: { bg: 'bg-green-50 border-green-200', text: 'text-green-800', icon: CheckCircle, iconColor: 'text-green-500' },
   error: { bg: 'bg-red-50 border-red-200', text: 'text-red-800', icon: AlertCircle, iconColor: 'text-red-500' },
+  coming_soon: { bg: 'bg-purple-50 border-purple-200', text: 'text-purple-800', icon: Rocket, iconColor: 'text-purple-500' },
 };
 
 export default function AnnouncementBanner() {
@@ -29,7 +30,7 @@ export default function AnnouncementBanner() {
     setDismissed((prev) => new Set([...prev, id]));
   };
 
-  const visible = announcements.filter((a) => !dismissed.has(a.id));
+  const visible = announcements.filter((a) => !dismissed.has(a.id) && a.type !== 'coming_soon');
   if (visible.length === 0) return null;
 
   return (

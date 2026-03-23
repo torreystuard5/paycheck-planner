@@ -89,6 +89,7 @@ const ANNOUNCEMENT_TYPES = [
   { value: 'warning', label: 'Warning' },
   { value: 'success', label: 'Success' },
   { value: 'error', label: 'Error' },
+  { value: 'coming_soon', label: 'Coming Soon' },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -1537,7 +1538,7 @@ function SettingsTab() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <input type="text" value={updateForm.description} onChange={(e) => setUpdateForm({ ...updateForm, description: e.target.value })} className={inputClass} placeholder="What changed..." required />
+            <textarea rows={5} value={updateForm.description} onChange={(e) => setUpdateForm({ ...updateForm, description: e.target.value })} className={inputClass} placeholder="What changed..." style={{ minHeight: '120px', resize: 'vertical' }} required />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
@@ -1563,7 +1564,7 @@ function SettingsTab() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea rows={3} value={comingSoonForm.description} onChange={(e) => setComingSoonForm({ ...comingSoonForm, description: e.target.value })} className={inputClass} placeholder="Feature description..." required />
+            <textarea rows={5} value={comingSoonForm.description} onChange={(e) => setComingSoonForm({ ...comingSoonForm, description: e.target.value })} className={inputClass} placeholder="Feature description..." style={{ minHeight: '120px', resize: 'vertical' }} required />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">ETA (Optional)</label>
@@ -1587,7 +1588,7 @@ function SettingsTab() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-            <textarea rows={3} value={announcementForm.message} onChange={(e) => setAnnouncementForm({ ...announcementForm, message: e.target.value })} className={inputClass} placeholder="Announcement message..." required />
+            <textarea rows={5} value={announcementForm.message} onChange={(e) => setAnnouncementForm({ ...announcementForm, message: e.target.value })} className={inputClass} placeholder="Announcement message..." style={{ minHeight: '120px', resize: 'vertical' }} required />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
