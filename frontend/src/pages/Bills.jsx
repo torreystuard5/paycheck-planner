@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, ChevronUp, X, AlertCircle, CheckCircle, Circle, Undo2, Users, DollarSign, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, ChevronUp, X, AlertCircle, CheckCircle, Circle, Undo2, Users, DollarSign, Loader2, History, ArrowLeft, Pencil } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -86,6 +86,14 @@ export default function Bills() {
   const [memberPaying, setMemberPaying] = useState(false);
   const [householdMembers, setHouseholdMembers] = useState([]);
 
+  // Bill history state
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
+
   useEffect(() => {
     fetchBills(true);
   }, [statusFilter]);
@@ -134,6 +142,26 @@ export default function Bills() {
     } finally {
       if (showLoading) setLoading(false);
     }
+  };
+
+  const fetchHistory = async (filter = historyFilter, page = 1) => {
+    setHistoryLoading(true);
+    try {
+      const res = await api.get(`/api/v1/bills/history?filter=${filter}&page=${page}&per_page=50`);
+      setHistoryEntries(res.data.entries || []);
+      setHistoryTotal(res.data.total || 0);
+      setHistoryPage(res.data.page || 1);
+    } catch {
+      setHistoryEntries([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const openHistory = () => {
+    setShowHistory(true);
+    setHistoryFilter('all');
+    fetchHistory('all', 1);
   };
 
   const showSuccess = (msg) => {
@@ -367,7 +395,6 @@ export default function Bills() {
   };
 
   const filtered = bills.filter((b) => {
-    if (b.is_user_responsible === false) return false;
     const matchSearch = !search || b.name?.toLowerCase().includes(search.toLowerCase());
     const matchCategory = !filterCategory || b.category === filterCategory;
     return matchSearch && matchCategory;
@@ -430,6 +457,13 @@ export default function Bills() {
             <Upload className="h-4 w-4" />
             Import CSV
           </button>
+          <button
+            onClick={openHistory}
+            className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <History className="h-4 w-4" />
+            History
+          </button>
           <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
             <Plus className="h-4 w-4" />
             Add Bill
@@ -448,6 +482,111 @@ export default function Bills() {
         </div>
       )}
 
+      {showHistory ? (
+        <>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowHistory(false)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Bills
+            </button>
+            <h2 className="text-lg font-semibold text-gray-900">Bill History</h2>
+          </div>
+
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+            {[
+              { label: 'All', value: 'all' },
+              { label: 'Payments', value: 'payments' },
+              { label: 'Changes', value: 'changes' },
+            ].map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => { setHistoryFilter(tab.value); fetchHistory(tab.value, 1); }}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  historyFilter === tab.value
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {historyLoading ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-500">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Loading history...
+            </div>
+          ) : historyEntries.length === 0 ? (
+            <EmptyState icon={History} title="No history yet" message="Bill actions will appear here as you create, edit, and pay bills." />
+          ) : (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="divide-y divide-gray-100">
+                {historyEntries.map((entry) => {
+                  const actionConfig = {
+                    created: { icon: Plus, color: 'text-blue-600', bg: 'bg-blue-50', label: 'created' },
+                    updated: { icon: Pencil, color: 'text-amber-600', bg: 'bg-amber-50', label: 'updated' },
+                    deleted: { icon: Trash2, color: 'text-red-600', bg: 'bg-red-50', label: 'deleted' },
+                    payment_recorded: { icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50', label: 'paid' },
+                    payment_undone: { icon: Undo2, color: 'text-gray-600', bg: 'bg-gray-100', label: 'undid payment for' },
+                  };
+                  const config = actionConfig[entry.action_type] || actionConfig.updated;
+                  const Icon = config.icon;
+                  let detail = '';
+                  if (entry.details) {
+                    try {
+                      const d = JSON.parse(entry.details);
+                      if (d.amount) detail = ` — $${Number(d.amount).toFixed(2)}`;
+                      else if (d.name) detail = ` — ${d.name}`;
+                    } catch { /* ignore */ }
+                  }
+                  return (
+                    <div key={entry.id} className="flex items-center gap-3 px-6 py-3">
+                      <div className={`p-1.5 rounded-lg ${config.bg}`}>
+                        <Icon className={`w-4 h-4 ${config.color}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-900">
+                          <span className="font-medium">{entry.user_name}</span>
+                          {' '}{config.label}{' '}
+                          <span className="font-medium">{entry.bill_name || 'a bill'}</span>
+                          {detail}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {format(new Date(entry.created_at), 'MMM d, yyyy h:mm a')}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {historyTotal > 50 && (
+                <div className="flex items-center justify-center gap-2 px-6 py-3 border-t border-gray-100">
+                  <button
+                    disabled={historyPage <= 1}
+                    onClick={() => fetchHistory(historyFilter, historyPage - 1)}
+                    className="px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-500">Page {historyPage}</span>
+                  <button
+                    disabled={historyPage * 50 >= historyTotal}
+                    onClick={() => fetchHistory(historyFilter, historyPage + 1)}
+                    className="px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+      <>
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
         {statusTabs.map((tab) => (
           <button
@@ -555,9 +694,15 @@ export default function Bills() {
                     </div>
                   </div>
                   <div className="mb-2">
-                    <CurrencyDisplay amount={bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount} className="text-xl font-bold text-gray-900" />
+                    <CurrencyDisplay amount={bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount} className={`text-xl font-bold ${bill.is_user_responsible === false ? 'text-gray-400' : 'text-gray-900'}`} />
                     {bill.payment_mode === 'split' && bill.is_household_bill && (
                       <span className="text-xs text-purple-600 ml-1.5">(your share)</span>
+                    )}
+                    {bill.is_user_responsible === false && bill.assigned_member_name && (
+                      <span className="text-xs text-gray-500 ml-1.5">({bill.assigned_member_name}'s bill)</span>
+                    )}
+                    {bill.is_user_responsible === false && !bill.assigned_member_name && bill.user_id !== user?.id && (
+                      <span className="text-xs text-gray-500 ml-1.5">(other member's bill)</span>
                     )}
                   </div>
                   <div className="flex items-center justify-between text-sm">
@@ -701,6 +846,8 @@ export default function Bills() {
             );
           })}
         </div>
+      )}
+      </>
       )}
 
       {/* Pay Bill Modal */}

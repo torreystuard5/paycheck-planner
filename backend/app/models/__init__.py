@@ -3,6 +3,7 @@ from app.models.user import User
 from app.models.household import Household
 from app.models.income import IncomeSource
 from app.models.bill import Bill
+from app.models.bill_history import BillHistory
 from app.models.bill_member_payment import BillMemberPayment
 from app.models.debt import Debt
 from app.models.savings_goal import SavingsContribution, SavingsGoal
@@ -21,6 +22,7 @@ __all__ = [
     "Household",
     "IncomeSource",
     "Bill",
+    "BillHistory",
     "BillMemberPayment",
     "Debt",
     "SavingsGoal",

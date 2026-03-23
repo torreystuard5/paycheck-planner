@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
@@ -8,11 +9,14 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.bill import Bill
+from app.models.bill_history import BillHistory
 from app.models.bill_member_payment import BillMemberPayment
 from app.models.user import User
 from app.schemas.bill import (
     BillBreakdownResponse,
     BillCreate,
+    BillHistoryEntry,
+    BillHistoryResponse,
     BillPayRequest,
     BillResponse,
     BillUpdate,
@@ -145,15 +149,14 @@ def _bill_to_response(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
         is_user_responsible = True
-    elif bill.payment_mode == "single" and is_household and current_user_id:
-        user_share = amount
+    elif is_household and current_user_id:
+        # Single-pay household bill or no payment_mode set
         if bill.assigned_member_id:
             is_user_responsible = bill.assigned_member_id == current_user_id
         else:
             is_user_responsible = bill.user_id == current_user_id
-        if not is_user_responsible:
-            from decimal import Decimal
-            user_share = Decimal("0")
+        from decimal import Decimal
+        user_share = amount if is_user_responsible else Decimal("0")
     else:
         user_share = amount
         is_user_responsible = True
@@ -188,6 +191,17 @@ def _bill_to_response(
     )
 
 
+async def log_bill_action(db: AsyncSession, bill_id, bill_name, user_id, action_type, details=None):
+    entry = BillHistory(
+        bill_id=bill_id,
+        bill_name=bill_name,
+        user_id=user_id,
+        action_type=action_type,
+        details=json.dumps(details) if details else None,
+    )
+    db.add(entry)
+
+
 @router.post("", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
 async def create_bill(
     data: BillCreate,
@@ -219,6 +233,11 @@ async def create_bill(
         )
         bill = result.scalar_one()
 
+    await log_bill_action(
+        db, bill.id, bill.name, current_user.id, "created",
+        {"amount": str(bill.amount)} if bill.amount else None,
+    )
+
     if current_user.household_id:
         try:
             await log_activity(
@@ -245,12 +264,12 @@ async def list_bills(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.household_id:
-        query = select(Bill).where(
-            or_(
-                Bill.user_id == current_user.id,
-                Bill.household_id == current_user.household_id,
-            )
+        # Get ALL user IDs in the household
+        member_result = await db.execute(
+            select(User.id).where(User.household_id == current_user.household_id)
         )
+        household_member_ids = [row[0] for row in member_result.all()]
+        query = select(Bill).where(Bill.user_id.in_(household_member_ids))
     else:
         query = select(Bill).where(Bill.user_id == current_user.id)
     if active_only:
@@ -264,6 +283,77 @@ async def list_bills(
     bills = result.scalars().all()
     member_count = await _get_household_member_count(db, current_user.household_id)
     return [_bill_to_response(b, current_user.id, member_count) for b in bills]
+
+
+@router.get("/history", response_model=BillHistoryResponse)
+async def get_bill_history(
+    filter: str = Query(default="all", pattern="^(all|payments|changes)$"),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Get visible bill user IDs (same household logic)
+    if current_user.household_id:
+        member_result = await db.execute(
+            select(User.id).where(User.household_id == current_user.household_id)
+        )
+        visible_user_ids = [row[0] for row in member_result.all()]
+    else:
+        visible_user_ids = [current_user.id]
+
+    query = select(BillHistory).where(BillHistory.user_id.in_(visible_user_ids))
+
+    if filter == "payments":
+        query = query.where(
+            BillHistory.action_type.in_(["payment_recorded", "payment_undone"])
+        )
+    elif filter == "changes":
+        query = query.where(
+            BillHistory.action_type.in_(["created", "updated", "deleted"])
+        )
+
+    # Get total count
+    count_query = select(func.count()).select_from(
+        query.subquery()
+    )
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Paginate and fetch
+    query = query.order_by(BillHistory.created_at.desc())
+    query = query.offset((page - 1) * per_page).limit(per_page)
+    result = await db.execute(query)
+    entries = result.scalars().all()
+
+    # Fetch user names
+    user_ids = list({e.user_id for e in entries})
+    if user_ids:
+        users_result = await db.execute(
+            select(User.id, User.first_name, User.email).where(User.id.in_(user_ids))
+        )
+        user_map = {
+            row[0]: row[1] or row[2] for row in users_result.all()
+        }
+    else:
+        user_map = {}
+
+    return BillHistoryResponse(
+        entries=[
+            BillHistoryEntry(
+                id=e.id,
+                bill_id=e.bill_id,
+                bill_name=e.bill_name,
+                user_name=user_map.get(e.user_id, "Unknown"),
+                action_type=e.action_type,
+                details=e.details,
+                created_at=e.created_at,
+            )
+            for e in entries
+        ],
+        total=total,
+        page=page,
+    )
 
 
 @router.get("/{bill_id}", response_model=BillResponse)
@@ -428,6 +518,9 @@ async def update_bill(
 
     update_data = data.model_dump(exclude_unset=True)
 
+    # Capture old values for history logging
+    old_values = {k: getattr(bill, k) for k in update_data}
+
     # Validate assigned_member_id belongs to the same household
     if "assigned_member_id" in update_data and update_data["assigned_member_id"] is not None:
         member_result = await db.execute(
@@ -451,6 +544,19 @@ async def update_bill(
         select(Bill).where(Bill.id == bill.id).options(selectinload(Bill.assigned_member))
     )
     bill = result.scalar_one()
+
+    # Log changes to bill history
+    changes = {}
+    for k, old_val in old_values.items():
+        new_val = update_data[k]
+        old_str = str(old_val) if old_val is not None else None
+        new_str = str(new_val) if new_val is not None else None
+        if old_str != new_str:
+            changes[k] = {"from": old_str, "to": new_str}
+    if changes:
+        await log_bill_action(
+            db, bill.id, bill.name, current_user.id, "updated", changes,
+        )
 
     if current_user.household_id:
         try:
@@ -497,6 +603,11 @@ async def delete_bill(
     bill_name = bill.name
     bill.is_active = False
     await db.flush()
+
+    await log_bill_action(
+        db, bill.id, bill_name, current_user.id, "deleted",
+        {"name": bill_name},
+    )
 
     if current_user.household_id:
         try:
@@ -545,6 +656,11 @@ async def pay_bill(
 
     await db.flush()
     await db.refresh(bill)
+
+    await log_bill_action(
+        db, bill.id, bill.name, current_user.id, "payment_recorded",
+        {"amount": str(bill.paid_amount)},
+    )
 
     if current_user.household_id:
         try:
@@ -595,6 +711,10 @@ async def unpay_bill(
 
     await db.flush()
     await db.refresh(bill)
+
+    await log_bill_action(
+        db, bill.id, bill.name, current_user.id, "payment_undone", None,
+    )
 
     if current_user.household_id:
         try:

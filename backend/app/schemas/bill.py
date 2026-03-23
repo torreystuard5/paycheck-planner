@@ -100,3 +100,21 @@ class BillBreakdownResponse(BaseModel):
     total_paid: Decimal
     total_remaining: Decimal
     members: list[MemberShareResponse]
+
+
+class BillHistoryEntry(BaseModel):
+    id: int
+    bill_id: Optional[UUID] = None
+    bill_name: Optional[str] = None
+    user_name: str
+    action_type: str
+    details: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BillHistoryResponse(BaseModel):
+    entries: list[BillHistoryEntry]
+    total: int
+    page: int
