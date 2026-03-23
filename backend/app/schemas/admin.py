@@ -1,5 +1,4 @@
 from datetime import date, datetime
-from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -53,9 +52,6 @@ class AdminUserDetailResponse(BaseModel):
     last_name: str
     currency: str
     date_format: str
-    pay_frequency: str | None
-    next_pay_date: date | None
-    net_pay_amount: Decimal | None
     household_id: UUID | None
     is_active: bool
     is_admin: bool
