@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { MessageSquare, AlertCircle, Send, Clock, CheckCircle2, ArrowRightCircle, ChevronLeft, ChevronRight, Loader2, Save, X } from 'lucide-react';
 import api from '../services/api';
+import { formatFriendlyDate } from '../utils/formatDate';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 
@@ -167,13 +168,7 @@ export default function AdminTickets() {
 
   const formatDateTime = (dateStr) => {
     if (!dateStr) return '\u2014';
-    return new Date(dateStr).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+    return formatFriendlyDate(dateStr);
   };
 
   const truncate = (str, len = 80) =>

@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import usePolling from '../hooks/usePolling';
-import { formatDate } from '../utils/dateFormat';
+import { formatDate, formatFriendlyDate } from '../utils/formatDate';
 import RecentUpdates from '../components/RecentUpdates';
 
 export default function Dashboard() {

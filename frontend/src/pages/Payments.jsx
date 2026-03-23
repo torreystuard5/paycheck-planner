@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Filter, Receipt, Download, ChevronDown } from 'lucide-react';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
@@ -241,10 +242,10 @@ export default function Payments() {
                   return (
                     <tr key={payment.id} className="border-t border-gray-100 hover:bg-gray-50">
                       <td className="px-6 py-4 text-gray-900">
-                        {payment.paid_date ? format(parseISO(payment.paid_date), 'MMM d, yyyy') : '--'}
+                        {payment.paid_date ? formatFriendlyDate(payment.paid_date) : '--'}
                       </td>
                       <td className="px-6 py-4 text-gray-600">
-                        {payment.pay_period_date ? format(parseISO(payment.pay_period_date), 'MMM d, yyyy') : '--'}
+                        {payment.pay_period_date ? formatFriendlyDate(payment.pay_period_date) : '--'}
                       </td>
                       <td className="px-6 py-4 text-gray-700">
                         {billName || debtName || 'Payment'}

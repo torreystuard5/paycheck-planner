@@ -1,9 +1,10 @@
+import json
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DebtCreate(BaseModel):
@@ -21,6 +22,8 @@ class DebtCreate(BaseModel):
     due_day: Optional[int] = Field(default=None, ge=1, le=31)
     auto_pay: bool = False
     reminder_days: int = Field(default=3, ge=0, le=30)
+    is_split: Optional[bool] = None
+    split_members: Optional[list] = None
 
 
 class DebtUpdate(BaseModel):
@@ -41,6 +44,8 @@ class DebtUpdate(BaseModel):
     auto_pay: Optional[bool] = None
     reminder_days: Optional[int] = Field(default=None, ge=0, le=30)
     is_active: Optional[bool] = None
+    is_split: Optional[bool] = None
+    split_members: Optional[list] = None
 
 
 class DebtResponse(BaseModel):
@@ -57,7 +62,19 @@ class DebtResponse(BaseModel):
     auto_pay: bool = False
     reminder_days: int = 3
     is_active: bool = True
+    is_split: bool = False
+    split_members: Optional[list] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_validator("split_members", mode="before")
+    @classmethod
+    def parse_split_members(cls, v: object) -> object:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return v

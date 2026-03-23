@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
 import MainLayout from './components/Layout/MainLayout';
 import TosOverlay from './components/TosOverlay';
+import { ToastProvider } from './components/Toast';
 
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -41,6 +42,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <ToastProvider>
         <TosGate>
         <Routes>
           {/* Public routes */}
@@ -83,6 +85,7 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
         </TosGate>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

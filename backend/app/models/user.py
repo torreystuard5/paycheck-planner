@@ -112,3 +112,4 @@ class User(Base):
         foreign_keys="[ReferralReward.referred_user_id]",
     )
     bill_member_payments = relationship("BillMemberPayment", back_populates="member", cascade="all, delete-orphan")
+    paycheck_schedules = relationship("PaycheckSchedule", back_populates="user", cascade="all, delete-orphan")

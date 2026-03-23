@@ -18,6 +18,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import api from '../services/api';
+import { formatFriendlyDate } from '../utils/formatDate';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function AdminStats() {
@@ -116,10 +117,7 @@ export default function AdminStats() {
   ];
 
   const chartData = stats.signups_last_7_days.map((d) => ({
-    date: new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    }),
+    date: formatFriendlyDate(d.date),
     signups: d.count,
   }));
 

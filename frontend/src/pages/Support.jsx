@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Send, Loader2, ChevronDown, ChevronUp, HelpCircle, MessageSquare, AlertCircle, Clock, ArrowRightCircle, CheckCircle2 } from 'lucide-react';
 import api from '../services/api';
+import { formatFriendlyDate } from '../utils/formatDate';
 
 const FAQ_ITEMS = [
   {
@@ -96,15 +97,7 @@ export default function Support() {
     setOpenFaq(openFaq === idx ? null : idx);
   };
 
-  const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const formatDate = (dateStr) => formatFriendlyDate(dateStr);
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
@@ -352,10 +345,7 @@ function TicketReplies({ ticketId }) {
           <div key={reply.id} className="bg-blue-50 border border-blue-100 rounded-lg p-3">
             <p className="text-sm text-gray-800 whitespace-pre-wrap">{reply.reply_message}</p>
             <p className="text-xs text-gray-500 mt-2">
-              {new Date(reply.created_at).toLocaleDateString('en-US', {
-                month: 'short', day: 'numeric', year: 'numeric',
-                hour: '2-digit', minute: '2-digit',
-              })}
+              {formatFriendlyDate(reply.created_at)}
             </p>
           </div>
         ))}

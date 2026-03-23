@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import async_session
 from app.models.system_setting import SystemSetting
 from app.models.user import User
-from app.routers import admin, announcements, auth, billing, bills, debts, households, import_export, income, notes, passwords, paycheck_engine, payments, referrals, reminders, savings, support, supporter, updates
+from app.routers import admin, announcements, auth, billing, bills, debts, households, import_export, income, notes, passwords, paycheck_engine, paycheck_schedules, payments, referrals, reminders, savings, support, supporter, updates
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +187,7 @@ app.include_router(notes.router, prefix="/api/v1")
 app.include_router(passwords.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(announcements.router, prefix="/api/v1")
+app.include_router(paycheck_schedules.router, prefix="/api/v1")
 app.include_router(updates.router, prefix="/api/v1")
 
 

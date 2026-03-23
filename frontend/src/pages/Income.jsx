@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Wallet, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, Wallet, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import SortDropdown from '../components/SortDropdown';
-import { format, parseISO } from 'date-fns';
+import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -30,6 +30,7 @@ export default function Income() {
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
     fetchIncomes(true);
@@ -123,7 +124,7 @@ export default function Income() {
           <h1 className="text-2xl font-bold text-gray-900">Income & Paychecks</h1>
           <p className="text-sm text-gray-600 mt-1">Manage your income sources and paychecks</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SortDropdown
             sortBy={sortBy}
             sortOrder={sortOrder}
@@ -155,32 +156,91 @@ export default function Income() {
         <EmptyState icon={Wallet} title="No Income Sources" message="Add your first paycheck or income source to get started." actionLabel="Add Paycheck" onAction={openAdd} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {incomes.map((income) => (
-            <div key={income.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold text-gray-900">{income.name}</h3>
-                  <p className="text-sm text-gray-500 capitalize">{income.frequency?.replace(/_/g, ' ') || 'Monthly'}</p>
+          {incomes.map((income) => {
+            const isExpanded = expandedId === income.id;
+            return (
+              <div key={income.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 ${!income.is_active ? 'opacity-60' : ''}`}>
+                <div className="p-4">
+                  {/* Line 1: Name + actions */}
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-base font-semibold text-gray-900 truncate">{income.name}</h3>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => openEdit(income)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setDeleteTarget(income)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : income.id)}
+                        className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Line 2: Badges */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                    <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 capitalize">
+                      {income.frequency?.replace(/_/g, ' ') || 'Monthly'}
+                    </span>
+                    {!income.is_active && (
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Inactive</span>
+                    )}
+                  </div>
+
+                  {/* Line 3: Amount */}
+                  <div className="mt-2">
+                    <CurrencyDisplay amount={income.amount} className="text-lg font-bold text-gray-900" />
+                  </div>
+
+                  {/* Line 4: Next pay date */}
+                  <div className="flex items-center gap-1.5 mt-1.5 text-sm text-gray-500">
+                    <Calendar className="w-4 h-4" />
+                    <span>Next: {income.next_pay_date ? formatFriendlyDate(income.next_pay_date) : '--'}</span>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => openEdit(income)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setDeleteTarget(income)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+
+                {/* Expanded section */}
+                <div
+                  className="overflow-hidden transition-all duration-300 ease-in-out"
+                  style={{ maxHeight: isExpanded ? '200px' : '0px', opacity: isExpanded ? 1 : 0 }}
+                >
+                  <div className="px-4 pb-4">
+                    <div className="border-t border-gray-200 pt-3 space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Per Paycheck</span>
+                        <CurrencyDisplay amount={income.amount} className="font-medium text-gray-900" />
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Est. Monthly</span>
+                        <CurrencyDisplay
+                          amount={(() => {
+                            const amt = Number(income.amount) || 0;
+                            switch (income.frequency) {
+                              case 'weekly': return (amt * 52) / 12;
+                              case 'biweekly': return (amt * 26) / 12;
+                              case 'semi_monthly': return amt * 2;
+                              case 'monthly': return amt;
+                              default: return amt;
+                            }
+                          })()}
+                          className="font-medium text-gray-900"
+                        />
+                      </div>
+                      {income.created_at && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Added</span>
+                          <span className="text-gray-700">{formatFriendlyDate(income.created_at)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <CurrencyDisplay amount={income.amount} className="text-xl font-bold text-gray-900 block mb-2" />
-              <div className="flex items-center gap-1 text-sm text-gray-500">
-                <Calendar className="w-4 h-4" />
-                <span>Next: {income.next_pay_date ? format(parseISO(income.next_pay_date), 'MMM d, yyyy') : '--'}</span>
-              </div>
-              {!income.is_active && (
-                <span className="inline-block mt-2 text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">Inactive</span>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

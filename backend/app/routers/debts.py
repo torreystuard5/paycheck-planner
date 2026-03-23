@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from uuid import UUID
 
@@ -138,6 +139,8 @@ async def create_debt(
         due_day=data.due_day,
         auto_pay=data.auto_pay,
         reminder_days=data.reminder_days,
+        is_split=data.is_split if data.is_split is not None else False,
+        split_members=json.dumps(data.split_members) if data.split_members is not None else None,
     )
     db.add(debt)
     await db.flush()
@@ -228,6 +231,8 @@ async def update_debt(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     update_data = data.model_dump(exclude_unset=True)
+    if "split_members" in update_data:
+        update_data["split_members"] = json.dumps(update_data["split_members"]) if update_data["split_members"] is not None else None
     for field, value in update_data.items():
         setattr(debt, field, value)
 

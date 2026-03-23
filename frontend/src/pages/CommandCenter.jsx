@@ -42,6 +42,7 @@ import {
 } from 'recharts';
 import { formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
+import { formatFriendlyDate } from '../utils/formatDate';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
@@ -95,7 +96,7 @@ const ANNOUNCEMENT_TYPES = [
 // ─── Helpers ─────────────────────────────────────────────────────────
 const formatDate = (dateStr) => {
   if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatFriendlyDate(dateStr);
 };
 
 const formatDateTime = (dateStr) => {
@@ -228,7 +229,7 @@ function DashboardTab() {
   ];
 
   const chartData = (stats.signups_last_7_days || []).map((d) => ({
-    date: new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    date: formatFriendlyDate(d.date),
     signups: d.count,
   }));
 

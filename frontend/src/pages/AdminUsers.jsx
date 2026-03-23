@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, ChevronLeft, ChevronRight, ShieldCheck, Loader2, Save, AlertTriangle } from 'lucide-react';
 import api from '../services/api';
+import { formatFriendlyDate } from '../utils/formatDate';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
@@ -205,11 +206,7 @@ export default function AdminUsers() {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    return formatFriendlyDate(dateStr);
   };
 
   const formatDateTime = (dateStr) => {

@@ -8,6 +8,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -45,6 +46,8 @@ class Debt(Base):
     auto_pay: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     reminder_days: Mapped[int] = mapped_column(Integer, server_default=text("3"))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    is_split: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    split_members: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit, Trash2, CreditCard, TrendingDown, Shield, DollarSign, Download, Upload, ChevronDown, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, CreditCard, TrendingDown, Shield, DollarSign, Upload, ChevronDown, ChevronUp, AlertCircle, CheckCircle, Users } from 'lucide-react';
 import SortDropdown from '../components/SortDropdown';
+import ImportExportButton from '../components/ImportExportButton';
 import { formatDistanceToNow } from 'date-fns';
+import { formatFriendlyDate } from '../utils/formatDate';
+import { getCategoryColor } from '../utils/categoryColors';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -25,6 +28,14 @@ const defaultForm = {
   due_day: '',
   auto_pay: false,
   reminder_days: 3,
+  is_split: false,
+  split_members: [],
+};
+
+const fmtCurrency = (val) => {
+  const n = Number(val);
+  const v = isNaN(n) ? 0 : n;
+  return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
 export default function Debts() {
@@ -47,17 +58,25 @@ export default function Debts() {
   const [creditData, setCreditData] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [tabLoading, setTabLoading] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const exportRef = useRef(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [householdMembers, setHouseholdMembers] = useState([]);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchDebts(true);
   }, [sortBy, sortOrder]);
+
+  useEffect(() => {
+    if (user?.household_id) {
+      api.get('/api/v1/households/me')
+        .then((res) => setHouseholdMembers(res.data.members || []))
+        .catch(() => setHouseholdMembers([]));
+    }
+  }, [user?.household_id]);
 
   const pollDebts = useCallback(async () => {
     try {
@@ -75,16 +94,6 @@ export default function Debts() {
     if (activeTab === 'Payoff Strategy') fetchPayoffData();
     if (activeTab === 'Credit Cards') fetchCreditData();
   }, [activeTab]);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (exportRef.current && !exportRef.current.contains(e.target)) {
-        setShowExportMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const fetchDebts = async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -159,6 +168,8 @@ export default function Debts() {
       due_day: debt.due_day || '',
       auto_pay: debt.auto_pay ?? false,
       reminder_days: debt.reminder_days ?? 3,
+      is_split: debt.is_split ?? false,
+      split_members: debt.split_members || [],
     });
     setShowModal(true);
   };
@@ -177,6 +188,8 @@ export default function Debts() {
         due_day: form.due_day ? parseInt(form.due_day, 10) : null,
         auto_pay: form.auto_pay,
         reminder_days: parseInt(form.reminder_days, 10) || 3,
+        is_split: form.is_split,
+        split_members: form.is_split ? form.split_members : [],
       };
       if (editingDebt) {
         await api.put(`/api/v1/debts/${editingDebt.id}`, payload);
@@ -203,16 +216,15 @@ export default function Debts() {
     }
   };
 
-  const handleExport = async (format = 'excel') => {
-    setShowExportMenu(false);
+  const handleExport = async () => {
     try {
-      const response = await api.get(`/api/v1/export/debts?format=${format}`, {
+      const response = await api.get('/api/v1/export/debts?format=csv', {
         responseType: 'blob',
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `debts_export.${format === 'excel' ? 'xlsx' : 'csv'}`);
+      link.setAttribute('download', 'debts_export.csv');
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -243,6 +255,17 @@ export default function Debts() {
     }
   };
 
+  const toggleSplitMember = (memberId) => {
+    setForm((prev) => {
+      const members = prev.split_members || [];
+      if (members.includes(memberId)) {
+        return { ...prev, split_members: members.filter(id => id !== memberId) };
+      } else {
+        return { ...prev, split_members: [...members, memberId] };
+      }
+    });
+  };
+
   const totalDebt = debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
   const totalMinPayment = debts.reduce((sum, d) => sum + (Number(d.minimum_payment) || 0), 0);
 
@@ -266,6 +289,127 @@ export default function Debts() {
     return 'bg-red-500';
   };
 
+  const renderDebtCard = (debt) => {
+    const isExpanded = expandedId === debt.id;
+    const isSplit = debt.is_split;
+    const splitCount = (debt.split_members?.length || 0) + 1;
+    const yourShare = isSplit && debt.balance ? (Number(debt.balance) / splitCount) : null;
+    const catColor = getCategoryColor(debt.type === 'credit_card' ? 'debt' : debt.type);
+
+    return (
+      <div key={debt.id} className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="p-4">
+          {/* Line 1: Name + actions */}
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-base font-semibold text-gray-900 truncate">{debt.name}</h3>
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => openEdit(debt)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+                <Edit className="w-4 h-4" />
+              </button>
+              <button onClick={() => setDeleteTarget(debt)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setExpandedId(isExpanded ? null : debt.id)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Line 2: Badges */}
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            {debt.is_household_bill && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
+                <Users className="w-3 h-3" /> Shared
+              </span>
+            )}
+            {isSplit && (
+              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-600">
+                Split
+              </span>
+            )}
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${catColor}`}>
+              {debt.type?.replace(/_/g, ' ') || 'Debt'}
+            </span>
+            {debt.auto_pay && (
+              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                Auto-pay
+              </span>
+            )}
+          </div>
+
+          {/* Line 3: Balance */}
+          <div className="mt-2">
+            <CurrencyDisplay amount={debt.balance} className="text-lg font-bold text-gray-900" />
+            {yourShare != null && (
+              <span className="text-xs text-purple-600 ml-1.5">(Your Share: {fmtCurrency(yourShare)})</span>
+            )}
+          </div>
+
+          {/* Line 4: Due info */}
+          <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm text-gray-500">
+            <span>Due day {debt.due_day || '--'}</span>
+            {debt.apr && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span>{debt.apr}% APR</span>
+              </>
+            )}
+            {debt.minimum_payment && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span>Min: {fmtCurrency(debt.minimum_payment)}</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Expanded section */}
+        <div
+          className="overflow-hidden transition-all duration-300 ease-in-out"
+          style={{ maxHeight: isExpanded ? '300px' : '0px', opacity: isExpanded ? 1 : 0 }}
+        >
+          <div className="px-4 pb-4">
+            <div className="border-t border-gray-200 pt-3 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Balance</span>
+                <CurrencyDisplay amount={debt.balance} className="font-medium text-gray-900" />
+              </div>
+              {debt.credit_limit && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Credit Limit</span>
+                  <CurrencyDisplay amount={debt.credit_limit} className="font-medium text-gray-900" />
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-500">APR</span>
+                <span className="font-medium text-gray-900">{debt.apr ? `${debt.apr}%` : '--'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Minimum Payment</span>
+                <CurrencyDisplay amount={debt.minimum_payment} className="font-medium text-gray-900" />
+              </div>
+              {isSplit && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Your Share</span>
+                  <span className="font-medium text-purple-600">{fmtCurrency(yourShare)}</span>
+                </div>
+              )}
+              {debt.created_at && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Added</span>
+                  <span className="text-gray-700">{formatFriendlyDate(debt.created_at)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -277,7 +421,7 @@ export default function Debts() {
           )}
         </div>
         {activeTab === 'Overview' && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <SortDropdown
               sortBy={sortBy}
               sortOrder={sortOrder}
@@ -291,33 +435,10 @@ export default function Debts() {
                 { value: 'created_at', label: 'Date Added' },
               ]}
             />
-            <div className="relative" ref={exportRef}>
-              <button
-                onClick={() => setShowExportMenu(!showExportMenu)}
-                className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <Download className="h-4 w-4" />
-                Export
-                <ChevronDown className="h-3 w-3" />
-              </button>
-              {showExportMenu && (
-                <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
-                  <button onClick={() => handleExport('excel')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg">
-                    Excel (.xlsx)
-                  </button>
-                  <button onClick={() => handleExport('csv')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-b-lg">
-                    CSV (.csv)
-                  </button>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={() => { setShowImportModal(true); setImportResult(null); }}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <Upload className="h-4 w-4" />
-              Import CSV
-            </button>
+            <ImportExportButton
+              onExport={handleExport}
+              onImport={() => { setShowImportModal(true); setImportResult(null); }}
+            />
             <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
               <Plus className="h-4 w-4" />
               Add Debt
@@ -363,39 +484,7 @@ export default function Debts() {
             <EmptyState icon={CreditCard} title="No Debts Found" message="Add a debt to start tracking your payoff progress." actionLabel="Add Debt" onAction={openAdd} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {debts.map((debt) => (
-                <div key={debt.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{debt.name}</h3>
-                      <p className="text-sm text-gray-500 capitalize">{debt.type?.replace(/_/g, ' ') || 'Debt'}</p>
-                    </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => openEdit(debt)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setDeleteTarget(debt)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <CurrencyDisplay amount={debt.balance} className="text-xl font-bold text-gray-900 block mb-3" />
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-gray-500">Minimum Payment</span>
-                      <CurrencyDisplay amount={debt.minimum_payment} className="block font-medium text-gray-900" />
-                    </div>
-                    <div>
-                      <span className="text-gray-500">APR</span>
-                      <p className="font-medium text-gray-900">{debt.apr ? `${debt.apr}%` : '--'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-sm mt-2">
-                    <span className="text-gray-500">Due day {debt.due_day || '--'}</span>
-                    {debt.auto_pay && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Auto-pay</span>}
-                  </div>
-                </div>
-              ))}
+              {debts.map(renderDebtCard)}
             </div>
           )}
         </div>
@@ -694,6 +783,50 @@ export default function Debts() {
             <input type="checkbox" id="auto_pay" checked={form.auto_pay} onChange={(e) => setForm({ ...form, auto_pay: e.target.checked })} className="rounded border-gray-300" />
             <label htmlFor="auto_pay" className="text-sm text-gray-700">Auto-pay enabled</label>
           </div>
+
+          {/* Split toggle */}
+          {householdMembers.length > 1 && (
+            <div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, is_split: !form.is_split })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.is_split ? 'bg-purple-600' : 'bg-gray-200'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.is_split ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+                <span className="text-sm text-gray-700">Split this debt</span>
+              </div>
+
+              {form.is_split && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-gray-500">Select members to split with:</p>
+                  {householdMembers
+                    .filter(m => m.id !== user?.id)
+                    .map((m) => (
+                      <label key={m.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.split_members.includes(m.id)}
+                          onChange={() => toggleSplitMember(m.id)}
+                          className="rounded border-gray-300"
+                        />
+                        <span className="text-sm text-gray-700">{m.first_name} {m.last_name}</span>
+                      </label>
+                    ))}
+                  {form.balance && form.split_members.length > 0 && (
+                    <div className="mt-2 p-3 bg-purple-50 rounded-lg">
+                      <p className="text-xs text-purple-700 font-medium mb-1">Split Preview</p>
+                      <p className="text-sm text-purple-900">
+                        {fmtCurrency(parseFloat(form.balance) / (form.split_members.length + 1))} per person ({form.split_members.length + 1} people)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">

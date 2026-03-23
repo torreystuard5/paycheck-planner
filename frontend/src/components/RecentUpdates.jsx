@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, Loader2, Rocket } from 'lucide-react';
 import api from '../services/api';
+import { formatFriendlyDate } from '../utils/formatDate';
 
 const COLLAPSED_KEY = 'paydrift_updates_collapsed';
 const TABS = ['Recent Updates', 'Coming Soon'];
@@ -10,12 +11,6 @@ const UPDATE_TYPE_BADGE = {
   fix: 'bg-amber-100 text-amber-700',
   new_feature: 'bg-green-100 text-green-700',
 };
-
-function formatUpdateDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 export default function RecentUpdates() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -112,7 +107,7 @@ export default function RecentUpdates() {
                 {sortedUpdates.slice(0, 8).map((update, idx) => (
                   <div key={update.id || idx} className="py-3 px-4 flex items-start gap-3">
                     <span className="text-sm text-gray-500 shrink-0 w-16">
-                      {formatUpdateDate(update.date)}
+                      {formatFriendlyDate(update.date)}
                     </span>
                     {update.type && (
                       <span className={`inline-flex px-1.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${UPDATE_TYPE_BADGE[update.type] || 'bg-gray-100 text-gray-700'}`}>

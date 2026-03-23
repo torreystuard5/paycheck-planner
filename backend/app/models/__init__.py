@@ -19,6 +19,7 @@ from app.models.admin_audit_log import AdminAuditLog
 from app.models.announcement import Announcement
 from app.models.app_update import AppUpdate
 from app.models.coming_soon import ComingSoon
+from app.models.paycheck_schedule import PaycheckSchedule
 from app.models.system_setting import SystemSetting
 
 __all__ = [
@@ -44,5 +45,6 @@ __all__ = [
     "Announcement",
     "AppUpdate",
     "ComingSoon",
+    "PaycheckSchedule",
     "SystemSetting",
 ]

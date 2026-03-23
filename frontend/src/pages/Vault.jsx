@@ -27,6 +27,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { formatFriendlyDate } from '../utils/formatDate';
 
 // Vault API helper that adds X-Notes-Session header
 function vaultApi(sessionToken) {
@@ -374,10 +375,7 @@ function NotesTab({ vApi, resetTimer }) {
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-gray-900 text-sm">{note.title || 'Untitled'}</h3>
                 <span className="text-xs text-gray-400">
-                  {new Date(note.updated_at || note.created_at).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
+                  {formatFriendlyDate(note.updated_at || note.created_at)}
                 </span>
               </div>
             </div>

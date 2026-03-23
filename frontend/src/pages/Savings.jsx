@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit, Trash2, PiggyBank, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, PiggyBank, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import SortDropdown from '../components/SortDropdown';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { formatFriendlyDate } from '../utils/formatDate';
+import { formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
@@ -31,6 +32,7 @@ export default function Savings() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
     fetchData(true);
@@ -167,7 +169,7 @@ export default function Savings() {
             <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SortDropdown
             sortBy={sortBy}
             sortOrder={sortOrder}
@@ -202,42 +204,84 @@ export default function Savings() {
             const target = Number(goal.target_amount) || 0;
             const current = Number(goal.current_amount) || 0;
             const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+            const isExpanded = expandedId === goal.id;
+            const goalContribs = contributions.filter(c => c.goal_id === goal.id);
+
             return (
-              <div key={goal.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{goal.name}</h3>
+              <div key={goal.id} className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="p-4">
+                  {/* Line 1: Name + actions */}
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-base font-semibold text-gray-900 truncate">{goal.name}</h3>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => openEditGoal(goal)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setDeleteTarget(goal)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : goal.id)}
+                        className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => openEditGoal(goal)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setDeleteTarget(goal)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                  {/* Line 2: Progress */}
+                  <div className="mt-3">
+                    <div className="flex justify-between text-sm mb-1">
+                      <CurrencyDisplay amount={goal.current_amount || 0} className="text-gray-700" />
+                      <CurrencyDisplay amount={goal.target_amount} className="text-gray-700" />
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div
+                        className="bg-blue-500 h-3 rounded-full transition-all"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 text-right">{(isFinite(progress) ? progress : 0).toFixed(1)}%</p>
                   </div>
+
+                  {/* Line 3: Target date */}
+                  {goal.target_date && (
+                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-1.5">
+                      <Calendar className="w-3 h-3" />
+                      Target: {formatFriendlyDate(goal.target_date)}
+                    </div>
+                  )}
                 </div>
 
-                <div className="mb-3">
-                  <div className="flex justify-between text-sm mb-1">
-                    <CurrencyDisplay amount={goal.current_amount || 0} className="text-gray-700" />
-                    <CurrencyDisplay amount={goal.target_amount} className="text-gray-700" />
+                {/* Expanded section */}
+                <div
+                  className="overflow-hidden transition-all duration-300 ease-in-out"
+                  style={{ maxHeight: isExpanded ? '400px' : '0px', opacity: isExpanded ? 1 : 0 }}
+                >
+                  <div className="px-4 pb-4">
+                    <div className="border-t border-gray-200 pt-3 space-y-3">
+                      {goal.created_at && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Created</span>
+                          <span className="text-gray-700">{formatFriendlyDate(goal.created_at)}</span>
+                        </div>
+                      )}
+                      {goalContribs.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 uppercase mb-2">Recent Contributions</p>
+                          <div className="space-y-1.5">
+                            {goalContribs.slice(0, 5).map((c) => (
+                              <div key={c.id} className="flex justify-between text-sm">
+                                <span className="text-gray-600">{c.pay_period_date ? formatFriendlyDate(c.pay_period_date) : '--'}</span>
+                                <CurrencyDisplay amount={c.amount} className="font-medium text-green-600" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div
-                      className="bg-blue-500 h-3 rounded-full transition-all"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 text-right">{(isFinite(progress) ? progress : 0).toFixed(1)}%</p>
                 </div>
-
-                {goal.target_date && (
-                  <div className="flex items-center gap-1 text-xs text-gray-500">
-                    <Calendar className="w-3 h-3" />
-                    Target: {format(parseISO(goal.target_date), 'MMM d, yyyy')}
-                  </div>
-                )}
               </div>
             );
           })}
@@ -259,7 +303,7 @@ export default function Savings() {
               <tbody>
                 {contributions.map((c) => (
                   <tr key={c.id} className="border-b border-gray-100">
-                    <td className="py-3 text-gray-900">{c.pay_period_date ? format(parseISO(c.pay_period_date), 'MMM d, yyyy') : '--'}</td>
+                    <td className="py-3 text-gray-900">{c.pay_period_date ? formatFriendlyDate(c.pay_period_date) : '--'}</td>
                     <td className="py-3 text-gray-700">{c.goal_name || goals.find(g => g.id === c.goal_id)?.name || '--'}</td>
                     <td className="py-3 text-right">
                       <CurrencyDisplay amount={c.amount} className="font-medium text-green-600" />
