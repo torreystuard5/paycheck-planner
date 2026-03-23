@@ -17,6 +17,8 @@ from app.models.note import Note
 from app.models.password import Password
 from app.models.admin_audit_log import AdminAuditLog
 from app.models.announcement import Announcement
+from app.models.app_update import AppUpdate
+from app.models.coming_soon import ComingSoon
 from app.models.system_setting import SystemSetting
 
 __all__ = [
@@ -40,5 +42,7 @@ __all__ = [
     "Password",
     "AdminAuditLog",
     "Announcement",
+    "AppUpdate",
+    "ComingSoon",
     "SystemSetting",
 ]

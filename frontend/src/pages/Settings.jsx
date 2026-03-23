@@ -228,7 +228,7 @@ export default function Settings() {
               >
                 <option value="weekly">Weekly</option>
                 <option value="biweekly">Biweekly</option>
-                <option value="semi_monthly">Semi-monthly</option>
+                <option value="semi_monthly">Semi-Monthly</option>
                 <option value="monthly">Monthly</option>
               </select>
             </div>
@@ -317,7 +317,7 @@ export default function Settings() {
                 onChange={(e) => setPreferences({ ...preferences, email_notifications: e.target.checked })}
                 className="rounded border-gray-300"
               />
-              <span className="text-sm text-gray-700">Email notifications</span>
+              <span className="text-sm text-gray-700">Email Notifications</span>
             </label>
             <label className="flex items-center gap-3 cursor-pointer">
               <input
@@ -326,7 +326,7 @@ export default function Settings() {
                 onChange={(e) => setPreferences({ ...preferences, bill_reminders: e.target.checked })}
                 className="rounded border-gray-300"
               />
-              <span className="text-sm text-gray-700">Bill due date reminders</span>
+              <span className="text-sm text-gray-700">Bill Due Date Reminders</span>
             </label>
             <label className="flex items-center gap-3 cursor-pointer">
               <input
@@ -335,7 +335,7 @@ export default function Settings() {
                 onChange={(e) => setPreferences({ ...preferences, payment_confirmations: e.target.checked })}
                 className="rounded border-gray-300"
               />
-              <span className="text-sm text-gray-700">Payment confirmations</span>
+              <span className="text-sm text-gray-700">Payment Confirmations</span>
             </label>
           </div>
         </div>
@@ -436,7 +436,7 @@ export default function Settings() {
                 onChange={(e) => setSupportForm({ ...supportForm, cant_access_email: e.target.checked })}
                 className="rounded border-gray-300"
               />
-              <span className="text-sm text-gray-700">I can't access this email</span>
+              <span className="text-sm text-gray-700">I Can't Access This Email</span>
             </label>
             <button
               type="submit"

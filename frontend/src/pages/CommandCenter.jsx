@@ -588,7 +588,7 @@ function UsersTab({ currentUser }) {
       {loading ? (
         <LoadingSpinner />
       ) : filteredUsers.length === 0 ? (
-        <EmptyState icon={Users} title="No users found" message="No users match your search." />
+        <EmptyState icon={Users} title="No Users Found" message="No users match your search." />
       ) : (
         <>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -944,7 +944,7 @@ function SupportTab() {
       {loading ? (
         <LoadingSpinner />
       ) : tickets.length === 0 ? (
-        <EmptyState icon={MessageSquare} title="No support tickets" message={statusFilter ? `No ${statusFilter.replace('_', ' ')} tickets found.` : 'No support tickets yet.'} />
+        <EmptyState icon={MessageSquare} title="No Support Tickets" message={statusFilter ? `No ${statusFilter.replace('_', ' ')} tickets found.` : 'No support tickets yet.'} />
       ) : (
         <>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -1104,6 +1104,12 @@ function SupportTab() {
 }
 
 // ─── Settings Tab ────────────────────────────────────────────────────
+const UPDATE_TYPES = [
+  { value: 'update', label: 'Update', color: 'bg-blue-100 text-blue-700' },
+  { value: 'fix', label: 'Fix', color: 'bg-amber-100 text-amber-700' },
+  { value: 'new_feature', label: 'New Feature', color: 'bg-green-100 text-green-700' },
+];
+
 function SettingsTab() {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -1119,9 +1125,29 @@ function SettingsTab() {
   const [deleteAnnouncementTarget, setDeleteAnnouncementTarget] = useState(null);
   const [error, setError] = useState(null);
 
+  // App Updates
+  const [appUpdates, setAppUpdates] = useState([]);
+  const [appUpdatesLoading, setAppUpdatesLoading] = useState(true);
+  const [showUpdateForm, setShowUpdateForm] = useState(false);
+  const [editingUpdate, setEditingUpdate] = useState(null);
+  const [updateForm, setUpdateForm] = useState({ date: '', description: '', type: 'update' });
+  const [savingUpdate, setSavingUpdate] = useState(false);
+  const [deleteUpdateTarget, setDeleteUpdateTarget] = useState(null);
+
+  // Coming Soon
+  const [comingSoon, setComingSoon] = useState([]);
+  const [comingSoonLoading, setComingSoonLoading] = useState(true);
+  const [showComingSoonForm, setShowComingSoonForm] = useState(false);
+  const [editingComingSoon, setEditingComingSoon] = useState(null);
+  const [comingSoonForm, setComingSoonForm] = useState({ feature_name: '', description: '', eta: '' });
+  const [savingComingSoon, setSavingComingSoon] = useState(false);
+  const [deleteComingSoonTarget, setDeleteComingSoonTarget] = useState(null);
+
   useEffect(() => {
     fetchSettings();
     fetchAnnouncements();
+    fetchAppUpdates();
+    fetchComingSoon();
   }, []);
 
   const fetchSettings = async () => {
@@ -1145,6 +1171,30 @@ function SettingsTab() {
       // silent
     } finally {
       setAnnouncementsLoading(false);
+    }
+  };
+
+  const fetchAppUpdates = async () => {
+    setAppUpdatesLoading(true);
+    try {
+      const { data } = await api.get('/api/v1/admin/app-updates');
+      setAppUpdates(Array.isArray(data) ? data : []);
+    } catch {
+      // silent
+    } finally {
+      setAppUpdatesLoading(false);
+    }
+  };
+
+  const fetchComingSoon = async () => {
+    setComingSoonLoading(true);
+    try {
+      const { data } = await api.get('/api/v1/admin/coming-soon');
+      setComingSoon(Array.isArray(data) ? data : []);
+    } catch {
+      // silent
+    } finally {
+      setComingSoonLoading(false);
     }
   };
 
@@ -1211,6 +1261,91 @@ function SettingsTab() {
     } catch {
       setError('Failed to delete announcement.');
     }
+  };
+
+  // App Updates CRUD
+  const openEditUpdate = (item) => {
+    setEditingUpdate(item);
+    setUpdateForm({ date: item.date || '', description: item.description || '', type: item.type || 'update' });
+    setShowUpdateForm(true);
+  };
+
+  const handleSaveUpdate = async (e) => {
+    e.preventDefault();
+    setSavingUpdate(true);
+    setError(null);
+    try {
+      const payload = { date: updateForm.date, description: updateForm.description, type: updateForm.type };
+      if (editingUpdate) {
+        await api.put(`/api/v1/admin/app-updates/${editingUpdate.id}`, payload);
+      } else {
+        await api.post('/api/v1/admin/app-updates', payload);
+      }
+      setShowUpdateForm(false);
+      setEditingUpdate(null);
+      setUpdateForm({ date: '', description: '', type: 'update' });
+      fetchAppUpdates();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to save update.');
+    } finally {
+      setSavingUpdate(false);
+    }
+  };
+
+  const deleteAppUpdate = async () => {
+    if (!deleteUpdateTarget) return;
+    try {
+      await api.delete(`/api/v1/admin/app-updates/${deleteUpdateTarget.id}`);
+      setDeleteUpdateTarget(null);
+      fetchAppUpdates();
+    } catch {
+      setError('Failed to delete update.');
+    }
+  };
+
+  // Coming Soon CRUD
+  const openEditComingSoon = (item) => {
+    setEditingComingSoon(item);
+    setComingSoonForm({ feature_name: item.feature_name || '', description: item.description || '', eta: item.eta || '' });
+    setShowComingSoonForm(true);
+  };
+
+  const handleSaveComingSoon = async (e) => {
+    e.preventDefault();
+    setSavingComingSoon(true);
+    setError(null);
+    try {
+      const payload = { feature_name: comingSoonForm.feature_name, description: comingSoonForm.description, eta: comingSoonForm.eta || null };
+      if (editingComingSoon) {
+        await api.put(`/api/v1/admin/coming-soon/${editingComingSoon.id}`, payload);
+      } else {
+        await api.post('/api/v1/admin/coming-soon', payload);
+      }
+      setShowComingSoonForm(false);
+      setEditingComingSoon(null);
+      setComingSoonForm({ feature_name: '', description: '', eta: '' });
+      fetchComingSoon();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to save coming soon item.');
+    } finally {
+      setSavingComingSoon(false);
+    }
+  };
+
+  const deleteComingSoonItem = async () => {
+    if (!deleteComingSoonTarget) return;
+    try {
+      await api.delete(`/api/v1/admin/coming-soon/${deleteComingSoonTarget.id}`);
+      setDeleteComingSoonTarget(null);
+      fetchComingSoon();
+    } catch {
+      setError('Failed to delete coming soon item.');
+    }
+  };
+
+  const getUpdateTypeBadge = (type) => {
+    const t = UPDATE_TYPES.find((u) => u.value === type);
+    return t ? t.color : 'bg-gray-100 text-gray-700';
   };
 
   return (
@@ -1303,11 +1438,149 @@ function SettingsTab() {
         )}
       </div>
 
+      {/* Recent Updates Manager */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Clock className="h-5 w-5 text-blue-600" />
+            Recent Updates
+          </h2>
+          <button
+            onClick={() => { setEditingUpdate(null); setUpdateForm({ date: new Date().toISOString().split('T')[0], description: '', type: 'update' }); setShowUpdateForm(true); }}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            New
+          </button>
+        </div>
+
+        {appUpdatesLoading ? (
+          <LoadingSpinner />
+        ) : appUpdates.length === 0 ? (
+          <p className="text-gray-500 text-sm">No updates yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {appUpdates.map((item) => (
+              <div key={item.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${getUpdateTypeBadge(item.type)}`}>
+                  {UPDATE_TYPES.find((u) => u.value === item.type)?.label || item.type}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-900">{item.description}</p>
+                  <p className="text-xs text-gray-400 mt-1">{formatDate(item.date)}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEditUpdate(item)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors">
+                    <Save className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => setDeleteUpdateTarget(item)} className="p-1 text-gray-400 hover:text-red-600 transition-colors">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Coming Soon Manager */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <ArrowRightCircle className="h-5 w-5 text-green-600" />
+            Coming Soon
+          </h2>
+          <button
+            onClick={() => { setEditingComingSoon(null); setComingSoonForm({ feature_name: '', description: '', eta: '' }); setShowComingSoonForm(true); }}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            New
+          </button>
+        </div>
+
+        {comingSoonLoading ? (
+          <LoadingSpinner />
+        ) : comingSoon.length === 0 ? (
+          <p className="text-gray-500 text-sm">No upcoming features yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {comingSoon.map((item) => (
+              <div key={item.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{item.feature_name}</p>
+                  <p className="text-sm text-gray-600">{item.description}</p>
+                  {item.eta && <p className="text-xs text-gray-400 mt-1">ETA: {item.eta}</p>}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEditComingSoon(item)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors">
+                    <Save className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => setDeleteComingSoonTarget(item)} className="p-1 text-gray-400 hover:text-red-600 transition-colors">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Create/Edit Update Modal */}
+      <Modal isOpen={showUpdateForm} onClose={() => { setShowUpdateForm(false); setEditingUpdate(null); }} title={editingUpdate ? 'Edit Update' : 'New Update'}>
+        <form onSubmit={handleSaveUpdate} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input type="date" value={updateForm.date} onChange={(e) => setUpdateForm({ ...updateForm, date: e.target.value })} className={inputClass} required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <input type="text" value={updateForm.description} onChange={(e) => setUpdateForm({ ...updateForm, description: e.target.value })} className={inputClass} placeholder="What changed..." required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <select value={updateForm.type} onChange={(e) => setUpdateForm({ ...updateForm, type: e.target.value })} className={inputClass}>
+              {UPDATE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => { setShowUpdateForm(false); setEditingUpdate(null); }} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={savingUpdate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {savingUpdate ? 'Saving...' : editingUpdate ? 'Update' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Create/Edit Coming Soon Modal */}
+      <Modal isOpen={showComingSoonForm} onClose={() => { setShowComingSoonForm(false); setEditingComingSoon(null); }} title={editingComingSoon ? 'Edit Feature' : 'New Feature'}>
+        <form onSubmit={handleSaveComingSoon} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Feature Name</label>
+            <input type="text" value={comingSoonForm.feature_name} onChange={(e) => setComingSoonForm({ ...comingSoonForm, feature_name: e.target.value })} className={inputClass} placeholder="Feature name..." required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea rows={3} value={comingSoonForm.description} onChange={(e) => setComingSoonForm({ ...comingSoonForm, description: e.target.value })} className={inputClass} placeholder="Feature description..." required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">ETA (Optional)</label>
+            <input type="text" value={comingSoonForm.eta} onChange={(e) => setComingSoonForm({ ...comingSoonForm, eta: e.target.value })} className={inputClass} placeholder="e.g., Q2 2026" />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => { setShowComingSoonForm(false); setEditingComingSoon(null); }} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={savingComingSoon} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {savingComingSoon ? 'Saving...' : editingComingSoon ? 'Update' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Create Announcement Modal */}
       <Modal isOpen={showAnnouncementForm} onClose={() => setShowAnnouncementForm(false)} title="Create Announcement">
         <form onSubmit={handleCreateAnnouncement} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title (optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Title (Optional)</label>
             <input type="text" value={announcementForm.title} onChange={(e) => setAnnouncementForm({ ...announcementForm, title: e.target.value })} className={inputClass} placeholder="Announcement title" />
           </div>
           <div>
@@ -1322,7 +1595,7 @@ function SettingsTab() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date (Optional)</label>
               <input type="date" value={announcementForm.expires_at} onChange={(e) => setAnnouncementForm({ ...announcementForm, expires_at: e.target.value })} className={inputClass} />
             </div>
           </div>
@@ -1353,6 +1626,28 @@ function SettingsTab() {
         onConfirm={deleteAnnouncement}
         title="Delete Announcement"
         message={`Delete "${deleteAnnouncementTarget?.title || 'this announcement'}"? This cannot be undone.`}
+        confirmText="Delete"
+        danger
+      />
+
+      {/* Delete update confirm */}
+      <ConfirmDialog
+        isOpen={!!deleteUpdateTarget}
+        onClose={() => setDeleteUpdateTarget(null)}
+        onConfirm={deleteAppUpdate}
+        title="Delete Update"
+        message={`Delete this update entry? This cannot be undone.`}
+        confirmText="Delete"
+        danger
+      />
+
+      {/* Delete coming soon confirm */}
+      <ConfirmDialog
+        isOpen={!!deleteComingSoonTarget}
+        onClose={() => setDeleteComingSoonTarget(null)}
+        onConfirm={deleteComingSoonItem}
+        title="Delete Feature"
+        message={`Delete "${deleteComingSoonTarget?.feature_name || 'this feature'}"? This cannot be undone.`}
         confirmText="Delete"
         danger
       />
@@ -1420,7 +1715,7 @@ function AuditLogTab() {
       {loading ? (
         <LoadingSpinner />
       ) : entries.length === 0 ? (
-        <EmptyState icon={ScrollText} title="No audit entries" message="No audit log entries found." />
+        <EmptyState icon={ScrollText} title="No Audit Entries" message="No audit log entries found." />
       ) : (
         <>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

@@ -152,7 +152,7 @@ export default function Income() {
       </div>
 
       {incomes.length === 0 ? (
-        <EmptyState icon={Wallet} title="No income sources" message="Add your first paycheck or income source to get started." actionLabel="Add Paycheck" onAction={openAdd} />
+        <EmptyState icon={Wallet} title="No Income Sources" message="Add your first paycheck or income source to get started." actionLabel="Add Paycheck" onAction={openAdd} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {incomes.map((income) => (

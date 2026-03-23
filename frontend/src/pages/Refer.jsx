@@ -40,7 +40,7 @@ export default function Refer() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">Refer a Friend</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Refer A Friend</h1>
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
           <p className="text-red-700 text-sm">{error}</p>
@@ -52,10 +52,10 @@ export default function Refer() {
   if (!info) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">Refer a Friend</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Refer A Friend</h1>
         <EmptyState
           icon={Gift}
-          title="Referral program unavailable"
+          title="Referral Program Unavailable"
           message="Could not load your referral information."
         />
       </div>
@@ -67,7 +67,7 @@ export default function Refer() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Refer a Friend</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Refer A Friend</h1>
         <p className="text-gray-600 mt-1">Share PayDrift and earn free months</p>
       </div>
 

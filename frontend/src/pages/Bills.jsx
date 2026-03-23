@@ -542,7 +542,7 @@ export default function Bills() {
               Loading history...
             </div>
           ) : historyEntries.length === 0 ? (
-            <EmptyState icon={History} title="No history yet" message="Bill actions will appear here as you create, edit, and pay bills." />
+            <EmptyState icon={History} title="No History Yet" message="Bill actions will appear here as you create, edit, and pay bills." />
           ) : (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
               <div className="divide-y divide-gray-100">
@@ -646,7 +646,7 @@ export default function Bills() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={FileText} title="No bills found" message="Add a bill to get started tracking your expenses." actionLabel="Add Bill" onAction={openAdd} />
+        <EmptyState icon={FileText} title="No Bills Found" message="Add a bill to get started tracking your expenses." actionLabel="Add Bill" onAction={openAdd} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((bill) => {

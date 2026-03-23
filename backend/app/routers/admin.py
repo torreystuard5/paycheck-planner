@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.admin_audit_log import AdminAuditLog
 from app.models.announcement import Announcement
+from app.models.app_update import AppUpdate
+from app.models.coming_soon import ComingSoon
 from app.models.household import Household
 from app.models.support_ticket import SupportTicket
 from app.models.system_setting import SystemSetting
@@ -31,6 +33,14 @@ from app.schemas.admin import (
     SignupDay,
     SystemSettingOut,
     SystemSettingUpdate,
+)
+from app.schemas.updates import (
+    AppUpdateCreate,
+    AppUpdateOut,
+    AppUpdateUpdate,
+    ComingSoonCreate,
+    ComingSoonOut,
+    ComingSoonUpdate,
 )
 from app.utils.security import get_current_user
 
@@ -687,3 +697,265 @@ async def update_system_setting(
     await db.flush()
     await db.refresh(setting)
     return SystemSettingOut.model_validate(setting)
+
+
+# ── App Updates ────────────────────────────────────────────────────
+
+
+@router.get("/app-updates", response_model=list[AppUpdateOut])
+async def list_app_updates_admin(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(
+        select(AppUpdate).order_by(AppUpdate.date.desc())
+    )
+    return [AppUpdateOut.model_validate(u) for u in result.scalars().all()]
+
+
+@router.post("/app-updates", response_model=AppUpdateOut, status_code=status.HTTP_201_CREATED)
+async def create_app_update(
+    body: AppUpdateCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    update = AppUpdate(
+        date=body.date,
+        description=body.description,
+        type=body.type,
+        created_by=current_user.id,
+    )
+    db.add(update)
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="created_app_update",
+        target_type="app_update",
+        details=json.dumps({"description": body.description, "type": body.type}, default=str),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+    await db.refresh(update)
+    return AppUpdateOut.model_validate(update)
+
+
+@router.put("/app-updates/{update_id}", response_model=AppUpdateOut)
+async def update_app_update(
+    update_id: int,
+    body: AppUpdateUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(
+        select(AppUpdate).where(AppUpdate.id == update_id)
+    )
+    update = result.scalar_one_or_none()
+    if not update:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="App update not found",
+        )
+
+    update_data = body.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(update, field, value)
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="updated_app_update",
+        target_type="app_update",
+        target_id=str(update_id),
+        details=json.dumps(update_data, default=str),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+    await db.refresh(update)
+    return AppUpdateOut.model_validate(update)
+
+
+@router.delete("/app-updates/{update_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_app_update(
+    update_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(
+        select(AppUpdate).where(AppUpdate.id == update_id)
+    )
+    update = result.scalar_one_or_none()
+    if not update:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="App update not found",
+        )
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="deleted_app_update",
+        target_type="app_update",
+        target_id=str(update_id),
+        details=json.dumps({"description": update.description}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.delete(update)
+    await db.flush()
+
+
+# ── Coming Soon ────────────────────────────────────────────────────
+
+
+@router.get("/coming-soon", response_model=list[ComingSoonOut])
+async def list_coming_soon_admin(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(
+        select(ComingSoon).order_by(ComingSoon.created_at.desc())
+    )
+    return [ComingSoonOut.model_validate(c) for c in result.scalars().all()]
+
+
+@router.post("/coming-soon", response_model=ComingSoonOut, status_code=status.HTTP_201_CREATED)
+async def create_coming_soon(
+    body: ComingSoonCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    item = ComingSoon(
+        feature_name=body.feature_name,
+        description=body.description,
+        eta=body.eta,
+        created_by=current_user.id,
+    )
+    db.add(item)
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="created_coming_soon",
+        target_type="coming_soon",
+        details=json.dumps({"feature_name": body.feature_name}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+    await db.refresh(item)
+    return ComingSoonOut.model_validate(item)
+
+
+@router.put("/coming-soon/{item_id}", response_model=ComingSoonOut)
+async def update_coming_soon(
+    item_id: int,
+    body: ComingSoonUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(
+        select(ComingSoon).where(ComingSoon.id == item_id)
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Coming soon item not found",
+        )
+
+    update_data = body.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(item, field, value)
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="updated_coming_soon",
+        target_type="coming_soon",
+        target_id=str(item_id),
+        details=json.dumps(update_data, default=str),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+    await db.refresh(item)
+    return ComingSoonOut.model_validate(item)
+
+
+@router.delete("/coming-soon/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_coming_soon(
+    item_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(
+        select(ComingSoon).where(ComingSoon.id == item_id)
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Coming soon item not found",
+        )
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="deleted_coming_soon",
+        target_type="coming_soon",
+        target_id=str(item_id),
+        details=json.dumps({"feature_name": item.feature_name}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.delete(item)
+    await db.flush()

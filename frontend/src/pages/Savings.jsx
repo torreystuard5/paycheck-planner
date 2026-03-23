@@ -195,7 +195,7 @@ export default function Savings() {
       )}
 
       {goals.length === 0 ? (
-        <EmptyState icon={PiggyBank} title="No savings goals" message="Create a savings goal to start tracking your progress." actionLabel="Add Goal" onAction={openAddGoal} />
+        <EmptyState icon={PiggyBank} title="No Savings Goals" message="Create a savings goal to start tracking your progress." actionLabel="Add Goal" onAction={openAddGoal} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {goals.map((goal) => {

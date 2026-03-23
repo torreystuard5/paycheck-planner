@@ -220,7 +220,7 @@ export default function Payments() {
       </div>
 
       {payments.length === 0 ? (
-        <EmptyState icon={Receipt} title="No payments found" message="Record a payment to start tracking your payment history." actionLabel="Record Payment" onAction={() => setShowModal(true)} />
+        <EmptyState icon={Receipt} title="No Payments Found" message="Record a payment to start tracking your payment history." actionLabel="Record Payment" onAction={() => setShowModal(true)} />
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
@@ -310,7 +310,7 @@ export default function Payments() {
             </div>
             <div className="flex items-center gap-2 pt-6">
               <input type="checkbox" id="is_extra" checked={form.is_extra} onChange={(e) => setForm({ ...form, is_extra: e.target.checked })} className="rounded border-gray-300" />
-              <label htmlFor="is_extra" className="text-sm text-gray-700">Extra payment</label>
+              <label htmlFor="is_extra" className="text-sm text-gray-700">Extra Payment</label>
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">

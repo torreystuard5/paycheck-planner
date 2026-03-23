@@ -278,30 +278,41 @@ export default function Dashboard() {
             Quick Stats
           </h2>
           <div className="space-y-4">
-            {creditScore && (
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-600">Credit Utilization</span>
-                  <span className="text-2xl font-bold text-gray-900">{creditScore.overall_utilization_pct != null ? `${creditScore.overall_utilization_pct}%` : '--'}</span>
-                </div>
-                {creditScore.overall_tier && <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 capitalize">{creditScore.overall_tier}</span>}
-                {creditScore.overall_utilization_pct != null && (
-                  <div className="mt-3">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">Credit Utilization</span>
-                      <span className="text-gray-900">{(isFinite(Number(creditScore.overall_utilization_pct)) ? Number(creditScore.overall_utilization_pct) : 0).toFixed(1)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-500 h-2 rounded-full"
-                        style={{ width: `${Math.min(Number(creditScore.overall_utilization_pct), 100)}%` }}
-                      />
-                    </div>
+            {creditScore && (() => {
+              const pct = Number(creditScore.overall_utilization_pct || 0);
+              const getRating = (v) => {
+                if (v < 10) return { label: 'Excellent', bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500' };
+                if (v < 30) return { label: 'Good', bg: 'bg-blue-100', text: 'text-blue-700', bar: 'bg-blue-500' };
+                if (v < 50) return { label: 'Fair', bg: 'bg-yellow-100', text: 'text-yellow-700', bar: 'bg-yellow-500' };
+                if (v < 75) return { label: 'Poor', bg: 'bg-orange-100', text: 'text-orange-700', bar: 'bg-orange-500' };
+                return { label: 'Critical', bg: 'bg-red-100', text: 'text-red-700', bar: 'bg-red-500' };
+              };
+              const rating = getRating(pct);
+              return (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600">Credit Utilization</span>
+                    <span className="text-2xl font-bold text-gray-900">{creditScore.overall_utilization_pct != null ? `${creditScore.overall_utilization_pct}%` : '--'}</span>
                   </div>
-                )}
-              </div>
-            )}
-            {!creditScore && <p className="text-gray-500 text-sm">Add debts to see credit efficiency stats.</p>}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs text-gray-500">Utilization Rating</span>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${rating.bg} ${rating.text}`}>{rating.label}</span>
+                  </div>
+                  {creditScore.overall_utilization_pct != null && (
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">Credit Utilization</span>
+                        <span className="text-gray-900">{(isFinite(pct) ? pct : 0).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className={`${rating.bar} h-2 rounded-full`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            {!creditScore && <p className="text-gray-500 text-sm">Add debts to see credit card utilization.</p>}
 
             <div className="pt-4 border-t border-gray-100">
               <div className="flex justify-between items-center">

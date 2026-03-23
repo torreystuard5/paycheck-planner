@@ -358,7 +358,7 @@ function NotesTab({ vApi, resetTimer }) {
       {filtered.length === 0 ? (
         <EmptyState
           icon={StickyNote}
-          title="No notes yet"
+          title="No Notes Yet"
           message="Create your first secure note."
           actionLabel="New Note"
           onAction={openNew}
@@ -632,7 +632,7 @@ function PasswordsTab({ vApi, resetTimer }) {
       {filtered.length === 0 ? (
         <EmptyState
           icon={KeyRound}
-          title="No passwords yet"
+          title="No Passwords Yet"
           message="Store your first password securely."
           actionLabel="New Password"
           onAction={openNew}

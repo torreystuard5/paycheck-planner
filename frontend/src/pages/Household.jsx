@@ -338,7 +338,7 @@ export default function Household() {
             className={`${inputClass} ${!isCreator ? 'bg-gray-50 cursor-not-allowed' : ''}`}
           >
             <option value="equal">Equal Split</option>
-            <option value="proportional">Proportional to Income</option>
+            <option value="proportional">Proportional To Income</option>
             <option value="custom">Custom</option>
           </select>
           {!isCreator && (
@@ -426,7 +426,7 @@ export default function Household() {
         </div>
 
         {activities.length === 0 ? (
-          <p className="text-sm text-gray-500">No activity yet.</p>
+          <p className="text-sm text-gray-500">No Activity Yet.</p>
         ) : (
           <div className="max-h-96 overflow-y-auto space-y-3">
             {activities.map((item) => (

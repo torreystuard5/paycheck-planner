@@ -297,7 +297,7 @@ export default function Support() {
                         <TicketReplies ticketId={ticket.id} />
                       )}
                       {ticket.reply_count === 0 && (
-                        <p className="text-sm text-gray-400 italic">No replies yet.</p>
+                        <p className="text-sm text-gray-400 italic">No Replies Yet.</p>
                       )}
                     </div>
                   )}
@@ -339,7 +339,7 @@ function TicketReplies({ ticketId }) {
   }
 
   if (!detail?.replies?.length) {
-    return <p className="text-sm text-gray-400 italic">No replies yet.</p>;
+    return <p className="text-sm text-gray-400 italic">No Replies Yet.</p>;
   }
 
   return (

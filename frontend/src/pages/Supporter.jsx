@@ -73,7 +73,7 @@ export default function Supporter() {
           className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold text-lg hover:from-amber-600 hover:to-orange-600 transition-all shadow-md"
         >
           <Coffee className="h-5 w-5" />
-          Support on Ko-fi
+          Support On Ko-fi
         </a>
       </div>
 
@@ -146,7 +146,7 @@ export default function Supporter() {
 
       {/* Promo Code Section */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">Have a promo code?</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">Have A Promo Code?</h2>
         <p className="text-sm text-gray-600 mb-4">Enter your promo code below to unlock access to upcoming paid features.</p>
 
         {promoSuccess && (

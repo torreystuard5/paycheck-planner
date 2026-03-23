@@ -100,7 +100,7 @@ export default function Reports() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Bills by Category</h2>
           {categoryData.length === 0 ? (
-            <EmptyState icon={BarChart3} title="No bill data" message="Add bills to see a category breakdown." />
+            <EmptyState icon={BarChart3} title="No Bill Data" message="Add bills to see a category breakdown." />
           ) : (
             <div className="flex flex-col lg:flex-row items-center gap-8">
               <ResponsiveContainer width="100%" height={300}>
@@ -141,7 +141,7 @@ export default function Reports() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Monthly Payment Trends</h2>
           {monthlyPayments.length === 0 ? (
-            <EmptyState icon={BarChart3} title="No payment data" message="Record payments to see monthly trends." />
+            <EmptyState icon={BarChart3} title="No Payment Data" message="Record payments to see monthly trends." />
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={monthlyPayments}>
@@ -161,7 +161,7 @@ export default function Reports() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Interest Projection</h2>
           {interestData.length === 0 ? (
-            <EmptyState icon={BarChart3} title="No interest data" message="Add debts to see interest projections." />
+            <EmptyState icon={BarChart3} title="No Interest Data" message="Add debts to see interest projections." />
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={interestData}>

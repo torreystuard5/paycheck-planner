@@ -12,7 +12,7 @@ import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import usePolling from '../hooks/usePolling';
 
-const TABS = ['Overview', 'Payoff Strategy', 'Credit Score'];
+const TABS = ['Overview', 'Payoff Strategy', 'Credit Cards'];
 const DEBT_TYPES = ['credit_card', 'student_loan', 'auto_loan', 'mortgage', 'personal_loan', 'other'];
 
 const defaultForm = {
@@ -73,7 +73,7 @@ export default function Debts() {
 
   useEffect(() => {
     if (activeTab === 'Payoff Strategy') fetchPayoffData();
-    if (activeTab === 'Credit Score') fetchCreditData();
+    if (activeTab === 'Credit Cards') fetchCreditData();
   }, [activeTab]);
 
   useEffect(() => {
@@ -250,15 +250,19 @@ export default function Debts() {
 
   if (loading) return <LoadingSpinner />;
 
-  const getScoreColor = (score) => {
-    if (score >= 80) return 'text-green-500';
-    if (score >= 60) return 'text-amber-500';
-    return 'text-red-500';
+  const getUtilizationRating = (pct) => {
+    const val = Number(pct) || 0;
+    if (val < 10) return { label: 'Excellent', bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500', ring: 'text-green-500' };
+    if (val < 30) return { label: 'Good', bg: 'bg-blue-100', text: 'text-blue-700', bar: 'bg-blue-500', ring: 'text-blue-500' };
+    if (val < 50) return { label: 'Fair', bg: 'bg-yellow-100', text: 'text-yellow-700', bar: 'bg-yellow-500', ring: 'text-yellow-500' };
+    if (val < 75) return { label: 'Poor', bg: 'bg-orange-100', text: 'text-orange-700', bar: 'bg-orange-500', ring: 'text-orange-500' };
+    return { label: 'Critical', bg: 'bg-red-100', text: 'text-red-700', bar: 'bg-red-500', ring: 'text-red-500' };
   };
 
-  const getScoreBg = (score) => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-amber-500';
+  const getUtilBarColor = (pct) => {
+    const val = Number(pct) || 0;
+    if (val < 30) return 'bg-green-500';
+    if (val <= 50) return 'bg-yellow-500';
     return 'bg-red-500';
   };
 
@@ -281,7 +285,7 @@ export default function Debts() {
               options={[
                 { value: 'name', label: 'Name' },
                 { value: 'balance', label: 'Balance' },
-                { value: 'minimum_payment', label: 'Min Payment' },
+                { value: 'minimum_payment', label: 'Minimum Payment' },
                 { value: 'interest_rate', label: 'Interest Rate' },
                 { value: 'due_date', label: 'Due Date' },
                 { value: 'created_at', label: 'Date Added' },
@@ -350,13 +354,13 @@ export default function Debts() {
               <CurrencyDisplay amount={totalDebt} className="text-2xl font-bold text-gray-900 mt-1 block" />
             </div>
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <p className="text-sm text-gray-600">Total Minimum Payments</p>
+              <p className="text-sm text-gray-600">Total Min Payments</p>
               <CurrencyDisplay amount={totalMinPayment} className="text-2xl font-bold text-gray-900 mt-1 block" />
             </div>
           </div>
 
           {debts.length === 0 ? (
-            <EmptyState icon={CreditCard} title="No debts found" message="Add a debt to start tracking your payoff progress." actionLabel="Add Debt" onAction={openAdd} />
+            <EmptyState icon={CreditCard} title="No Debts Found" message="Add a debt to start tracking your payoff progress." actionLabel="Add Debt" onAction={openAdd} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {debts.map((debt) => (
@@ -378,7 +382,7 @@ export default function Debts() {
                   <CurrencyDisplay amount={debt.balance} className="text-xl font-bold text-gray-900 block mb-3" />
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <span className="text-gray-500">Min Payment</span>
+                      <span className="text-gray-500">Minimum Payment</span>
                       <CurrencyDisplay amount={debt.minimum_payment} className="block font-medium text-gray-900" />
                     </div>
                     <div>
@@ -507,71 +511,77 @@ export default function Debts() {
               )}
 
               {!strategies && interestProjection.length === 0 && (
-                <EmptyState icon={TrendingDown} title="No strategy data" message="Add debts to compare payoff strategies." />
+                <EmptyState icon={TrendingDown} title="No Strategy Data" message="Add debts to compare payoff strategies." />
               )}
             </>
           )}
         </div>
       )}
 
-      {activeTab === 'Credit Score' && (
+      {activeTab === 'Credit Cards' && (
         <div className="space-y-6">
           {tabLoading ? <LoadingSpinner /> : (
             <>
-              {creditData ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col items-center">
-                    <h3 className="font-semibold text-gray-900 mb-4">Credit Utilization</h3>
-                    <div className="relative w-36 h-36 mb-4">
-                      <svg className="w-full h-full" viewBox="0 0 36 36">
-                        <path d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#e5e7eb" strokeWidth="3" />
-                        <path
-                          d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          strokeDasharray={`${Math.min(Number(creditData.overall_utilization_pct || 0), 100)}, 100`}
-                          className={getScoreColor(100 - Number(creditData.overall_utilization_pct || 0))}
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className={`text-3xl font-bold ${getScoreColor(100 - Number(creditData.overall_utilization_pct || 0))}`}>{creditData.overall_utilization_pct != null ? `${creditData.overall_utilization_pct}%` : '--'}</span>
+              {creditData ? (() => {
+                const rating = getUtilizationRating(creditData.overall_utilization_pct);
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col items-center">
+                      <h3 className="font-semibold text-gray-900 mb-4">Credit Utilization</h3>
+                      <div className="relative w-36 h-36 mb-4">
+                        <svg className="w-full h-full" viewBox="0 0 36 36">
+                          <path d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+                          <path
+                            d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            strokeDasharray={`${Math.min(Number(creditData.overall_utilization_pct || 0), 100)}, 100`}
+                            className={rating.ring}
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className={`text-3xl font-bold ${rating.ring}`}>{creditData.overall_utilization_pct != null ? `${creditData.overall_utilization_pct}%` : '--'}</span>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-gray-500 mb-1">Utilization Rating</p>
+                        <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${rating.bg} ${rating.text}`}>{rating.label}</span>
                       </div>
                     </div>
-                    {creditData.overall_tier && <span className={`text-sm font-medium capitalize px-3 py-1 rounded-full bg-${creditData.overall_color === 'green' ? 'green' : creditData.overall_color === 'yellow' ? 'amber' : creditData.overall_color === 'orange' ? 'orange' : 'red'}-100 text-${creditData.overall_color === 'green' ? 'green' : creditData.overall_color === 'yellow' ? 'amber' : creditData.overall_color === 'orange' ? 'orange' : 'red'}-700`}>{creditData.overall_tier}</span>}
-                  </div>
 
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <h3 className="font-semibold text-gray-900 mb-4">Details</h3>
-                    <div className="space-y-4">
-                      {creditData.overall_utilization_pct != null && (
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-600">Credit Utilization</span>
-                            <span className="font-medium text-gray-900">{(isFinite(Number(creditData.overall_utilization_pct)) ? Number(creditData.overall_utilization_pct) : 0).toFixed(1)}%</span>
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                      <h3 className="font-semibold text-gray-900 mb-4">Details</h3>
+                      <div className="space-y-4">
+                        {creditData.overall_utilization_pct != null && (
+                          <div>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-gray-600">Credit Utilization</span>
+                              <span className="font-medium text-gray-900">{(isFinite(Number(creditData.overall_utilization_pct)) ? Number(creditData.overall_utilization_pct) : 0).toFixed(1)}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                              <div className={`h-2.5 rounded-full ${rating.bar}`} style={{ width: `${Math.min(Number(creditData.overall_utilization_pct), 100)}%` }} />
+                            </div>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2.5">
-                            <div className={`h-2.5 rounded-full ${getScoreBg(100 - Number(creditData.overall_utilization_pct))}`} style={{ width: `${Math.min(Number(creditData.overall_utilization_pct), 100)}%` }} />
+                        )}
+                        {creditData.total_limit != null && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Total Credit Limit</span>
+                            <CurrencyDisplay amount={creditData.total_limit} className="font-medium text-gray-900" />
                           </div>
-                        </div>
-                      )}
-                      {creditData.total_limit != null && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Total Credit Limit</span>
-                          <CurrencyDisplay amount={creditData.total_limit} className="font-medium text-gray-900" />
-                        </div>
-                      )}
-                      {creditData.total_balance != null && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Total Balance</span>
-                          <CurrencyDisplay amount={creditData.total_balance} className="font-medium text-gray-900" />
-                        </div>
-                      )}
+                        )}
+                        {creditData.total_balance != null && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Total Balance</span>
+                            <CurrencyDisplay amount={creditData.total_balance} className="font-medium text-gray-900" />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <EmptyState icon={Shield} title="No credit data" message="Add debts to see your credit efficiency score." />
+                );
+              })() : (
+                <EmptyState icon={Shield} title="No Credit Data" message="Add debts to see your credit card utilization." />
               )}
 
               {Array.isArray(recommendations) && recommendations.length > 0 && (
@@ -580,14 +590,55 @@ export default function Debts() {
                     <Shield className="w-5 h-5 text-blue-500" />
                     Recommendations
                   </h3>
-                  <ul className="space-y-3">
-                    {recommendations.map((rec, idx) => (
-                      <li key={idx} className="flex gap-3 text-sm">
-                        <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center shrink-0 text-xs font-medium">{idx + 1}</span>
-                        <span className="text-gray-700">{typeof rec === 'string' ? rec : rec.message || rec.recommendation || JSON.stringify(rec)}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[...recommendations]
+                      .sort((a, b) => (Number(b.current_utilization || b.utilization_pct || 0)) - (Number(a.current_utilization || a.utilization_pct || 0)))
+                      .map((rec, idx) => {
+                        if (typeof rec === 'string') {
+                          return (
+                            <div key={idx} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                              <p className="text-sm text-gray-700">{rec}</p>
+                            </div>
+                          );
+                        }
+                        const cardName = rec.card_name || rec.name || rec.debt_name || `Card ${idx + 1}`;
+                        const currentUtil = Number(rec.current_utilization || rec.utilization_pct || 0);
+                        const projectedUtil = Number(rec.projected_utilization || rec.projected_pct || 0);
+                        const suggestion = rec.suggestion || rec.message || rec.recommendation || '';
+                        const currentUtilPct = currentUtil > 1 ? currentUtil : currentUtil * 100;
+                        const projectedUtilPct = projectedUtil > 1 ? projectedUtil : projectedUtil * 100;
+                        return (
+                          <div key={idx} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
+                            <h4 className="font-semibold text-gray-900">{cardName}</h4>
+                            <div>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="text-gray-600">Current Utilization</span>
+                                <span className="font-medium text-gray-900">{currentUtilPct.toFixed(1)}%</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div className={`h-2 rounded-full ${getUtilBarColor(currentUtilPct)}`} style={{ width: `${Math.min(currentUtilPct, 100)}%` }} />
+                              </div>
+                            </div>
+                            {projectedUtilPct > 0 && (
+                              <div>
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span className="text-gray-600">Projected Utilization</span>
+                                  <span className="font-medium text-gray-900">{projectedUtilPct.toFixed(1)}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div className={`h-2 rounded-full ${getUtilBarColor(projectedUtilPct)}`} style={{ width: `${Math.min(projectedUtilPct, 100)}%` }} />
+                                </div>
+                              </div>
+                            )}
+                            {suggestion && (
+                              <div className="bg-blue-50 rounded-lg p-2.5">
+                                <p className="text-sm text-blue-700">{suggestion}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                    })}
+                  </div>
                 </div>
               )}
             </>
@@ -603,7 +654,7 @@ export default function Debts() {
               <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Debt Type</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={inputClass}>
                 {DEBT_TYPES.map((t) => <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>)}
               </select>
@@ -625,7 +676,7 @@ export default function Debts() {
               <input type="number" step="0.01" value={form.apr} onChange={(e) => setForm({ ...form, apr: e.target.value })} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Min Payment</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Payment</label>
               <input type="number" step="0.01" value={form.minimum_payment} onChange={(e) => setForm({ ...form, minimum_payment: e.target.value })} className={inputClass} />
             </div>
           </div>
@@ -635,7 +686,7 @@ export default function Debts() {
               <input type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Days</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Days Before</label>
               <input type="number" min="0" max="30" value={form.reminder_days} onChange={(e) => setForm({ ...form, reminder_days: e.target.value })} className={inputClass} />
             </div>
           </div>
