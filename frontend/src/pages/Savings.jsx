@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash2, PiggyBank, Calendar } from 'lucide-react';
+import SortDropdown from '../components/SortDropdown';
 import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +21,8 @@ export default function Savings() {
   const [contributions, setContributions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showContribModal, setShowContribModal] = useState(false);
   const [editingGoal, setEditingGoal] = useState(null);
@@ -31,11 +34,11 @@ export default function Savings() {
 
   useEffect(() => {
     fetchData(true);
-  }, []);
+  }, [sortBy, sortOrder]);
 
   const pollData = useCallback(async () => {
     try {
-      const goalsRes = await api.get('/api/v1/savings/goals');
+      const goalsRes = await api.get(`/api/v1/savings/goals?sort_by=${sortBy}&sort_order=${sortOrder}`);
       const goalsData = Array.isArray(goalsRes.data) ? goalsRes.data : [];
       setGoals(goalsData);
       const allContribs = [];
@@ -51,7 +54,7 @@ export default function Savings() {
     } catch {
       // silent poll
     }
-  }, []);
+  }, [sortBy, sortOrder]);
 
   usePolling(pollData, 30000, !!user?.household_id);
 
@@ -59,7 +62,7 @@ export default function Savings() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const goalsRes = await api.get('/api/v1/savings/goals');
+      const goalsRes = await api.get(`/api/v1/savings/goals?sort_by=${sortBy}&sort_order=${sortOrder}`);
       const goalsData = Array.isArray(goalsRes.data) ? goalsRes.data : [];
       setGoals(goalsData);
       const allContribs = [];
@@ -164,7 +167,18 @@ export default function Savings() {
             <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
           )}
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-2">
+          <SortDropdown
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+            options={[
+              { value: 'name', label: 'Name' },
+              { value: 'current_amount', label: 'Current Amount' },
+              { value: 'target_amount', label: 'Target Amount' },
+              { value: 'created_at', label: 'Date Added' },
+            ]}
+          />
           <button onClick={openAddContrib} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-colors">
             <Plus className="h-4 w-4" />
             Add Contribution

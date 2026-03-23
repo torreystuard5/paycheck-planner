@@ -3,6 +3,7 @@ import { Outlet, Link } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 import EarlyAccessBanner from '../EarlyAccessBanner';
+import AnnouncementBanner from '../AnnouncementBanner';
 import Footer from '../Footer';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
@@ -32,6 +33,7 @@ export default function MainLayout() {
         </div>
 
         <main className="p-4 md:p-6">
+          <AnnouncementBanner />
           <Outlet />
         </main>
         <div className="px-4 md:px-6">

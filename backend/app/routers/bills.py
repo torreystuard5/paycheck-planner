@@ -256,10 +256,15 @@ async def create_bill(
     return _bill_to_response(bill, current_user.id, member_count)
 
 
+BILL_SORT_FIELDS = {"name", "amount", "due_date", "category", "created_at"}
+
+
 @router.get("", response_model=list[BillResponse])
 async def list_bills(
     active_only: bool = True,
     status: str | None = Query(default=None, pattern="^(paid|unpaid)$"),
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -278,7 +283,15 @@ async def list_bills(
         query = query.where(Bill.is_paid.is_(True))
     elif status == "unpaid":
         query = query.where(Bill.is_paid.is_(False))
-    query = query.options(selectinload(Bill.assigned_member)).order_by(Bill.due_day)
+    query = query.options(selectinload(Bill.assigned_member))
+
+    # Apply sorting
+    if sort_by not in BILL_SORT_FIELDS:
+        sort_by = "created_at"
+    sort_col_name = "due_day" if sort_by == "due_date" else sort_by
+    sort_col = getattr(Bill, sort_col_name, Bill.created_at)
+    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
+
     result = await db.execute(query)
     bills = result.scalars().all()
     member_count = await _get_household_member_count(db, current_user.household_id)

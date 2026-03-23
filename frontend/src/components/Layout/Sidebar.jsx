@@ -37,7 +37,7 @@ const links = [
   { to: '/support', label: 'Support', icon: HelpCircle },
   { to: '/admin/tickets', label: 'Support Tickets', icon: MessageSquare, adminOnly: true },
   { to: '/admin/users', label: 'Users', icon: Users, adminOnly: true },
-  { to: '/admin/stats', label: 'Admin Stats', icon: Shield, adminOnly: true },
+  { to: '/admin/command-center', label: 'Command Center', icon: Shield, adminOnly: true },
 ];
 
 export default function Sidebar({ open, onClose }) {

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,17 +16,25 @@ from app.services.encryption_service import decrypt, encrypt
 
 router = APIRouter(prefix="/passwords", tags=["Passwords"])
 
+PASSWORDS_SORT_FIELDS = {"site_name", "username", "created_at"}
+
 
 @router.get("", response_model=list[PasswordListItem])
 async def list_passwords(
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(verify_notes_session),
 ):
-    result = await db.execute(
-        select(Password)
-        .where(Password.user_id == current_user.id)
-        .order_by(Password.created_at.desc())
-    )
+    query = select(Password).where(Password.user_id == current_user.id)
+
+    # Apply sorting — note: username is encrypted so we can only sort by site_name or timestamps
+    if sort_by not in PASSWORDS_SORT_FIELDS:
+        sort_by = "created_at"
+    sort_col = getattr(Password, sort_by, Password.created_at)
+    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
+
+    result = await db.execute(query)
     rows = result.scalars().all()
     return [
         PasswordListItem(

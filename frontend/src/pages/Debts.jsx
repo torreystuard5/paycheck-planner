@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Edit, Trash2, CreditCard, TrendingDown, Shield, DollarSign, Download, Upload, ChevronDown, AlertCircle, CheckCircle } from 'lucide-react';
+import SortDropdown from '../components/SortDropdown';
 import { formatDistanceToNow } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../services/api';
@@ -32,6 +33,8 @@ export default function Debts() {
   const [debts, setDebts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
   const [showModal, setShowModal] = useState(false);
   const [editingDebt, setEditingDebt] = useState(null);
   const [form, setForm] = useState(defaultForm);
@@ -54,17 +57,17 @@ export default function Debts() {
 
   useEffect(() => {
     fetchDebts(true);
-  }, []);
+  }, [sortBy, sortOrder]);
 
   const pollDebts = useCallback(async () => {
     try {
-      const res = await api.get('/api/v1/debts');
+      const res = await api.get(`/api/v1/debts?sort_by=${sortBy}&sort_order=${sortOrder}`);
       setDebts(Array.isArray(res.data) ? res.data : []);
       setLastUpdated(new Date());
     } catch {
       // silent poll
     }
-  }, []);
+  }, [sortBy, sortOrder]);
 
   usePolling(pollDebts, 30000, !!user?.household_id);
 
@@ -87,7 +90,7 @@ export default function Debts() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const res = await api.get('/api/v1/debts');
+      const res = await api.get(`/api/v1/debts?sort_by=${sortBy}&sort_order=${sortOrder}`);
       setDebts(Array.isArray(res.data) ? res.data : []);
     } catch {
       setError('Failed to load debts.');
@@ -271,6 +274,19 @@ export default function Debts() {
         </div>
         {activeTab === 'Overview' && (
           <div className="flex items-center gap-2">
+            <SortDropdown
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+              options={[
+                { value: 'name', label: 'Name' },
+                { value: 'balance', label: 'Balance' },
+                { value: 'minimum_payment', label: 'Min Payment' },
+                { value: 'interest_rate', label: 'Interest Rate' },
+                { value: 'due_date', label: 'Due Date' },
+                { value: 'created_at', label: 'Date Added' },
+              ]}
+            />
             <div className="relative" ref={exportRef}>
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}

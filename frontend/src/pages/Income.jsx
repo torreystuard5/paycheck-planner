@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Wallet, Calendar } from 'lucide-react';
+import SortDropdown from '../components/SortDropdown';
 import { format, parseISO } from 'date-fns';
 import api from '../services/api';
 import Modal from '../components/Modal';
@@ -22,6 +23,8 @@ export default function Income() {
   const [incomes, setIncomes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
   const [showModal, setShowModal] = useState(false);
   const [editingIncome, setEditingIncome] = useState(null);
   const [form, setForm] = useState(defaultForm);
@@ -30,13 +33,13 @@ export default function Income() {
 
   useEffect(() => {
     fetchIncomes(true);
-  }, []);
+  }, [sortBy, sortOrder]);
 
   const fetchIncomes = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const res = await api.get('/api/v1/income');
+      const res = await api.get(`/api/v1/income?sort_by=${sortBy}&sort_order=${sortOrder}`);
       setIncomes(Array.isArray(res.data) ? res.data : []);
     } catch {
       setError('Failed to load income sources.');
@@ -120,10 +123,23 @@ export default function Income() {
           <h1 className="text-2xl font-bold text-gray-900">Income & Paychecks</h1>
           <p className="text-sm text-gray-600 mt-1">Manage your income sources and paychecks</p>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
-          <Plus className="h-4 w-4" />
-          Add Paycheck
-        </button>
+        <div className="flex items-center gap-2">
+          <SortDropdown
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+            options={[
+              { value: 'source', label: 'Source' },
+              { value: 'amount', label: 'Amount' },
+              { value: 'pay_date', label: 'Pay Date' },
+              { value: 'created_at', label: 'Date Added' },
+            ]}
+          />
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+            <Plus className="h-4 w-4" />
+            Add Paycheck
+          </button>
+        </div>
       </div>
 
       {error && (

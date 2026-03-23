@@ -20,6 +20,7 @@ import Income from './pages/Income';
 import AdminTickets from './pages/AdminTickets';
 import AdminStats from './pages/AdminStats';
 import AdminUsers from './pages/AdminUsers';
+import CommandCenter from './pages/CommandCenter';
 import Refer from './pages/Refer';
 import Vault from './pages/Vault';
 import NotFound from './pages/NotFound';
@@ -75,6 +76,7 @@ export default function App() {
             <Route path="admin/tickets" element={<AdminTickets />} />
             <Route path="admin/stats" element={<AdminStats />} />
             <Route path="admin/users" element={<AdminUsers />} />
+            <Route path="admin/command-center" element={<CommandCenter />} />
           </Route>
 
           {/* 404 */}

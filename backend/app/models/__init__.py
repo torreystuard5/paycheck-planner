@@ -15,6 +15,9 @@ from app.models.supporter import Supporter
 from app.models.referral import ReferralReward
 from app.models.note import Note
 from app.models.password import Password
+from app.models.admin_audit_log import AdminAuditLog
+from app.models.announcement import Announcement
+from app.models.system_setting import SystemSetting
 
 __all__ = [
     "PromoCode",
@@ -35,4 +38,7 @@ __all__ = [
     "ReferralReward",
     "Note",
     "Password",
+    "AdminAuditLog",
+    "Announcement",
+    "SystemSetting",
 ]

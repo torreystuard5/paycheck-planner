@@ -1,4 +1,5 @@
 import logging
+import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,8 +9,9 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.database import async_session
+from app.models.system_setting import SystemSetting
 from app.models.user import User
-from app.routers import admin, auth, billing, bills, debts, households, import_export, income, notes, passwords, paycheck_engine, payments, referrals, reminders, savings, support, supporter
+from app.routers import admin, announcements, auth, billing, bills, debts, households, import_export, income, notes, passwords, paycheck_engine, payments, referrals, reminders, savings, support, supporter
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +48,19 @@ TOS_EXEMPT_PATHS = {
     "/api/v1/support/auth-issue",
     "/health",
 }
+
+# Paths exempt from maintenance mode
+MAINTENANCE_EXEMPT_PREFIXES = (
+    "/api/v1/auth/",
+    "/api/v1/admin/",
+    "/health",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+)
+
+# Cached maintenance mode state
+_maintenance_cache: dict = {"enabled": False, "checked_at": 0.0}
 
 
 @app.middleware("http")
@@ -95,6 +110,65 @@ async def tos_check_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+async def _is_maintenance_mode() -> bool:
+    """Check if maintenance mode is enabled, with 30-second caching."""
+    now = time.time()
+    if now - _maintenance_cache["checked_at"] < 30:
+        return _maintenance_cache["enabled"]
+    try:
+        async with async_session() as session:
+            result = await session.execute(
+                select(SystemSetting.value).where(SystemSetting.key == "maintenance_mode")
+            )
+            value = result.scalar_one_or_none()
+            enabled = value == "true" if value else False
+    except Exception:
+        logger.exception("Maintenance mode DB check failed — defaulting to off")
+        enabled = False
+    _maintenance_cache["enabled"] = enabled
+    _maintenance_cache["checked_at"] = now
+    return enabled
+
+
+@app.middleware("http")
+async def maintenance_mode_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    path = request.url.path
+
+    # Always allow exempt paths
+    if any(path.startswith(prefix) for prefix in MAINTENANCE_EXEMPT_PREFIXES):
+        return await call_next(request)
+
+    if not await _is_maintenance_mode():
+        return await call_next(request)
+
+    # Check if the user is an admin — admins bypass maintenance mode
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1]
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            if payload.get("type") == "access":
+                user_id = payload.get("sub")
+                if user_id:
+                    async with async_session() as session:
+                        result = await session.execute(
+                            select(User.is_admin).where(User.id == user_id)
+                        )
+                        is_admin = result.scalar_one_or_none()
+                        if is_admin:
+                            return await call_next(request)
+        except (JWTError, Exception):
+            pass
+
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "System is under maintenance. Please try again later."},
+    )
+
+
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(income.router, prefix="/api/v1")
 app.include_router(bills.router, prefix="/api/v1")
@@ -112,6 +186,23 @@ app.include_router(billing.router, prefix="/api/v1")
 app.include_router(notes.router, prefix="/api/v1")
 app.include_router(passwords.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(announcements.router, prefix="/api/v1")
+
+
+@app.on_event("startup")
+async def seed_default_settings():
+    """Ensure default system settings exist."""
+    try:
+        async with async_session() as session:
+            result = await session.execute(
+                select(SystemSetting).where(SystemSetting.key == "maintenance_mode")
+            )
+            if not result.scalar_one_or_none():
+                session.add(SystemSetting(key="maintenance_mode", value="false"))
+                await session.commit()
+                logger.info("Seeded default maintenance_mode setting")
+    except Exception:
+        logger.exception("Error seeding default system settings")
 
 
 @app.on_event("startup")

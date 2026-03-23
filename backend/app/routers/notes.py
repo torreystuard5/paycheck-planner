@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +26,8 @@ from app.services.encryption_service import decrypt, encrypt
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/notes", tags=["Notes"])
+
+NOTES_SORT_FIELDS = {"title", "created_at", "updated_at"}
 
 pin_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -191,14 +193,20 @@ async def update_notes_settings(
 
 @router.get("", response_model=list[NoteListItem])
 async def list_notes(
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(verify_notes_session),
 ):
-    result = await db.execute(
-        select(Note)
-        .where(Note.user_id == current_user.id)
-        .order_by(Note.created_at.desc())
-    )
+    query = select(Note).where(Note.user_id == current_user.id)
+
+    # Apply sorting
+    if sort_by not in NOTES_SORT_FIELDS:
+        sort_by = "created_at"
+    sort_col = getattr(Note, sort_by, Note.created_at)
+    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
+
+    result = await db.execute(query)
     return [NoteListItem.model_validate(n) for n in result.scalars().all()]
 
 

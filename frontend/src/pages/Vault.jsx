@@ -21,6 +21,7 @@ import {
   Timer,
   Check,
 } from 'lucide-react';
+import SortDropdown from '../components/SortDropdown';
 import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
@@ -242,17 +243,19 @@ function NotesTab({ vApi, resetTimer }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   const fetchNotes = useCallback(async () => {
     try {
-      const { data } = await vApi.get('/api/v1/notes');
+      const { data } = await vApi.get(`/api/v1/notes?sort_by=${sortBy}&sort_order=${sortOrder}`);
       setNotes(Array.isArray(data) ? data : data.notes || []);
     } catch {
       setNotes([]);
     } finally {
       setLoading(false);
     }
-  }, [vApi]);
+  }, [vApi, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchNotes();
@@ -331,6 +334,16 @@ function NotesTab({ vApi, resetTimer }) {
             className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
           />
         </div>
+        <SortDropdown
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+          options={[
+            { value: 'title', label: 'Title' },
+            { value: 'created_at', label: 'Date Created' },
+            { value: 'updated_at', label: 'Last Modified' },
+          ]}
+        />
         <button
           onClick={openNew}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors flex items-center gap-1.5 shrink-0"
@@ -461,17 +474,19 @@ function PasswordsTab({ vApi, resetTimer }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [copied, setCopied] = useState(null); // 'password' | 'username' | null
   const clipboardTimerRef = useRef(null);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   const fetchPasswords = useCallback(async () => {
     try {
-      const { data } = await vApi.get('/api/v1/passwords');
+      const { data } = await vApi.get(`/api/v1/passwords?sort_by=${sortBy}&sort_order=${sortOrder}`);
       setPasswords(Array.isArray(data) ? data : data.passwords || []);
     } catch {
       setPasswords([]);
     } finally {
       setLoading(false);
     }
-  }, [vApi]);
+  }, [vApi, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchPasswords();
@@ -593,6 +608,16 @@ function PasswordsTab({ vApi, resetTimer }) {
             className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
           />
         </div>
+        <SortDropdown
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+          options={[
+            { value: 'site_name', label: 'Site Name' },
+            { value: 'username', label: 'Username' },
+            { value: 'created_at', label: 'Date Added' },
+          ]}
+        />
         <button
           onClick={openNew}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors flex items-center gap-1.5 shrink-0"

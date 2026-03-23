@@ -160,9 +160,14 @@ async def create_debt(
     return debt
 
 
+DEBT_SORT_FIELDS = {"name", "balance", "minimum_payment", "interest_rate", "due_date", "created_at"}
+
+
 @router.get("", response_model=list[DebtResponse])
 async def list_debts(
     active_only: bool = True,
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -177,7 +182,14 @@ async def list_debts(
         query = select(Debt).where(Debt.user_id == current_user.id)
     if active_only:
         query = query.where(Debt.is_active.is_(True))
-    query = query.order_by(Debt.due_day)
+
+    # Apply sorting
+    if sort_by not in DEBT_SORT_FIELDS:
+        sort_by = "created_at"
+    col_map = {"interest_rate": "apr", "due_date": "due_day"}
+    sort_col = getattr(Debt, col_map.get(sort_by, sort_by), Debt.created_at)
+    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
+
     result = await db.execute(query)
     return result.scalars().all()
 

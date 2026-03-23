@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,8 @@ from app.schemas.income import IncomeCreate, IncomeResponse, IncomeUpdate
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/income", tags=["Income Sources"])
+
+INCOME_SORT_FIELDS = {"source", "amount", "pay_date", "created_at"}
 
 
 @router.post("", response_model=IncomeResponse, status_code=status.HTTP_201_CREATED)
@@ -35,13 +37,22 @@ async def create_income(
 @router.get("", response_model=list[IncomeResponse])
 async def list_income(
     active_only: bool = True,
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     query = select(IncomeSource).where(IncomeSource.user_id == current_user.id)
     if active_only:
         query = query.where(IncomeSource.is_active.is_(True))
-    query = query.order_by(IncomeSource.next_pay_date)
+
+    # Apply sorting
+    if sort_by not in INCOME_SORT_FIELDS:
+        sort_by = "created_at"
+    col_map = {"source": "name", "pay_date": "next_pay_date"}
+    sort_col = getattr(IncomeSource, col_map.get(sort_by, sort_by), IncomeSource.created_at)
+    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
+
     result = await db.execute(query)
     return result.scalars().all()
 

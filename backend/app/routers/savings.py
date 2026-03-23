@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,8 @@ from app.services.household_service import log_activity
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/savings", tags=["Savings"])
+
+SAVINGS_SORT_FIELDS = {"name", "current_amount", "target_amount", "created_at"}
 
 
 # ── Goals ──────────────────────────────────────────────────────────
@@ -59,6 +61,8 @@ async def create_goal(
 @router.get("/goals", response_model=list[SavingsGoalResponse])
 async def list_goals(
     active_only: bool = True,
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -72,7 +76,13 @@ async def list_goals(
         query = select(SavingsGoal).where(SavingsGoal.user_id == current_user.id)
     if active_only:
         query = query.where(SavingsGoal.is_active.is_(True))
-    query = query.order_by(SavingsGoal.created_at)
+
+    # Apply sorting
+    if sort_by not in SAVINGS_SORT_FIELDS:
+        sort_by = "created_at"
+    sort_col = getattr(SavingsGoal, sort_by, SavingsGoal.created_at)
+    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
+
     result = await db.execute(query)
     return result.scalars().all()
 

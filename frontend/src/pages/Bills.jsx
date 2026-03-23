@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, ChevronUp, X, AlertCircle, CheckCircle, Circle, Undo2, Users, DollarSign, Loader2, History, ArrowLeft, Pencil } from 'lucide-react';
+import SortDropdown from '../components/SortDropdown';
 import { formatDistanceToNow, format } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -57,6 +58,8 @@ export default function Bills() {
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
   const [showModal, setShowModal] = useState(false);
   const [editingBill, setEditingBill] = useState(null);
   const [form, setForm] = useState(defaultForm);
@@ -96,18 +99,21 @@ export default function Bills() {
 
   useEffect(() => {
     fetchBills(true);
-  }, [statusFilter]);
+  }, [statusFilter, sortBy, sortOrder]);
 
   const pollBills = useCallback(async () => {
     try {
-      const params = statusFilter ? `?status=${statusFilter}` : '';
-      const res = await api.get(`/api/v1/bills${params}`);
+      const queryParams = new URLSearchParams();
+      if (statusFilter) queryParams.set('status', statusFilter);
+      queryParams.set('sort_by', sortBy);
+      queryParams.set('sort_order', sortOrder);
+      const res = await api.get(`/api/v1/bills?${queryParams.toString()}`);
       setBills(Array.isArray(res.data) ? res.data : []);
       setLastUpdated(new Date());
     } catch {
       // silent poll failure
     }
-  }, [statusFilter]);
+  }, [statusFilter, sortBy, sortOrder]);
 
   usePolling(pollBills, 30000, !!user?.household_id);
 
@@ -134,8 +140,11 @@ export default function Bills() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const params = statusFilter ? `?status=${statusFilter}` : '';
-      const res = await api.get(`/api/v1/bills${params}`);
+      const queryParams = new URLSearchParams();
+      if (statusFilter) queryParams.set('status', statusFilter);
+      queryParams.set('sort_by', sortBy);
+      queryParams.set('sort_order', sortOrder);
+      const res = await api.get(`/api/v1/bills?${queryParams.toString()}`);
       setBills(Array.isArray(res.data) ? res.data : []);
     } catch {
       setError('Failed to load bills.');
@@ -430,6 +439,18 @@ export default function Bills() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <SortDropdown
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+            options={[
+              { value: 'name', label: 'Name' },
+              { value: 'amount', label: 'Amount' },
+              { value: 'due_date', label: 'Due Date' },
+              { value: 'category', label: 'Category' },
+              { value: 'created_at', label: 'Date Added' },
+            ]}
+          />
           <div className="relative" ref={exportRef}>
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}

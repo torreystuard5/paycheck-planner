@@ -1,9 +1,10 @@
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID as PyUUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +15,7 @@ from app.database import get_db
 from app.models.support_ticket import SupportTicket
 from app.models.support_ticket_reply import SupportTicketReply
 from app.models.user import User
+from app.routers.admin import log_admin_action, _get_client_ip
 from app.schemas.support import (
     SupportTicketCreate,
     SupportTicketDetail,
@@ -133,11 +135,16 @@ async def create_auth_issue(
 
 # ── Admin-facing endpoints ─────────────────────────────────────────────
 
+TICKET_SORT_FIELDS = {"created_at", "status"}
+
+
 @router.get("/all", response_model=SupportTicketListResponse)
 async def list_all_tickets(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     status_filter: str | None = Query(None, alias="status"),
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -157,11 +164,16 @@ async def list_all_tickets(
 
     total = (await db.execute(count_query)).scalar() or 0
     offset = (page - 1) * per_page
+
+    # Apply sorting
+    if sort_by not in TICKET_SORT_FIELDS:
+        sort_by = "created_at"
+    sort_col = getattr(SupportTicket, sort_by, SupportTicket.created_at)
+    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
+
     rows = (
         await db.execute(
-            query.order_by(SupportTicket.created_at.desc())
-            .offset(offset)
-            .limit(per_page)
+            query.offset(offset).limit(per_page)
         )
     ).scalars().all()
 
@@ -197,6 +209,7 @@ async def get_support_ticket(
 async def update_support_ticket(
     ticket_id: PyUUID,
     body: SupportTicketUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -223,6 +236,16 @@ async def update_support_ticket(
     if body.admin_notes is not None:
         ticket.admin_notes = body.admin_notes
 
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="updated_ticket",
+        target_type="support_ticket",
+        target_id=str(ticket_id),
+        details=json.dumps({"status": body.status, "admin_notes": body.admin_notes}, default=str),
+        ip_address=_get_client_ip(request),
+    )
+
     await db.flush()
     await db.refresh(ticket, attribute_names=["replies"])
     return ticket
@@ -232,6 +255,7 @@ async def update_support_ticket(
 async def reply_to_ticket(
     ticket_id: PyUUID,
     data: TicketReplyCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -254,6 +278,17 @@ async def reply_to_ticket(
         replied_by=current_user.id,
     )
     db.add(reply)
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="replied_to_ticket",
+        target_type="support_ticket",
+        target_id=str(ticket_id),
+        details=json.dumps({"subject": ticket.subject}),
+        ip_address=_get_client_ip(request),
+    )
+
     await db.flush()
     await db.refresh(reply)
 

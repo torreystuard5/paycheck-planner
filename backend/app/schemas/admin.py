@@ -30,6 +30,7 @@ class AdminUserSummary(BaseModel):
     is_supporter: bool
     subscription_tier: str
     referral_code: str | None
+    last_login_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -86,3 +87,77 @@ class AdminUserNotesUpdate(BaseModel):
 
 class AdminUserEmailUpdate(BaseModel):
     email: EmailStr
+
+
+class AdminUserUpdate(BaseModel):
+    is_active: bool | None = None
+
+
+# --- Audit Log Schemas ---
+
+
+class AuditLogOut(BaseModel):
+    id: int
+    admin_id: UUID
+    admin_email: str | None = None
+    action: str
+    target_type: str | None = None
+    target_id: str | None = None
+    details: str | None = None
+    ip_address: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AuditLogListResponse(BaseModel):
+    items: list[AuditLogOut]
+    total: int
+    page: int
+    per_page: int
+
+
+# --- Announcement Schemas ---
+
+
+class AnnouncementCreate(BaseModel):
+    title: str
+    message: str
+    type: str = "info"
+    expires_at: datetime | None = None
+
+
+class AnnouncementUpdate(BaseModel):
+    title: str | None = None
+    message: str | None = None
+    type: str | None = None
+    is_active: bool | None = None
+    expires_at: datetime | None = None
+
+
+class AnnouncementOut(BaseModel):
+    id: int
+    title: str
+    message: str
+    type: str
+    is_active: bool
+    created_by: UUID
+    created_at: datetime
+    expires_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# --- System Settings Schemas ---
+
+
+class SystemSettingOut(BaseModel):
+    key: str
+    value: str
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SystemSettingUpdate(BaseModel):
+    value: str
