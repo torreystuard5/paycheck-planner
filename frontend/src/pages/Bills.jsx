@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, X, AlertCircle, CheckCircle, Undo2, Users, DollarSign } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, FileText, Download, Upload, ChevronDown, ChevronUp, X, AlertCircle, CheckCircle, Circle, Undo2, Users, DollarSign, Loader2 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -74,12 +74,11 @@ export default function Bills() {
   const exportRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Breakdown state
-  const [showBreakdownModal, setShowBreakdownModal] = useState(false);
-  const [breakdownBill, setBreakdownBill] = useState(null);
-  const [breakdown, setBreakdown] = useState(null);
-  const [breakdownLoading, setBreakdownLoading] = useState(false);
-  const [breakdownError, setBreakdownError] = useState(null);
+  // Expandable card state
+  const [expandedBillId, setExpandedBillId] = useState(null);
+  const [breakdownCache, setBreakdownCache] = useState({});
+  const [breakdownLoading, setBreakdownLoading] = useState(null);
+  const [breakdownError, setBreakdownError] = useState({});
 
   // Member payment state
   const [showMemberPayModal, setShowMemberPayModal] = useState(false);
@@ -294,35 +293,43 @@ export default function Bills() {
     }
   };
 
-  // Breakdown functions
-  const openBreakdown = async (bill) => {
-    setBreakdownBill(bill);
-    setBreakdown(null);
-    setBreakdownError(null);
-    setBreakdownLoading(true);
-    setShowBreakdownModal(true);
-    try {
-      const res = await api.get(`/api/v1/bills/${bill.id}/breakdown`);
-      setBreakdown(res.data);
-    } catch {
-      setBreakdownError('Failed to load bill breakdown.');
-    } finally {
-      setBreakdownLoading(false);
+  // Expandable card toggle with lazy breakdown fetch
+  const toggleExpand = async (bill) => {
+    if (expandedBillId === bill.id) {
+      setExpandedBillId(null);
+      return;
+    }
+    setExpandedBillId(bill.id);
+
+    // Only fetch breakdown for household bills that haven't been cached
+    if (bill.is_household_bill && !breakdownCache[bill.id]) {
+      setBreakdownLoading(bill.id);
+      setBreakdownError((prev) => ({ ...prev, [bill.id]: null }));
+      try {
+        const res = await api.get(`/api/v1/bills/${bill.id}/breakdown`);
+        setBreakdownCache((prev) => ({ ...prev, [bill.id]: res.data }));
+      } catch {
+        setBreakdownError((prev) => ({ ...prev, [bill.id]: 'Unable to load breakdown' }));
+      } finally {
+        setBreakdownLoading(null);
+      }
     }
   };
 
-  const openMemberPayModal = () => {
+  const openMemberPayModal = (bill) => {
     setMemberPayForm({
       member_id: user?.id || '',
       amount_paid: '',
       paid_at: format(new Date(), 'yyyy-MM-dd'),
+      _billId: bill.id,
     });
     setShowMemberPayModal(true);
   };
 
   const handleMemberPayment = async (e) => {
     e.preventDefault();
-    if (!breakdownBill) return;
+    const billId = memberPayForm._billId;
+    if (!billId) return;
     setMemberPaying(true);
     try {
       const payload = {
@@ -332,8 +339,8 @@ export default function Bills() {
       if (memberPayForm.paid_at) {
         payload.paid_at = new Date(memberPayForm.paid_at).toISOString();
       }
-      const res = await api.post(`/api/v1/bills/${breakdownBill.id}/member-payment`, payload);
-      setBreakdown(res.data);
+      const res = await api.post(`/api/v1/bills/${billId}/member-payment`, payload);
+      setBreakdownCache((prev) => ({ ...prev, [billId]: res.data }));
       setShowMemberPayModal(false);
       showSuccess('Payment recorded!');
       fetchBills();
@@ -348,7 +355,8 @@ export default function Bills() {
   // Pre-fill member payment amount with remaining balance
   const handleMemberSelect = (memberId) => {
     setMemberPayForm((prev) => {
-      const member = breakdown?.members?.find((m) => m.member_id === memberId);
+      const bd = breakdownCache[prev._billId];
+      const member = bd?.members?.find((m) => m.member_id === memberId);
       const remaining = member ? Number(member.balance) : 0;
       return {
         ...prev,
@@ -481,92 +489,217 @@ export default function Bills() {
         <EmptyState icon={FileText} title="No bills found" message="Add a bill to get started tracking your expenses." actionLabel="Add Bill" onAction={openAdd} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((bill) => (
-            <div key={bill.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${bill.is_paid ? 'opacity-80' : ''}`}>
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className={`font-semibold text-gray-900 ${bill.is_paid ? 'line-through text-gray-500' : ''}`}>{bill.name || 'Untitled'}</h3>
-                    {bill.is_household_bill && (
-                      <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">
-                        <Users className="w-3 h-3" />
-                        Shared
-                      </span>
-                    )}
-                    {bill.payment_mode === 'split' && (
-                      <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded-full">
-                        Split
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-500">{bill.category || 'Uncategorized'}</p>
-                  {bill.assigned_member_name && (
-                    <p className="text-xs text-blue-600">Assigned to {bill.assigned_member_name}</p>
-                  )}
-                </div>
-                <div className="flex gap-1">
-                  {bill.is_household_bill && (
-                    <button onClick={() => openBreakdown(bill)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors" title="View split breakdown">
-                      <DollarSign className="w-4 h-4" />
-                    </button>
-                  )}
-                  <button onClick={() => openEdit(bill)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setDeleteTarget(bill)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="mb-2">
-                <CurrencyDisplay amount={bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount} className="text-xl font-bold text-gray-900" />
-                {bill.payment_mode === 'split' && bill.is_household_bill && (
-                  <span className="text-xs text-purple-600 ml-1.5">(your share)</span>
-                )}
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">
-                  {(bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
-                    ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
-                    : `Due day ${bill.due_day || '--'}`
-                  }
-                </span>
-                {bill.auto_pay && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Auto-pay</span>}
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <p className="text-xs text-gray-400 capitalize">{freqLabel(bill.frequency)}</p>
-                {bill.next_due_date && (
-                  <p className="text-xs text-gray-500">Next: {bill.next_due_date}</p>
-                )}
-              </div>
+          {filtered.map((bill) => {
+            const isExpanded = expandedBillId === bill.id;
+            const bd = breakdownCache[bill.id];
+            const bdLoading = breakdownLoading === bill.id;
+            const bdError = breakdownError[bill.id];
 
-              <div className="mt-4 pt-3 border-t border-gray-100">
-                {bill.is_paid ? (
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      Paid {bill.paid_date ? format(new Date(bill.paid_date), 'MMM d') : ''}
-                    </span>
-                    <button
-                      onClick={() => handleUnpay(bill)}
-                      className="text-xs text-gray-500 hover:text-gray-700 transition-colors flex items-center gap-1"
-                    >
-                      <Undo2 className="w-3 h-3" />
-                      Undo
-                    </button>
+            return (
+              <div key={bill.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 ${bill.is_paid ? 'opacity-80' : ''}`}>
+                {/* Collapsed view — clickable body */}
+                <div
+                  className="p-6 cursor-pointer select-none"
+                  onClick={() => toggleExpand(bill)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className={`font-semibold text-gray-900 ${bill.is_paid ? 'line-through text-gray-500' : ''}`}>{bill.name || 'Untitled'}</h3>
+                        {bill.is_household_bill && (
+                          <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                            <Users className="w-3 h-3" />
+                            Shared
+                          </span>
+                        )}
+                        {bill.payment_mode === 'split' && (
+                          <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded-full">
+                            Split
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500">{bill.category || 'Uncategorized'}</p>
+                      {bill.assigned_member_name && (
+                        <p className="text-xs text-blue-600">Assigned to {bill.assigned_member_name}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {bill.is_paid ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleUnpay(bill); }}
+                          className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                          title="Undo paid"
+                        >
+                          <Undo2 className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openPayModal(bill); }}
+                          className="p-1.5 text-gray-400 hover:text-green-600 rounded-lg hover:bg-green-50 transition-colors"
+                          title="Mark as paid"
+                        >
+                          <DollarSign className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button onClick={(e) => { e.stopPropagation(); openEdit(bill); }} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors" title="Edit">
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(bill); }} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors" title="Delete">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      {isExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-gray-400 ml-1 transition-transform duration-200" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-gray-400 ml-1 transition-transform duration-200" />
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => openPayModal(bill)}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Mark as Paid
-                  </button>
-                )}
+                  <div className="mb-2">
+                    <CurrencyDisplay amount={bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount} className="text-xl font-bold text-gray-900" />
+                    {bill.payment_mode === 'split' && bill.is_household_bill && (
+                      <span className="text-xs text-purple-600 ml-1.5">(your share)</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">
+                      {(bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
+                        ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
+                        : `Due day ${bill.due_day || '--'}`
+                      }
+                    </span>
+                    {bill.auto_pay && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Auto-pay</span>}
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-gray-400 capitalize">{freqLabel(bill.frequency)}</p>
+                    {bill.next_due_date && (
+                      <p className="text-xs text-gray-500">Next: {bill.next_due_date}</p>
+                    )}
+                  </div>
+
+                  {/* Paid status badge */}
+                  {bill.is_paid && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Paid {bill.paid_date ? format(new Date(bill.paid_date), 'MMM d') : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Expanded view */}
+                <div
+                  className="overflow-hidden transition-all duration-300 ease-in-out"
+                  style={{ maxHeight: isExpanded ? '500px' : '0px', opacity: isExpanded ? 1 : 0 }}
+                >
+                  <div className="px-6 pb-6">
+                    <div className="border-t border-gray-200 pt-4 space-y-4">
+                      {/* Loading state */}
+                      {bdLoading && (
+                        <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading breakdown...
+                        </div>
+                      )}
+
+                      {/* Error state */}
+                      {bdError && (
+                        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg p-3">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          {bdError}
+                        </div>
+                      )}
+
+                      {/* Breakdown content for household bills */}
+                      {bill.is_household_bill && bd && !bdLoading && (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700">Total Bill Amount</span>
+                            <span className="text-sm font-bold text-gray-900">{fmtCurrency(bd.bill?.amount ?? bill.amount)}</span>
+                          </div>
+
+                          <div className="space-y-2">
+                            {bd.members?.map((member) => {
+                              const balance = Number(member.balance);
+                              const isPaid = balance <= 0;
+                              return (
+                                <div key={member.member_id} className="flex items-center justify-between py-1.5">
+                                  <span className="text-sm text-gray-700">{member.member_name}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium text-gray-900">{fmtCurrency(member.share)}</span>
+                                    {isPaid ? (
+                                      <span className="inline-flex items-center gap-1 text-xs text-green-700">
+                                        <CheckCircle className="w-3.5 h-3.5" />
+                                        Paid
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                                        <Circle className="w-3.5 h-3.5" />
+                                        Unpaid
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <div className="text-sm text-gray-500">
+                            Mode: {bill.payment_mode === 'split' ? 'Split' : `Single (assigned to ${bill.assigned_member_name || 'owner'})`}
+                          </div>
+                        </>
+                      )}
+
+                      {/* Non-household bills or single-pay without breakdown */}
+                      {!bill.is_household_bill && !bdLoading && (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700">Total Bill Amount</span>
+                            <span className="text-sm font-bold text-gray-900">{fmtCurrency(bill.amount)}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-1.5">
+                            <span className="text-sm text-gray-700">{user?.first_name || 'You'}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-900">{fmtCurrency(bill.amount)}</span>
+                              {bill.is_paid ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-green-700">
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  Paid
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                                  <Circle className="w-3.5 h-3.5" />
+                                  Unpaid
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-sm text-gray-500">
+                            Mode: Single
+                          </div>
+                        </>
+                      )}
+
+                      {/* Mark as Paid button in expanded view */}
+                      {!bill.is_paid && !bdLoading && (
+                        <div className="border-t border-gray-200 pt-4">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openPayModal(bill); }}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            Mark as Paid
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -601,79 +734,7 @@ export default function Bills() {
         </form>
       </Modal>
 
-      {/* Bill Breakdown Modal */}
-      <Modal isOpen={showBreakdownModal} onClose={() => { setShowBreakdownModal(false); setBreakdownBill(null); setBreakdown(null); }} title={`Split Breakdown: ${breakdownBill?.name || ''}`}>
-        {breakdownLoading ? (
-          <div className="flex justify-center py-8"><LoadingSpinner /></div>
-        ) : breakdownError ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{breakdownError}</div>
-        ) : breakdown ? (
-          <div className="space-y-5">
-            {/* Summary bar */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500 mb-1">Total</p>
-                <p className="text-lg font-bold text-gray-900">{fmtCurrency(breakdown.bill?.amount)}</p>
-              </div>
-              <div className="bg-green-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-green-600 mb-1">Paid</p>
-                <p className="text-lg font-bold text-green-700">{fmtCurrency(breakdown.total_paid)}</p>
-              </div>
-              <div className="bg-amber-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-amber-600 mb-1">Remaining</p>
-                <p className="text-lg font-bold text-amber-700">{fmtCurrency(breakdown.total_remaining)}</p>
-              </div>
-            </div>
-
-            {/* Per-member breakdown */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Per-Member Breakdown</h3>
-              <div className="space-y-2">
-                {breakdown.members?.map((member) => {
-                  const balance = Number(member.balance);
-                  const isPaid = balance <= 0;
-                  return (
-                    <div key={member.member_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium shrink-0">
-                          {(member.member_name || '?')[0].toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{member.member_name}</p>
-                          <p className="text-xs text-gray-500">
-                            Share: {fmtCurrency(member.share)} | Paid: {fmtCurrency(member.paid)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="shrink-0 ml-3">
-                        {isPaid ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full">
-                            <CheckCircle className="w-3 h-3" />
-                            Paid
-                          </span>
-                        ) : (
-                          <span className="text-sm font-semibold text-amber-600">
-                            {fmtCurrency(balance)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Record Payment button */}
-            <button
-              onClick={openMemberPayModal}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              <DollarSign className="w-4 h-4" />
-              Record Payment
-            </button>
-          </div>
-        ) : null}
-      </Modal>
+      {/* Bill Breakdown Modal removed — now shown inline in expandable cards */}
 
       {/* Member Payment Modal */}
       <Modal isOpen={showMemberPayModal} onClose={() => setShowMemberPayModal(false)} title="Record Member Payment">
