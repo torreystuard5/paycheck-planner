@@ -76,7 +76,7 @@ async def create_support_ticket(
     )
     db.add(ticket)
     await db.flush()
-    await db.refresh(ticket)
+    await db.refresh(ticket, attribute_names=["replies"])
 
     try:
         await send_support_email(
