@@ -161,34 +161,36 @@ export default function Savings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Savings Goals</h1>
-          <p className="text-sm text-gray-600 mt-1">Set goals and track your progress</p>
-          {lastUpdated && user?.household_id && (
-            <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SortDropdown
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
-            options={[
-              { value: 'name', label: 'Name' },
-              { value: 'current_amount', label: 'Current Amount' },
-              { value: 'target_amount', label: 'Target Amount' },
-              { value: 'created_at', label: 'Date Added' },
-            ]}
-          />
-          <button onClick={openAddContrib} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-colors">
-            <Plus className="h-4 w-4" />
-            Add Contribution
-          </button>
-          <button onClick={openAddGoal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
-            <Plus className="h-4 w-4" />
-            Add Goal
-          </button>
+      <div className="w-full max-w-[100vw] overflow-x-hidden box-border relative">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Savings Goals</h1>
+            <p className="text-sm text-gray-600 mt-1">Set goals and track your progress</p>
+            {lastUpdated && user?.household_id && (
+              <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SortDropdown
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+              options={[
+                { value: 'name', label: 'Name' },
+                { value: 'current_amount', label: 'Current Amount' },
+                { value: 'target_amount', label: 'Target Amount' },
+                { value: 'created_at', label: 'Date Added' },
+              ]}
+            />
+            <button onClick={openAddContrib} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-colors">
+              <Plus className="h-4 w-4" />
+              Add Contribution
+            </button>
+            <button onClick={openAddGoal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+              <Plus className="h-4 w-4" />
+              Add Goal
+            </button>
+          </div>
         </div>
       </div>
 

@@ -753,29 +753,31 @@ export default function Bills() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Bills</h1>
-          <p className="text-sm text-gray-600 mt-1">Manage your recurring bills</p>
-          {lastUpdated && user?.household_id && (
-            <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SortDropdown
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
-            options={sortOptions}
-          />
-          <ImportExportButton
-            onExport={handleExport}
-            onImport={() => { setShowImportModal(true); setImportResult(null); }}
-          />
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
-            <Plus className="h-4 w-4" />
-            Add Bill
-          </button>
+      <div className="w-full max-w-[100vw] overflow-x-hidden box-border relative">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Bills</h1>
+            <p className="text-sm text-gray-600 mt-1">Manage your recurring bills</p>
+            {lastUpdated && user?.household_id && (
+              <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SortDropdown
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+              options={sortOptions}
+            />
+            <ImportExportButton
+              onExport={handleExport}
+              onImport={() => { setShowImportModal(true); setImportResult(null); }}
+            />
+            <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+              <Plus className="h-4 w-4" />
+              Add Bill
+            </button>
+          </div>
         </div>
       </div>
 
@@ -889,41 +891,43 @@ export default function Bills() {
       ) : (
       <>
       {/* Filter row */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-          {statusTabs.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setStatusFilter(tab.value)}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                statusFilter === tab.value
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="w-full max-w-[100vw] overflow-x-hidden box-border relative">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg shrink min-w-0">
+            {statusTabs.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setStatusFilter(tab.value)}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  statusFilter === tab.value
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search bills..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
-          />
+          <div className="relative w-full sm:flex-1 sm:w-auto min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search bills..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+            />
+          </div>
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm shrink min-w-0"
+          >
+            <option value="">All Categories</option>
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
-        <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
-        >
-          <option value="">All Categories</option>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
       </div>
 
       {filtered.length === 0 ? (

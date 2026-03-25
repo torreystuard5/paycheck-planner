@@ -119,27 +119,29 @@ export default function Income() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Income & Paychecks</h1>
-          <p className="text-sm text-gray-600 mt-1">Manage your income sources and paychecks</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SortDropdown
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
-            options={[
-              { value: 'source', label: 'Source' },
-              { value: 'amount', label: 'Amount' },
-              { value: 'pay_date', label: 'Pay Date' },
-              { value: 'created_at', label: 'Date Added' },
-            ]}
-          />
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
-            <Plus className="h-4 w-4" />
-            Add Paycheck
-          </button>
+      <div className="w-full max-w-[100vw] overflow-x-hidden box-border relative">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Income & Paychecks</h1>
+            <p className="text-sm text-gray-600 mt-1">Manage your income sources and paychecks</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SortDropdown
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+              options={[
+                { value: 'source', label: 'Source' },
+                { value: 'amount', label: 'Amount' },
+                { value: 'pay_date', label: 'Pay Date' },
+                { value: 'created_at', label: 'Date Added' },
+              ]}
+            />
+            <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+              <Plus className="h-4 w-4" />
+              Add Paycheck
+            </button>
+          </div>
         </div>
       </div>
 

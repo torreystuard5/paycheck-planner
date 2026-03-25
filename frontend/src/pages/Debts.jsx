@@ -412,39 +412,41 @@ export default function Debts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Debts</h1>
-          <p className="text-sm text-gray-600 mt-1">Track and pay down your debts</p>
-          {lastUpdated && user?.household_id && (
-            <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+      <div className="w-full max-w-[100vw] overflow-x-hidden box-border relative">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Debts</h1>
+            <p className="text-sm text-gray-600 mt-1">Track and pay down your debts</p>
+            {lastUpdated && user?.household_id && (
+              <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+            )}
+          </div>
+          {activeTab === 'Overview' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <SortDropdown
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+                options={[
+                  { value: 'name', label: 'Name' },
+                  { value: 'balance', label: 'Balance' },
+                  { value: 'minimum_payment', label: 'Minimum Payment' },
+                  { value: 'interest_rate', label: 'Interest Rate' },
+                  { value: 'due_date', label: 'Due Date' },
+                  { value: 'created_at', label: 'Date Added' },
+                ]}
+              />
+              <ImportExportButton
+                onExport={handleExport}
+                onImport={() => { setShowImportModal(true); setImportResult(null); }}
+              />
+              <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+                <Plus className="h-4 w-4" />
+                Add Debt
+              </button>
+            </div>
           )}
         </div>
-        {activeTab === 'Overview' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <SortDropdown
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
-              options={[
-                { value: 'name', label: 'Name' },
-                { value: 'balance', label: 'Balance' },
-                { value: 'minimum_payment', label: 'Minimum Payment' },
-                { value: 'interest_rate', label: 'Interest Rate' },
-                { value: 'due_date', label: 'Due Date' },
-                { value: 'created_at', label: 'Date Added' },
-              ]}
-            />
-            <ImportExportButton
-              onExport={handleExport}
-              onImport={() => { setShowImportModal(true); setImportResult(null); }}
-            />
-            <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
-              <Plus className="h-4 w-4" />
-              Add Debt
-            </button>
-          </div>
-        )}
       </div>
 
       {error && (

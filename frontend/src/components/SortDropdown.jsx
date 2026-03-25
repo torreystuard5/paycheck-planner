@@ -37,7 +37,7 @@ export default function SortDropdown({ sortBy, sortOrder, onSortChange, options 
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1">
+        <div className="absolute left-0 right-auto mt-1 min-w-[160px] max-w-[calc(100vw-32px)] bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
           {options.map((opt) => (
             <button
               key={opt.value}

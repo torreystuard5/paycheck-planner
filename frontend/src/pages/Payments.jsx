@@ -179,7 +179,7 @@ export default function Payments() {
               <ChevronDown className="h-3 w-3" />
             </button>
             {showExportMenu && (
-              <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+              <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                 <button onClick={() => handleExport('excel')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg">
                   Excel (.xlsx)
                 </button>

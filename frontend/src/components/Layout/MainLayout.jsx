@@ -32,7 +32,7 @@ export default function MainLayout() {
           </Link>
         </div>
 
-        <main className="p-4 md:p-6">
+        <main className="p-4 md:p-6 overflow-x-hidden max-w-full">
           <AnnouncementBanner />
           <Outlet />
         </main>

@@ -26,7 +26,7 @@ export default function ImportExportButton({ onExport, onImport }) {
         <ChevronDown className="h-3 w-3" />
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+        <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
           <button
             onClick={() => { setOpen(false); onExport?.(); }}
             className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg"

@@ -1,5 +1,10 @@
 [
   {
+    "id": "2026-03-23-mobile-maintenance",
+    "date": "2026-03-23",
+    "message": "Mobile experience improvements: fixed sort/filter overflow on small screens, better touch targets, smoother modals, and overall layout stability across all devices."
+  },
+  {
     "id": "2026-03-23-optional-fields",
     "date": "2026-03-23",
     "message": "All fields on Add/Edit Bill and Debt forms are now optional — fill in only what you need"
