@@ -1,5 +1,10 @@
 [
   {
+    "id": "2026-03-23-dashboard-layout-fix",
+    "date": "2026-03-23",
+    "message": "Fixed dashboard and page layouts being clipped or cut off on mobile devices."
+  },
+  {
     "id": "2026-03-23-mobile-maintenance",
     "date": "2026-03-23",
     "message": "Mobile experience improvements: fixed sort/filter overflow on small screens, better touch targets, smoother modals, and overall layout stability across all devices."

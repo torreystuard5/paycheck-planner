@@ -753,7 +753,7 @@ export default function Bills() {
 
   return (
     <div className="space-y-6">
-      <div className="w-full max-w-[100vw] overflow-x-hidden box-border relative">
+      <div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Bills</h1>
@@ -891,7 +891,7 @@ export default function Bills() {
       ) : (
       <>
       {/* Filter row */}
-      <div className="w-full max-w-[100vw] overflow-x-hidden box-border relative">
+      <div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1 bg-gray-100 p-1 rounded-lg shrink min-w-0">
             {statusTabs.map((tab) => (

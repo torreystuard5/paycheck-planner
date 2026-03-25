@@ -161,7 +161,7 @@ export default function Savings() {
 
   return (
     <div className="space-y-6">
-      <div className="w-full max-w-[100vw] overflow-x-hidden box-border relative">
+      <div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Savings Goals</h1>
