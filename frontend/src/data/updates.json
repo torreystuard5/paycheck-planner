@@ -1,5 +1,10 @@
 [
   {
+    "id": "2026-03-25-modal-input-fix",
+    "date": "2026-03-25",
+    "message": "Fixed modal input fields (Add Goal, Add Bill, etc.) losing focus and resetting on every keystroke"
+  },
+  {
     "id": "2026-03-25-paid-tracker",
     "date": "2026-03-25",
     "message": "Added Paid / Still Owed tracker to the paycheck plan and dashboard cards so you can see exactly how much you've paid and what's left."
@@ -22,7 +27,7 @@
   {
     "id": "2026-03-23-optional-fields",
     "date": "2026-03-23",
-    "message": "All fields on Add/Edit Bill and Debt forms are now optional — fill in only what you need"
+    "message": "All fields on Add/Edit Bill and Debt forms are now optional \u2014 fill in only what you need"
   },
   {
     "id": "2026-03-23-split-shares-checklist",
@@ -77,11 +82,11 @@
   {
     "id": "2026-03-22-support-tickets",
     "date": "2026-03-22",
-    "message": "Support tickets system added — submit and track requests"
+    "message": "Support tickets system added \u2014 submit and track requests"
   },
   {
     "id": "2026-03-22-stability",
     "date": "2026-03-22",
-    "message": "Backend stability fix — resolved API loading issues"
+    "message": "Backend stability fix \u2014 resolved API loading issues"
   }
 ]

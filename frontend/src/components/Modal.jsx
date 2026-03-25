@@ -7,22 +7,16 @@ export default function Modal({ isOpen, onClose, title, children }) {
   useEffect(() => {
     if (isOpen) {
       scrollPosRef.current = window.scrollY;
+      document.body.dataset.modalOpen = 'true';
       document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${scrollPosRef.current}px`;
-      document.body.style.width = '100%';
     } else {
+      delete document.body.dataset.modalOpen;
       document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
       window.scrollTo(0, scrollPosRef.current);
     }
     return () => {
+      delete document.body.dataset.modalOpen;
       document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
     };
   }, [isOpen]);
 
