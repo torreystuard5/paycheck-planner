@@ -1,5 +1,10 @@
 [
   {
+    "id": "2026-03-23-vault-pin-focus-fix",
+    "date": "2026-03-23",
+    "message": "Fixed PIN input on Secure Vault losing focus on mobile devices"
+  },
+  {
     "id": "2026-03-23-dashboard-layout-fix",
     "date": "2026-03-23",
     "message": "Fixed dashboard and page layouts being clipped or cut off on mobile devices."

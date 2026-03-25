@@ -92,6 +92,7 @@ function PinSetup({ onSuccess }) {
   const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const pinInputRef = useRef(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -128,14 +129,16 @@ function PinSetup({ onSuccess }) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Enter PIN</label>
             <input
+              ref={pinInputRef}
               type="password"
               inputMode="numeric"
+              pattern="[0-9]*"
               maxLength={6}
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-center text-2xl tracking-[0.5em]"
               placeholder="····"
-              autoFocus
+              data-keep-focus="true"
             />
           </div>
           <div>
@@ -143,11 +146,13 @@ function PinSetup({ onSuccess }) {
             <input
               type="password"
               inputMode="numeric"
+              pattern="[0-9]*"
               maxLength={6}
               value={confirmPin}
               onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-center text-2xl tracking-[0.5em]"
               placeholder="····"
+              data-keep-focus="true"
             />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -170,6 +175,7 @@ function PinVerify({ onSuccess }) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const pinInputRef = useRef(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -191,6 +197,7 @@ function PinVerify({ onSuccess }) {
         setError(err.response?.data?.detail || 'Verification failed.');
       }
       setPin('');
+      requestAnimationFrame(() => pinInputRef.current?.focus());
     } finally {
       setSaving(false);
     }
@@ -207,14 +214,16 @@ function PinVerify({ onSuccess }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <input
+              ref={pinInputRef}
               type="password"
               inputMode="numeric"
+              pattern="[0-9]*"
               maxLength={6}
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-center text-2xl tracking-[0.5em]"
               placeholder="····"
-              autoFocus
+              data-keep-focus="true"
             />
           </div>
           {error && <p className="text-sm text-red-600" data-testid="pin-error">{error}</p>}
