@@ -175,6 +175,28 @@ export default function Dashboard() {
     return parts.join(' · ');
   };
 
+  // Compute paid amounts for bills and debts from current paycheck period checklist
+  const currentPaycheckItems = (paycheckPlan?.paychecks?.[0]?.assigned_items) || [];
+  const billItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'bill');
+  const debtItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'debt');
+
+  const billsTotalInPlan = billItemsInPlan.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const billsPaidInPlan = billItemsInPlan
+    .filter(i => !!checklist[`${i.item_type}_${i.id || i.item_id}`])
+    .reduce((s, i) => s + (Number(i.amount) || 0), 0);
+
+  const debtTotalInPlan = debtItemsInPlan.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const debtPaidInPlan = debtItemsInPlan
+    .filter(i => !!checklist[`${i.item_type}_${i.id || i.item_id}`])
+    .reduce((s, i) => s + (Number(i.amount) || 0), 0);
+
+  const billsPaidSubtitle = billItemsInPlan.length > 0
+    ? `${fmtCurrency(billsPaidInPlan)} of ${fmtCurrency(billsTotalInPlan)} paid`
+    : null;
+  const debtPaidSubtitle = debtItemsInPlan.length > 0
+    ? `${fmtCurrency(debtPaidInPlan)} of ${fmtCurrency(debtTotalInPlan)} paid this period`
+    : null;
+
   const cardLinks = {
     'Total Income': '/income',
     'Total Bills': '/bills',
@@ -184,8 +206,8 @@ export default function Dashboard() {
 
   const summaryCards = [
     { label: 'Total Income', value: totalIncome, icon: DollarSign, color: 'text-green-500', bg: 'bg-green-50' },
-    { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50', subtitle: getBillSubtitle() },
-    { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50' },
+    { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50', subtitle: getBillSubtitle(), paidSubtitle: billsPaidSubtitle },
+    { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50', paidSubtitle: debtPaidSubtitle },
     { label: 'Savings Goals', value: null, count: savingsCount, icon: PiggyBank, color: 'text-purple-500', bg: 'bg-purple-50' },
   ];
 
@@ -239,6 +261,12 @@ export default function Dashboard() {
                   <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                     <CheckCircle className="w-3 h-3" />
                     {card.subtitle}
+                  </p>
+                )}
+                {card.paidSubtitle && (
+                  <p className="text-xs text-blue-600 mt-0.5 flex items-center gap-1">
+                    <DollarSign className="w-3 h-3" />
+                    {card.paidSubtitle}
                   </p>
                 )}
               </div>
@@ -298,6 +326,13 @@ export default function Dashboard() {
                 const totalItems = assignedItems.length;
                 const progressPct = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0;
 
+                // Paid / Still Owed totals
+                const totalAssignedAmount = assignedItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                const paidAmount = assignedItems
+                  .filter((item) => !!checklist[`${item.item_type}_${item.id || item.item_id}`])
+                  .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                const stillOwed = totalAssignedAmount - paidAmount;
+
                 return (
                   <>
                     <div className="flex justify-between items-center">
@@ -327,12 +362,18 @@ export default function Dashboard() {
                             {checkedCount}/{totalItems} Paid
                           </span>
                         </div>
-                        <div className="w-full bg-gray-100 rounded-full h-1 mb-3">
+                        <div className="w-full bg-gray-100 rounded-full h-1 mb-2">
                           <div
                             className="bg-green-500 h-1 rounded-full transition-all duration-300"
                             style={{ width: `${progressPct}%` }}
                           />
                         </div>
+                        <p className="text-xs mb-3">
+                          <span className="font-semibold text-green-600">Paid: {fmtCurrency(paidAmount)}</span>
+                          <span className="text-gray-400"> of {fmtCurrency(totalAssignedAmount)}</span>
+                          <span className="text-gray-300 mx-1">·</span>
+                          <span className="font-semibold text-amber-600">Still Owed: {fmtCurrency(stillOwed)}</span>
+                        </p>
 
                         <div className="space-y-1.5">
                           {sortedItems.map((item) => {

@@ -1,5 +1,10 @@
 [
   {
+    "id": "2026-03-25-paid-tracker",
+    "date": "2026-03-25",
+    "message": "Added Paid / Still Owed tracker to the paycheck plan and dashboard cards so you can see exactly how much you've paid and what's left."
+  },
+  {
     "id": "2026-03-23-vault-pin-focus-fix",
     "date": "2026-03-23",
     "message": "Fixed PIN input on Secure Vault losing focus on mobile devices"
