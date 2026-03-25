@@ -103,7 +103,7 @@ async def get_admin_stats(
 
     active_users = (
         await db.execute(
-            select(func.count(User.id)).where(User.updated_at >= thirty_days_ago)
+            select(func.count(User.id)).where(User.last_login_at >= thirty_days_ago)
         )
     ).scalar() or 0
 

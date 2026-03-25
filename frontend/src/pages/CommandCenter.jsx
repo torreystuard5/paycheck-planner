@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Shield,
@@ -30,6 +30,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Power,
+  RefreshCw,
 } from 'lucide-react';
 import {
   LineChart,
@@ -186,34 +187,40 @@ function DashboardTab() {
   const [announcements, setAnnouncements] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      setLoading(true);
-      try {
-        const [statsRes, announcementsRes, activityRes] = await Promise.allSettled([
-          api.get('/api/v1/admin/stats'),
-          api.get('/api/v1/admin/announcements'),
-          api.get('/api/v1/admin/audit-log', { params: { page: 1, per_page: 5 } }),
-        ]);
-        if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
-        if (announcementsRes.status === 'fulfilled') {
-          const d = announcementsRes.value.data;
-          setAnnouncements(Array.isArray(d) ? d.filter((a) => a.is_active) : []);
-        }
-        if (activityRes.status === 'fulfilled') {
-          const d = activityRes.value.data;
-          setRecentActivity(Array.isArray(d) ? d : d.entries || d.items || []);
-        }
-      } catch {
-        setError('Failed to load dashboard data.');
-      } finally {
-        setLoading(false);
+  const fetchAll = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    setRefreshing(true);
+    try {
+      const [statsRes, announcementsRes, activityRes] = await Promise.allSettled([
+        api.get('/api/v1/admin/stats'),
+        api.get('/api/v1/admin/announcements'),
+        api.get('/api/v1/admin/audit-log', { params: { page: 1, per_page: 5 } }),
+      ]);
+      if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
+      if (announcementsRes.status === 'fulfilled') {
+        const d = announcementsRes.value.data;
+        setAnnouncements(Array.isArray(d) ? d.filter((a) => a.is_active) : []);
       }
-    };
-    fetchAll();
+      if (activityRes.status === 'fulfilled') {
+        const d = activityRes.value.data;
+        setRecentActivity(Array.isArray(d) ? d : d.entries || d.items || []);
+      }
+    } catch {
+      setError('Failed to load dashboard data.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchAll();
+    const interval = setInterval(() => fetchAll({ silent: true }), 60_000);
+    return () => clearInterval(interval);
+  }, [fetchAll]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return <p className="text-red-600 text-center py-8">{error}</p>;
@@ -235,6 +242,18 @@ function DashboardTab() {
 
   return (
     <div className="space-y-6">
+      {/* Refresh bar */}
+      <div className="flex items-center justify-end">
+        <button
+          onClick={() => fetchAll({ silent: true })}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
+
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.map(({ label, value, icon: Icon, color, bg }) => (

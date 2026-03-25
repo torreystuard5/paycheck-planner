@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users,
@@ -7,6 +7,7 @@ import {
   Activity,
   Home,
   MessageSquare,
+  RefreshCw,
 } from 'lucide-react';
 import {
   LineChart,
@@ -24,26 +25,33 @@ import LoadingSpinner from '../components/LoadingSpinner';
 export default function AdminStats() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [forbidden, setForbidden] = useState(false);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const { data } = await api.get('/api/v1/admin/stats');
-        setStats(data);
-      } catch (err) {
-        if (err.response?.status === 403) {
-          setForbidden(true);
-        } else {
-          setError('Failed to load admin stats.');
-        }
-      } finally {
-        setLoading(false);
+  const fetchStats = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    setRefreshing(true);
+    try {
+      const { data } = await api.get('/api/v1/admin/stats');
+      setStats(data);
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setForbidden(true);
+      } else {
+        setError('Failed to load admin stats.');
       }
-    };
-    fetchStats();
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(() => fetchStats({ silent: true }), 60_000);
+    return () => clearInterval(interval);
+  }, [fetchStats]);
 
   if (loading) return <LoadingSpinner />;
 
@@ -123,7 +131,17 @@ export default function AdminStats() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Admin Stats</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Admin Stats</h1>
+        <button
+          onClick={() => fetchStats({ silent: true })}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
