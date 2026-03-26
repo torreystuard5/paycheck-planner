@@ -30,28 +30,45 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      api
-        .get('/api/v1/auth/me')
-        .then(({ data }) => {
+    const init = async () => {
+      // Version gate — force re-login when backend version changes
+      try {
+        const { data: vData } = await api.get('/api/v1/version');
+        const serverVersion = vData?.version;
+        const localVersion = localStorage.getItem('app_version');
+        if (serverVersion && serverVersion !== localVersion) {
+          localStorage.setItem('app_version', serverVersion);
+          const hadToken = !!localStorage.getItem('access_token');
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          if (hadToken) {
+            setLoading(false);
+            return; // will show login since isAuthenticated is false
+          }
+        }
+      } catch {
+        // version endpoint unreachable — continue normally
+      }
+
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        try {
+          const { data } = await api.get('/api/v1/auth/me');
           setUser(data);
           setIsAuthenticated(true);
-          // Check if user needs to accept TOS
           if (!data.tos_version || data.tos_version < '1.0') {
             setTosRequired('1.0');
           }
-        })
-        .catch(() => {
+        } catch {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           setUser(null);
           setIsAuthenticated(false);
-        })
-        .finally(() => setLoading(false));
-    } else {
+        }
+      }
       setLoading(false);
-    }
+    };
+    init();
   }, []);
 
   const login = async (email, password) => {

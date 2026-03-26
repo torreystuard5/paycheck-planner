@@ -2,6 +2,9 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
+APP_VERSION = "0.1.0"
+
+
 class Settings(BaseSettings):
     DATABASE_URL: str
     SECRET_KEY: str

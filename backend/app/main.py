@@ -46,6 +46,7 @@ TOS_EXEMPT_PATHS = {
     "/api/v1/auth/refresh",
     "/api/v1/auth/logout",
     "/api/v1/support/auth-issue",
+    "/api/v1/version",
     "/health",
 }
 
@@ -53,6 +54,7 @@ TOS_EXEMPT_PATHS = {
 MAINTENANCE_EXEMPT_PREFIXES = (
     "/api/v1/auth/",
     "/api/v1/admin/",
+    "/api/v1/version",
     "/health",
     "/docs",
     "/redoc",
@@ -241,3 +243,9 @@ async def promote_initial_admin():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+@app.get("/api/v1/version")
+async def get_version():
+    from app.config import APP_VERSION
+    return {"version": APP_VERSION}
