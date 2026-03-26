@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.bill import Bill
 from app.models.debt import Debt
 from app.models.income import IncomeSource
+from app.models.paycheck_entry import PaycheckEntry
 from app.models.user import User
 from app.schemas.paycheck import PaycheckPlan, PaycheckPlanResponse
 from app.services.paycheck_engine import build_paycheck_plan, generate_pay_dates, get_pay_period_window
@@ -142,6 +143,15 @@ async def _fetch_user_data(db: AsyncSession, user: User):
     return income_sources, bills, filtered_debts
 
 
+async def _fetch_paycheck_entries(db: AsyncSession, user_id) -> list:
+    result = await db.execute(
+        select(PaycheckEntry)
+        .where(PaycheckEntry.user_id == user_id)
+        .order_by(PaycheckEntry.pay_date.desc())
+    )
+    return list(result.scalars().all())
+
+
 @router.get("", response_model=PaycheckPlanResponse)
 async def get_paycheck_plan(
     periods: int = Query(default=4, ge=1, le=12),
@@ -149,6 +159,7 @@ async def get_paycheck_plan(
     current_user: User = Depends(get_current_user),
 ):
     income_sources, bills, debts = await _fetch_user_data(db, current_user)
+    entries = await _fetch_paycheck_entries(db, current_user.id)
 
     plan = build_paycheck_plan(
         user=current_user,
@@ -156,6 +167,7 @@ async def get_paycheck_plan(
         bills=bills,
         debts=debts,
         num_periods=periods,
+        paycheck_entries=entries,
     )
     return plan
 
@@ -167,14 +179,15 @@ async def get_single_paycheck(
     current_user: User = Depends(get_current_user),
 ):
     income_sources, bills, debts = await _fetch_user_data(db, current_user)
+    entries = await _fetch_paycheck_entries(db, current_user.id)
 
-    # Generate enough periods to find the requested date
     plan = build_paycheck_plan(
         user=current_user,
         income_sources=income_sources,
         bills=bills,
         debts=debts,
         num_periods=12,
+        paycheck_entries=entries,
     )
 
     for paycheck in plan["paychecks"]:

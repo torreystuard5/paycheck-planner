@@ -7,7 +7,7 @@ paychecks based on due dates and the user's pay schedule.
 from __future__ import annotations
 
 import calendar
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 
@@ -172,14 +172,13 @@ def assign_bills_to_paycheck(
             paid_for_period = False
             if getattr(bill, "is_paid", False) and getattr(bill, "paid_date", None):
                 pd = bill.paid_date
-                if isinstance(pd, date):
-                    paid_for_period = window_start <= pd <= window_end
-                else:
-                    try:
-                        pd_date = pd.date() if hasattr(pd, "date") else date.fromisoformat(str(pd)[:10])
-                        paid_for_period = window_start <= pd_date <= window_end
-                    except (ValueError, AttributeError):
-                        paid_for_period = False
+                try:
+                    pd_date = pd.date() if isinstance(pd, datetime) else (
+                        pd if isinstance(pd, date) else date.fromisoformat(str(pd)[:10])
+                    )
+                    paid_for_period = window_start <= pd_date <= window_end
+                except (ValueError, AttributeError, TypeError):
+                    paid_for_period = False
 
             items.append(
                 {
@@ -241,6 +240,7 @@ def build_paycheck_plan(
     debts: list[Any],
     num_periods: int = 4,
     current_date: Optional[date] = None,
+    paycheck_entries: list[Any] | None = None,
 ) -> dict:
     """Build a full paycheck plan across *num_periods* pay periods.
 
@@ -252,13 +252,22 @@ def build_paycheck_plan(
     # Determine pay schedule — prefer first active income source, fall back to user profile
     if income_sources:
         source = income_sources[0]
-        pay_amount = Decimal(str(source.amount))
+        default_pay_amount = Decimal(str(source.amount))
         frequency = source.frequency
         next_pay = source.next_pay_date
     else:
-        pay_amount = Decimal(str(user.net_pay_amount))
+        default_pay_amount = Decimal(str(user.net_pay_amount))
         frequency = user.pay_frequency
         next_pay = user.next_pay_date
+
+    # Index logged paycheck entries by pay_date for O(1) lookup
+    entry_by_date: dict[date, Decimal] = {}
+    if paycheck_entries:
+        for entry in paycheck_entries:
+            pd = entry.pay_date
+            if isinstance(pd, datetime):
+                pd = pd.date()
+            entry_by_date[pd] = Decimal(str(entry.net_amount))
 
     # We need num_periods + 1 dates so the last period has a boundary
     pay_dates = generate_pay_dates(next_pay, frequency, num_periods + 1)
@@ -271,6 +280,14 @@ def build_paycheck_plan(
         window_start, window_end = get_pay_period_window(
             pay_dates[i], pay_dates[i + 1]
         )
+
+        # Use actual logged paycheck if one exists for this period,
+        # otherwise fall back to the income source template amount.
+        pay_amount = default_pay_amount
+        for entry_date, entry_amount in entry_by_date.items():
+            if window_start <= entry_date <= window_end:
+                pay_amount = entry_amount
+                break
 
         assigned = assign_bills_to_paycheck(
             bills, debts, window_start, window_end, current_date
