@@ -179,6 +179,7 @@ def assign_bills_to_paycheck(
                     "auto_pay": bool(bill.auto_pay),
                     "is_split": is_split,
                     "split_count": split_count if is_split else 1,
+                    "is_paid": bool(getattr(bill, "is_paid", False)),
                 }
             )
 

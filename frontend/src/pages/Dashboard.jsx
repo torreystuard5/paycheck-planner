@@ -34,18 +34,29 @@ export default function Dashboard() {
   const [checklist, setChecklist] = useState({});
   const [checklistLoading, setChecklistLoading] = useState({});
 
-  const fetchChecklist = useCallback(async (payPeriodStart) => {
+  const fetchChecklist = useCallback(async (payPeriodStart, assignedItems) => {
     if (!payPeriodStart) return;
+
+    // Seed from bill is_paid status so paid bills show immediately
+    const seedMap = {};
+    if (Array.isArray(assignedItems)) {
+      assignedItems.forEach((item) => {
+        if (item.is_paid) {
+          seedMap[`${item.item_type}_${item.id || item.item_id}`] = true;
+        }
+      });
+    }
+
     try {
       const res = await api.get(`/api/v1/paycheck-checklist?pay_period_start=${payPeriodStart}`);
       const items = Array.isArray(res.data) ? res.data : res.data?.items || [];
-      const map = {};
+      const map = { ...seedMap };
       items.forEach((entry) => {
         map[`${entry.item_type}_${entry.item_id}`] = entry.is_checked;
       });
       setChecklist(map);
     } catch {
-      setChecklist({});
+      setChecklist(seedMap);
     }
   }, []);
 
@@ -77,7 +88,7 @@ export default function Dashboard() {
         if (planData?.paychecks?.[0]) {
           const pp = planData.paychecks[0];
           const payPeriodStart = pp.pay_period_start || pp.paycheck_date;
-          if (payPeriodStart) fetchChecklist(payPeriodStart);
+          if (payPeriodStart) fetchChecklist(payPeriodStart, pp.assigned_items);
         }
       }
       if (creditRes.status === 'fulfilled') setCreditScore(creditRes.value.data);

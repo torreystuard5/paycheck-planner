@@ -18,6 +18,7 @@ class PaycheckItem(BaseModel):
     auto_pay: bool
     is_split: bool = False
     split_count: int = 1
+    is_paid: bool = False
 
 
 class PaycheckPlan(BaseModel):
