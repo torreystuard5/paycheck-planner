@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Wallet, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, Edit, Trash2, Wallet, Calendar, ChevronDown, ChevronUp, DollarSign, RefreshCw } from 'lucide-react';
 import SortDropdown from '../components/SortDropdown';
 import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
@@ -19,8 +19,18 @@ const defaultForm = {
   next_pay_date: new Date().toISOString().split('T')[0],
 };
 
+const defaultEntryForm = {
+  income_source_id: '',
+  pay_date: new Date().toISOString().split('T')[0],
+  net_amount: '',
+  gross_amount: '',
+  memo: '',
+};
+
 export default function Income() {
   const [incomes, setIncomes] = useState([]);
+  const [entries, setEntries] = useState([]);
+  const [monthlySummary, setMonthlySummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortBy, setSortBy] = useState('created_at');
@@ -32,23 +42,41 @@ export default function Income() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
-  useEffect(() => {
-    fetchIncomes(true);
-  }, [sortBy, sortOrder]);
+  // Paycheck entry state
+  const [showEntryModal, setShowEntryModal] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [entryForm, setEntryForm] = useState(defaultEntryForm);
+  const [savingEntry, setSavingEntry] = useState(false);
+  const [deleteEntryTarget, setDeleteEntryTarget] = useState(null);
 
-  const fetchIncomes = async (showLoading = false) => {
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  const fetchIncomes = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/api/v1/income?sort_by=${sortBy}&sort_order=${sortOrder}`);
-      setIncomes(Array.isArray(res.data) ? res.data : []);
+      const [incomesRes, entriesRes, summaryRes] = await Promise.allSettled([
+        api.get(`/api/v1/income?sort_by=${sortBy}&sort_order=${sortOrder}`),
+        api.get(`/api/v1/paycheck-entries?month=${currentMonth}&year=${currentYear}`),
+        api.get(`/api/v1/paycheck-entries/monthly-summary?month=${currentMonth}&year=${currentYear}`),
+      ]);
+      if (incomesRes.status === 'fulfilled') setIncomes(Array.isArray(incomesRes.value.data) ? incomesRes.value.data : []);
+      if (entriesRes.status === 'fulfilled') setEntries(Array.isArray(entriesRes.value.data) ? entriesRes.value.data : []);
+      if (summaryRes.status === 'fulfilled') setMonthlySummary(summaryRes.value.data);
     } catch {
-      setError('Failed to load income sources.');
+      setError('Failed to load income data.');
     } finally {
       if (showLoading) setLoading(false);
     }
-  };
+  }, [sortBy, sortOrder, currentMonth, currentYear]);
 
+  useEffect(() => {
+    fetchIncomes(true);
+  }, [fetchIncomes]);
+
+  // ── Income source handlers ──
   const openAdd = () => {
     setEditingIncome(null);
     setForm(defaultForm);
@@ -102,7 +130,64 @@ export default function Income() {
     }
   };
 
-  const totalMonthlyIncome = incomes.reduce((sum, inc) => {
+  // ── Paycheck entry handlers ──
+  const openAddEntry = () => {
+    setEditingEntry(null);
+    setEntryForm(defaultEntryForm);
+    setShowEntryModal(true);
+  };
+
+  const openEditEntry = (entry) => {
+    setEditingEntry(entry);
+    setEntryForm({
+      income_source_id: entry.income_source_id || '',
+      pay_date: entry.pay_date || '',
+      net_amount: entry.net_amount || '',
+      gross_amount: entry.gross_amount || '',
+      memo: entry.memo || '',
+    });
+    setShowEntryModal(true);
+  };
+
+  const handleEntrySubmit = async (e) => {
+    e.preventDefault();
+    setSavingEntry(true);
+    setError(null);
+    try {
+      const payload = {
+        income_source_id: entryForm.income_source_id || null,
+        pay_date: entryForm.pay_date,
+        net_amount: parseFloat(entryForm.net_amount),
+        gross_amount: entryForm.gross_amount ? parseFloat(entryForm.gross_amount) : null,
+        memo: entryForm.memo || null,
+      };
+      if (editingEntry) {
+        await api.put(`/api/v1/paycheck-entries/${editingEntry.id}`, payload);
+      } else {
+        await api.post('/api/v1/paycheck-entries', payload);
+      }
+      setShowEntryModal(false);
+      fetchIncomes();
+    } catch {
+      setError('Failed to save paycheck entry.');
+    } finally {
+      setSavingEntry(false);
+    }
+  };
+
+  const handleDeleteEntry = async () => {
+    if (!deleteEntryTarget) return;
+    try {
+      await api.delete(`/api/v1/paycheck-entries/${deleteEntryTarget.id}`);
+      setDeleteEntryTarget(null);
+      fetchIncomes();
+    } catch {
+      setError('Failed to delete paycheck entry.');
+    }
+  };
+
+  // ── Estimated monthly from frequency (fallback when no entries exist) ──
+  const estimatedFromSources = incomes.reduce((sum, inc) => {
     const amt = Number(inc.amount) || 0;
     switch (inc.frequency) {
       case 'weekly': return sum + (amt * 52) / 12;
@@ -113,9 +198,14 @@ export default function Income() {
     }
   }, 0);
 
+  const actualMonthlyNet = monthlySummary ? Number(monthlySummary.total_net) : 0;
+  const paycheckCount = monthlySummary ? monthlySummary.paycheck_count : 0;
+
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
   if (loading) return <LoadingSpinner />;
+
+  const monthLabel = now.toLocaleString('default', { month: 'long', year: 'numeric' });
 
   return (
     <div className="space-y-6">
@@ -123,23 +213,16 @@ export default function Income() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Income & Paychecks</h1>
-            <p className="text-sm text-gray-600 mt-1">Manage your income sources and paychecks</p>
+            <p className="text-sm text-gray-600 mt-1">Manage your income sources and log paychecks</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <SortDropdown
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
-              options={[
-                { value: 'source', label: 'Source' },
-                { value: 'amount', label: 'Amount' },
-                { value: 'pay_date', label: 'Pay Date' },
-                { value: 'created_at', label: 'Date Added' },
-              ]}
-            />
+            <button onClick={openAddEntry} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-colors">
+              <DollarSign className="h-4 w-4" />
+              Log Paycheck
+            </button>
             <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
               <Plus className="h-4 w-4" />
-              Add Paycheck
+              Add Source
             </button>
           </div>
         </div>
@@ -149,104 +232,172 @@ export default function Income() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
       )}
 
+      {/* Monthly income summary */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <p className="text-sm text-gray-600">Estimated Monthly Income</p>
-        <CurrencyDisplay amount={totalMonthlyIncome} className="text-2xl font-bold text-green-600 mt-1 block" />
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-600">{monthLabel} Income</p>
+            {paycheckCount > 0 ? (
+              <>
+                <CurrencyDisplay amount={actualMonthlyNet} className="text-2xl font-bold text-green-600 mt-1 block" />
+                <p className="text-xs text-gray-500 mt-1">{paycheckCount} paycheck{paycheckCount !== 1 ? 's' : ''} logged this month</p>
+              </>
+            ) : (
+              <>
+                <CurrencyDisplay amount={estimatedFromSources} className="text-2xl font-bold text-green-600 mt-1 block" />
+                <p className="text-xs text-gray-500 mt-1">Estimated from income sources — log a paycheck for actuals</p>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
-      {incomes.length === 0 ? (
-        <EmptyState icon={Wallet} title="No Income Sources" message="Add your first paycheck or income source to get started." actionLabel="Add Paycheck" onAction={openAdd} />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {incomes.map((income) => {
-            const isExpanded = expandedId === income.id;
-            return (
-              <div key={income.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 ${!income.is_active ? 'opacity-60' : ''}`}>
-                <div className="p-4">
-                  {/* Line 1: Name + actions */}
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-base font-semibold text-gray-900 truncate">{income.name}</h3>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => openEdit(income)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setDeleteTarget(income)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setExpandedId(isExpanded ? null : income.id)}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-                      >
-                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </button>
+      {/* Paycheck entries this month */}
+      {entries.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Paychecks This Month</h2>
+          <div className="space-y-2">
+            {entries.map((entry) => {
+              const source = incomes.find((s) => s.id === entry.income_source_id);
+              return (
+                <div key={entry.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="bg-green-50 p-2 rounded-lg shrink-0">
+                      <DollarSign className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{source?.name || 'Paycheck'}</p>
+                      <p className="text-xs text-gray-500">{formatFriendlyDate(entry.pay_date)}{entry.memo ? ` — ${entry.memo}` : ''}</p>
                     </div>
                   </div>
-
-                  {/* Line 2: Badges */}
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 capitalize">
-                      {income.frequency?.replace(/_/g, ' ') || 'Monthly'}
-                    </span>
-                    {!income.is_active && (
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Inactive</span>
-                    )}
-                  </div>
-
-                  {/* Line 3: Amount */}
-                  <div className="mt-2">
-                    <CurrencyDisplay amount={income.amount} className="text-lg font-bold text-gray-900" />
-                  </div>
-
-                  {/* Line 4: Next pay date */}
-                  <div className="flex items-center gap-1.5 mt-1.5 text-sm text-gray-500">
-                    <Calendar className="w-4 h-4" />
-                    <span>Next: {income.next_pay_date ? formatFriendlyDate(income.next_pay_date) : '--'}</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <CurrencyDisplay amount={entry.net_amount} className="text-base font-bold text-gray-900" />
+                    <button onClick={() => openEditEntry(entry)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setDeleteEntryTarget(entry)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-
-                {/* Expanded section */}
-                <div
-                  className="overflow-hidden transition-all duration-300 ease-in-out"
-                  style={{ maxHeight: isExpanded ? '200px' : '0px', opacity: isExpanded ? 1 : 0 }}
-                >
-                  <div className="px-4 pb-4">
-                    <div className="border-t border-gray-200 pt-3 space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Per Paycheck</span>
-                        <CurrencyDisplay amount={income.amount} className="font-medium text-gray-900" />
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Est. Monthly</span>
-                        <CurrencyDisplay
-                          amount={(() => {
-                            const amt = Number(income.amount) || 0;
-                            switch (income.frequency) {
-                              case 'weekly': return (amt * 52) / 12;
-                              case 'biweekly': return (amt * 26) / 12;
-                              case 'semi_monthly': return amt * 2;
-                              case 'monthly': return amt;
-                              default: return amt;
-                            }
-                          })()}
-                          className="font-medium text-gray-900"
-                        />
-                      </div>
-                      {income.created_at && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Added</span>
-                          <span className="text-gray-700">{formatFriendlyDate(income.created_at)}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingIncome ? 'Edit Paycheck' : 'Add Paycheck'}>
+      {/* Income Sources */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">Income Sources</h2>
+          <SortDropdown
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+            options={[
+              { value: 'source', label: 'Source' },
+              { value: 'amount', label: 'Amount' },
+              { value: 'pay_date', label: 'Pay Date' },
+              { value: 'created_at', label: 'Date Added' },
+            ]}
+          />
+        </div>
+
+        {incomes.length === 0 ? (
+          <EmptyState icon={Wallet} title="No Income Sources" message="Add your first income source to get started." actionLabel="Add Source" onAction={openAdd} />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {incomes.map((income) => {
+              const isExpanded = expandedId === income.id;
+              return (
+                <div key={income.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 ${!income.is_active ? 'opacity-60' : ''}`}>
+                  <div className="p-4">
+                    {/* Line 1: Name + actions */}
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-base font-semibold text-gray-900 truncate">{income.name}</h3>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => openEdit(income)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setDeleteTarget(income)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : income.id)}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Line 2: Badges */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 capitalize">
+                        {income.frequency?.replace(/_/g, ' ') || 'Monthly'}
+                      </span>
+                      {!income.is_active && (
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Inactive</span>
+                      )}
+                    </div>
+
+                    {/* Line 3: Amount */}
+                    <div className="mt-2">
+                      <CurrencyDisplay amount={income.amount} className="text-lg font-bold text-gray-900" />
+                    </div>
+
+                    {/* Line 4: Next pay date */}
+                    <div className="flex items-center gap-1.5 mt-1.5 text-sm text-gray-500">
+                      <Calendar className="w-4 h-4" />
+                      <span>Next: {income.next_pay_date ? formatFriendlyDate(income.next_pay_date) : '--'}</span>
+                    </div>
+                  </div>
+
+                  {/* Expanded section */}
+                  <div
+                    className="overflow-hidden transition-all duration-300 ease-in-out"
+                    style={{ maxHeight: isExpanded ? '200px' : '0px', opacity: isExpanded ? 1 : 0 }}
+                  >
+                    <div className="px-4 pb-4">
+                      <div className="border-t border-gray-200 pt-3 space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Per Paycheck</span>
+                          <CurrencyDisplay amount={income.amount} className="font-medium text-gray-900" />
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Est. Monthly</span>
+                          <CurrencyDisplay
+                            amount={(() => {
+                              const amt = Number(income.amount) || 0;
+                              switch (income.frequency) {
+                                case 'weekly': return (amt * 52) / 12;
+                                case 'biweekly': return (amt * 26) / 12;
+                                case 'semi_monthly': return amt * 2;
+                                case 'monthly': return amt;
+                                default: return amt;
+                              }
+                            })()}
+                            className="font-medium text-gray-900"
+                          />
+                        </div>
+                        {income.created_at && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Added</span>
+                            <span className="text-gray-700">{formatFriendlyDate(income.created_at)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Income Source Modal ── */}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingIncome ? 'Edit Income Source' : 'Add Income Source'}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
@@ -277,12 +428,59 @@ export default function Income() {
         </form>
       </Modal>
 
+      {/* ── Log Paycheck Modal ── */}
+      <Modal isOpen={showEntryModal} onClose={() => setShowEntryModal(false)} title={editingEntry ? 'Edit Paycheck' : 'Log Paycheck'}>
+        <form onSubmit={handleEntrySubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Income Source (optional)</label>
+            <select value={entryForm.income_source_id} onChange={(e) => setEntryForm({ ...entryForm, income_source_id: e.target.value })} className={inputClass}>
+              <option value="">— None —</option>
+              {incomes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pay Date</label>
+            <DateInput value={entryForm.pay_date} onChange={(e) => setEntryForm({ ...entryForm, pay_date: e.target.value })} className={inputClass} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Net Amount (take-home)</label>
+              <input type="number" step="0.01" required value={entryForm.net_amount} onChange={(e) => setEntryForm({ ...entryForm, net_amount: e.target.value })} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Gross Amount (optional)</label>
+              <input type="number" step="0.01" value={entryForm.gross_amount} onChange={(e) => setEntryForm({ ...entryForm, gross_amount: e.target.value })} className={inputClass} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Memo (optional)</label>
+            <input type="text" maxLength={255} value={entryForm.memo} onChange={(e) => setEntryForm({ ...entryForm, memo: e.target.value })} className={inputClass} placeholder="e.g. Overtime included" />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setShowEntryModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={savingEntry} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
+              {savingEntry ? 'Saving...' : editingEntry ? 'Update' : 'Log Paycheck'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Confirm dialogs */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         title="Delete Income Source"
         message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        danger
+      />
+      <ConfirmDialog
+        isOpen={!!deleteEntryTarget}
+        onClose={() => setDeleteEntryTarget(null)}
+        onConfirm={handleDeleteEntry}
+        title="Delete Paycheck Entry"
+        message="Are you sure you want to delete this paycheck entry? This action cannot be undone."
         confirmText="Delete"
         danger
       />

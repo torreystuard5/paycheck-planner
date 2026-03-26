@@ -21,6 +21,7 @@ from app.models.app_update import AppUpdate
 from app.models.coming_soon import ComingSoon
 from app.models.paycheck_schedule import PaycheckSchedule
 from app.models.paycheck_checklist import PaycheckChecklist
+from app.models.paycheck_entry import PaycheckEntry
 from app.models.system_setting import SystemSetting
 
 __all__ = [
@@ -48,5 +49,6 @@ __all__ = [
     "ComingSoon",
     "PaycheckSchedule",
     "PaycheckChecklist",
+    "PaycheckEntry",
     "SystemSetting",
 ]
