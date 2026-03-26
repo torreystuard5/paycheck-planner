@@ -166,6 +166,21 @@ def assign_bills_to_paycheck(
         split_count = getattr(bill, "split_member_count", 1) or 1
         for due_dt in due_dates:
             days = (due_dt - current_date).days
+
+            # A bill is only "paid" for this period if paid_date falls
+            # within the same pay-period window.
+            paid_for_period = False
+            if getattr(bill, "is_paid", False) and getattr(bill, "paid_date", None):
+                pd = bill.paid_date
+                if isinstance(pd, date):
+                    paid_for_period = window_start <= pd <= window_end
+                else:
+                    try:
+                        pd_date = pd.date() if hasattr(pd, "date") else date.fromisoformat(str(pd)[:10])
+                        paid_for_period = window_start <= pd_date <= window_end
+                    except (ValueError, AttributeError):
+                        paid_for_period = False
+
             items.append(
                 {
                     "id": bill.id,
@@ -179,7 +194,7 @@ def assign_bills_to_paycheck(
                     "auto_pay": bool(bill.auto_pay),
                     "is_split": is_split,
                     "split_count": split_count if is_split else 1,
-                    "is_paid": bool(getattr(bill, "is_paid", False)),
+                    "is_paid": paid_for_period,
                 }
             )
 
