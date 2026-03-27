@@ -77,6 +77,52 @@ def generate_pay_dates(
     return [_add_months(next_pay_date, i) for i in range(num_periods)]
 
 
+def _advance_to_current(
+    anchor: date, frequency: str, current_date: date
+) -> date:
+    """Advance *anchor* forward by its frequency until it is >= *current_date*.
+
+    Handles weekly, biweekly, semi_monthly, monthly, and unknown (monthly fallback).
+    """
+    if frequency == "weekly":
+        weeks_behind = ((current_date - anchor).days + 6) // 7  # ceil
+        return anchor + timedelta(weeks=weeks_behind)
+
+    if frequency == "biweekly":
+        periods_behind = ((current_date - anchor).days + 13) // 14  # ceil
+        return anchor + timedelta(weeks=2 * periods_behind)
+
+    if frequency == "semi_monthly":
+        # Determine the two pay days in any given month
+        if anchor.day <= 15:
+            day_a, day_b = anchor.day, anchor.day + 15
+        else:
+            day_a, day_b = anchor.day - 15, anchor.day
+
+        # Walk months starting from current_date's month, looking for the
+        # nearest semi-monthly date on or after current_date
+        y, m = current_date.year, current_date.month
+        for _ in range(3):  # at most check this month, next month, month after
+            max_day = calendar.monthrange(y, m)[1]
+            for d in sorted({min(day_a, max_day), min(day_b, max_day)}):
+                candidate = date(y, m, d)
+                if candidate >= current_date:
+                    return candidate
+            # advance to next month
+            if m == 12:
+                y, m = y + 1, 1
+            else:
+                m += 1
+        # Shouldn't reach here, but fallback
+        return current_date
+
+    # monthly or unknown — advance month by month
+    candidate = anchor
+    while candidate < current_date:
+        candidate = _add_months(candidate, 1)
+    return candidate
+
+
 # ── Pay-period windows ─────────────────────────────────────────────
 
 
@@ -259,6 +305,10 @@ def build_paycheck_plan(
         default_pay_amount = Decimal(str(user.net_pay_amount))
         frequency = user.pay_frequency
         next_pay = user.next_pay_date
+
+    # Advance next_pay so the first paycheck shown is never in the past
+    if next_pay < current_date:
+        next_pay = _advance_to_current(next_pay, frequency, current_date)
 
     # Index logged paycheck entries by pay_date for O(1) lookup
     entry_by_date: dict[date, Decimal] = {}
