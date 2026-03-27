@@ -449,6 +449,7 @@ function UsersTab({ currentUser }) {
     setTogglingAdmin(userId);
     try {
       await api.patch(`/api/v1/admin/users/${userId}/admin`, { is_admin: newVal });
+      fetchUsers();
     } catch (err) {
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, is_admin: currentIsAdmin } : u)));
       setToggleError(err.response?.data?.detail || 'Failed to update admin status.');
@@ -496,6 +497,7 @@ function UsersTab({ currentUser }) {
       setDetailUser(data);
       setDetailSuccess('Account status updated.');
       setTimeout(() => setDetailSuccess(''), 3000);
+      fetchUsers();
     } catch (err) {
       setDetailError(err.response?.data?.detail || 'Failed to update status.');
     } finally {
@@ -514,6 +516,7 @@ function UsersTab({ currentUser }) {
       setDetailUser(data);
       setDetailSuccess('Admin notes updated.');
       setTimeout(() => setDetailSuccess(''), 3000);
+      fetchUsers();
     } catch (err) {
       setDetailError(err.response?.data?.detail || 'Failed to update notes.');
     } finally {

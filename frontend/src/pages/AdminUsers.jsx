@@ -107,6 +107,7 @@ export default function AdminUsers() {
 
     try {
       await api.patch(`/api/v1/admin/users/${userId}/admin`, { is_admin: newVal });
+      fetchUsers();
     } catch (err) {
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, is_admin: currentIsAdmin } : u))
@@ -130,6 +131,7 @@ export default function AdminUsers() {
       setDetailUser(data);
       setDetailSuccess('Account status updated.');
       setTimeout(() => setDetailSuccess(''), 3000);
+      fetchUsers();
     } catch (err) {
       setDetailError(err.response?.data?.detail || 'Failed to update status.');
     } finally {
@@ -148,6 +150,7 @@ export default function AdminUsers() {
       setDetailUser(data);
       setDetailSuccess('Admin notes updated.');
       setTimeout(() => setDetailSuccess(''), 3000);
+      fetchUsers();
     } catch (err) {
       setDetailError(err.response?.data?.detail || 'Failed to update notes.');
     } finally {

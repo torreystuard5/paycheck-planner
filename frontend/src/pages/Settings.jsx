@@ -177,6 +177,7 @@ export default function Settings() {
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
+      fetchProfile();
     } catch {
       setError('Failed to save settings.');
     } finally {
