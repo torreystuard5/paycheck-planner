@@ -30,7 +30,15 @@ export default function Login() {
     setError('');
 
     try {
-      await login(form.email, form.password);
+      const result = await login(form.email, form.password);
+      if (result?.must_reset_password) {
+        // Clear tokens — user must reset via email link
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        setError('A password reset is required for your account. Please check your email for a reset link.');
+        setSubmitting(false);
+        return;
+      }
       navigate('/dashboard', { replace: true });
     } catch (err) {
       const msg =
@@ -112,7 +120,13 @@ export default function Login() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-gray-500">
+      <p className="mt-4 text-center">
+        <Link to="/forgot-password" className="text-sm font-medium text-blue-600 hover:text-blue-500">
+          Forgot Password?
+        </Link>
+      </p>
+
+      <p className="mt-3 text-center text-sm text-gray-500">
         Don&apos;t have an account?{' '}
         <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
           Create one

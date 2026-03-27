@@ -7,6 +7,9 @@ import { ToastProvider } from './components/Toast';
 
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
+import SetNewPassword from './pages/auth/SetNewPassword';
 import Dashboard from './pages/Dashboard';
 import Bills from './pages/Bills';
 import Debts from './pages/Debts';
@@ -48,6 +51,9 @@ export default function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/set-new-password" element={<SetNewPassword />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/cookies" element={<CookiePolicy />} />

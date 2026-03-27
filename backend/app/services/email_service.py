@@ -171,6 +171,46 @@ async def send_bill_reminder(
         return False
 
 
+async def send_password_reset_email(
+    to_email: str, user_name: str, reset_token: str
+) -> bool:
+    try:
+        conf = _get_mail_config()
+        if conf is None:
+            return False
+
+        # Use first origin from FRONTEND_URL (comma-separated list)
+        frontend_base = FRONTEND_URL.split(",")[0].strip()
+        reset_link = f"{frontend_base}/reset-password?token={reset_token}"
+
+        html_body = f"""
+        <h2>Password Reset Request</h2>
+        <p>Hi {user_name},</p>
+        <p>We received a request to reset your password. Click the link below to set a new password:</p>
+        <p><a href="{reset_link}" style="display:inline-block;padding:10px 24px;background-color:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Reset Password</a></p>
+        <p>Or copy and paste this URL into your browser:</p>
+        <p style="word-break:break-all;color:#6b7280;font-size:14px;">{reset_link}</p>
+        <p>This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email.</p>
+        <hr>
+        <p><small>PayDrift — Keeping your finances on track</small></p>
+        """
+
+        msg = MessageSchema(
+            subject="Reset your PayDrift password",
+            recipients=[to_email],
+            body=html_body,
+            subtype=MessageType.html,
+        )
+
+        fm = FastMail(conf)
+        await fm.send_message(msg)
+        logger.info("Password reset email sent to %s", to_email)
+        return True
+    except Exception:
+        logger.exception("Failed to send password reset email to %s", to_email)
+        return False
+
+
 async def send_debt_reminder(
     user_email: str,
     user_name: str,

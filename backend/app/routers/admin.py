@@ -1,4 +1,5 @@
 import json
+import secrets
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
@@ -446,6 +447,59 @@ async def update_user_email(
     await db.flush()
     await db.refresh(user)
     return AdminUserDetailResponse.model_validate(user)
+
+
+# ── Password Reset (Admin-initiated) ──────────────────────────────
+
+
+@router.post("/users/{user_id}/reset-password")
+async def admin_reset_password(
+    user_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Generate reset token and set must_reset_password
+    token = secrets.token_urlsafe(32)
+    user.reset_token = token
+    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    user.must_reset_password = True
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="initiated_password_reset",
+        target_type="user",
+        target_id=str(user_id),
+        details=json.dumps({"email": user.email}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+
+    # Send reset email (import here to avoid circular imports)
+    from app.services.email_service import send_password_reset_email
+
+    await send_password_reset_email(
+        to_email=user.email,
+        user_name=user.first_name,
+        reset_token=token,
+    )
+
+    return {"message": f"Password reset email sent to {user.email}"}
 
 
 # ── Audit Log ──────────────────────────────────────────────────────

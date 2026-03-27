@@ -381,6 +381,8 @@ function UsersTab({ currentUser }) {
   const [detailError, setDetailError] = useState('');
   const [detailSuccess, setDetailSuccess] = useState('');
   const [showEmailConfirm, setShowEmailConfirm] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [resetPasswordSuccess, setResetPasswordSuccess] = useState('');
 
   useEffect(() => {
     fetchUsers();
@@ -413,6 +415,7 @@ function UsersTab({ currentUser }) {
     setDetailError('');
     setDetailSuccess('');
     setShowEmailConfirm(false);
+    setResetPasswordSuccess('');
     try {
       const { data } = await api.get(`/api/v1/admin/users/${userId}`);
       setDetailUser(data);
@@ -794,6 +797,36 @@ function UsersTab({ currentUser }) {
                 <span className="text-sm text-gray-500">Failed Login Count</span>
                 <span className="text-sm text-gray-900">{detailUser.failed_login_count ?? 0}</span>
               </div>
+            </div>
+
+            {/* Reset Password */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-900">Password Reset</h3>
+              <p className="text-xs text-gray-500">Send a password reset email to this user. They will be required to set a new password.</p>
+              {resetPasswordSuccess && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">{resetPasswordSuccess}</div>
+              )}
+              <button
+                onClick={async () => {
+                  setResettingPassword(true);
+                  setDetailError('');
+                  setResetPasswordSuccess('');
+                  try {
+                    const { data } = await api.post(`/api/v1/admin/users/${detailUser.id}/reset-password`);
+                    setResetPasswordSuccess(data.message || 'Password reset email sent.');
+                    setTimeout(() => setResetPasswordSuccess(''), 5000);
+                  } catch (err) {
+                    setDetailError(err.response?.data?.detail || 'Failed to send password reset.');
+                  } finally {
+                    setResettingPassword(false);
+                  }
+                }}
+                disabled={resettingPassword}
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors"
+              >
+                {resettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Send Password Reset
+              </button>
             </div>
 
             {/* Read-only fields */}

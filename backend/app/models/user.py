@@ -52,6 +52,15 @@ class User(Base):
     account_status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Password reset fields
+    must_reset_password: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false")
+    )
+    reset_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reset_token_expires: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Secure vault fields
     pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes_lock_timeout: Mapped[int] = mapped_column(Integer, server_default=text("5"))

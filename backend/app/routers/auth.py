@@ -1,8 +1,8 @@
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -142,6 +142,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
+        must_reset_password=user.must_reset_password,
     )
 
 
@@ -227,6 +228,81 @@ async def update_date_format(
     await db.flush()
     await db.refresh(current_user)
     return current_user
+
+
+# ── Password Reset (User self-service) ─────────────────────────────
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8, max_length=72)
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
+):
+    """Send a password reset email. Always returns success to prevent email enumeration."""
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+
+    if user and user.is_active:
+        token = secrets.token_urlsafe(32)
+        user.reset_token = token
+        user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        await db.flush()
+
+        from app.services.email_service import send_password_reset_email
+
+        await send_password_reset_email(
+            to_email=user.email,
+            user_name=user.first_name,
+            reset_token=token,
+        )
+
+    return {"message": "If an account with that email exists, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+):
+    """Reset password using a valid token."""
+    result = await db.execute(
+        select(User).where(User.reset_token == body.token)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset link.",
+        )
+
+    # Check expiration
+    if user.reset_token_expires:
+        expires = user.reset_token_expires
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if expires < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reset link has expired. Please request a new one.",
+            )
+
+    # Update password and clear reset fields
+    user.password_hash = hash_password(body.new_password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    user.must_reset_password = False
+    user.failed_login_count = 0
+    await db.flush()
+
+    return {"message": "Password has been reset successfully. You can now log in."}
 
 
 class AcceptTosRequest(BaseModel):
