@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.debt import Debt
+from app.models.debt_payment import DebtPayment
 from app.models.income import IncomeSource
 from app.models.paycheck_entry import PaycheckEntry
 from app.models.user import User
@@ -152,6 +153,20 @@ async def _fetch_paycheck_entries(db: AsyncSession, user_id) -> list:
     return list(result.scalars().all())
 
 
+async def _get_paid_debt_ids(db: AsyncSession, user_id) -> set:
+    """Return set of debt IDs that have a DebtPayment for the current month."""
+    from datetime import date as _date
+    today = _date.today()
+    result = await db.execute(
+        select(DebtPayment.debt_id).where(
+            DebtPayment.user_id == user_id,
+            DebtPayment.period_month == today.month,
+            DebtPayment.period_year == today.year,
+        )
+    )
+    return {row[0] for row in result.all()}
+
+
 @router.get("", response_model=PaycheckPlanResponse)
 async def get_paycheck_plan(
     periods: int = Query(default=4, ge=1, le=12),
@@ -161,6 +176,9 @@ async def get_paycheck_plan(
     income_sources, bills, debts = await _fetch_user_data(db, current_user)
     entries = await _fetch_paycheck_entries(db, current_user.id)
 
+    # Fetch paid debt IDs so the engine can mark debts as paid
+    paid_ids = await _get_paid_debt_ids(db, current_user.id)
+
     plan = build_paycheck_plan(
         user=current_user,
         income_sources=income_sources,
@@ -168,6 +186,7 @@ async def get_paycheck_plan(
         debts=debts,
         num_periods=periods,
         paycheck_entries=entries,
+        paid_debt_ids=paid_ids,
     )
     return plan
 
@@ -180,6 +199,7 @@ async def get_single_paycheck(
 ):
     income_sources, bills, debts = await _fetch_user_data(db, current_user)
     entries = await _fetch_paycheck_entries(db, current_user.id)
+    paid_ids = await _get_paid_debt_ids(db, current_user.id)
 
     plan = build_paycheck_plan(
         user=current_user,
@@ -188,6 +208,7 @@ async def get_single_paycheck(
         debts=debts,
         num_periods=12,
         paycheck_entries=entries,
+        paid_debt_ids=paid_ids,
     )
 
     for paycheck in plan["paychecks"]:

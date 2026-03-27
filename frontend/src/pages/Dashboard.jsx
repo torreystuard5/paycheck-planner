@@ -140,6 +140,13 @@ export default function Dashboard() {
         pay_period_start: payPeriodStart,
         is_checked: newState,
       });
+      // Re-fetch debts and bills so summary cards stay in sync
+      const [debtsRes, billsRes] = await Promise.allSettled([
+        api.get('/api/v1/debts'),
+        api.get('/api/v1/bills'),
+      ]);
+      if (debtsRes.status === 'fulfilled') setDebts(debtsRes.value.data || []);
+      if (billsRes.status === 'fulfilled') setBills(billsRes.value.data || []);
     } catch {
       setChecklist((prev) => ({ ...prev, [key]: currentState }));
     } finally {
@@ -168,27 +175,14 @@ export default function Dashboard() {
   const paidCount = paidThisMonth.length;
   const totalBillCount = billsThisMonth.length;
 
-  // Build bill subtitle with split/single payment info
+  // Build unified bill subtitle — combined count + dollar amounts
   const getBillSubtitle = () => {
     if (totalBillCount === 0) return null;
-    const splitBills = billsThisMonth.filter(b => b.payment_mode === 'split' && b.is_household_bill);
-    const singleBills = billsThisMonth.filter(b => b.payment_mode !== 'split' || !b.is_household_bill);
-    const parts = [];
-
-    if (splitBills.length > 0) {
-      const splitPaid = splitBills.filter(b => b.is_paid).length;
-      parts.push(`${splitPaid}/${splitBills.length} split paid`);
-    }
-    if (singleBills.length > 0) {
-      const singlePaid = singleBills.filter(b => b.is_paid).length;
-      parts.push(`${singlePaid}/${singleBills.length} paid`);
-    }
-
-    if (parts.length === 0) return `${paidCount}/${totalBillCount} paid`;
-    return parts.join(' · ');
+    const paidBillsTotal = paidThisMonth.reduce((s, b) => s + (Number(b.user_share ?? b.amount) || 0), 0);
+    return `${paidCount}/${totalBillCount} bills paid \u00b7 ${fmtCurrency(paidBillsTotal)} of ${fmtCurrency(totalBills)}`;
   };
 
-  // Compute paid amounts for bills and debts from current paycheck period checklist
+  // Compute paid amounts for bills and debts from current paycheck period
   const currentPaycheckItems = (paycheckPlan?.paychecks?.[0]?.assigned_items) || [];
   const billItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'bill');
   const debtItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'debt');
@@ -198,9 +192,10 @@ export default function Dashboard() {
     .filter(i => !!checklist[`${i.item_type}_${i.id || i.item_id}`])
     .reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
+  // Debt paid amounts — use is_paid from the engine (backed by DebtPayment) OR checklist
   const debtTotalInPlan = debtItemsInPlan.reduce((s, i) => s + (Number(i.amount) || 0), 0);
   const debtPaidInPlan = debtItemsInPlan
-    .filter(i => !!checklist[`${i.item_type}_${i.id || i.item_id}`])
+    .filter(i => i.is_paid || !!checklist[`${i.item_type}_${i.id || i.item_id}`])
     .reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
   const billsPaidSubtitle = billItemsInPlan.length > 0
@@ -220,7 +215,7 @@ export default function Dashboard() {
   const summaryCards = [
     { label: 'Total Income', value: totalIncome, icon: DollarSign, color: 'text-green-500', bg: 'bg-green-50' },
     { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50', subtitle: getBillSubtitle(), paidSubtitle: billsPaidSubtitle },
-    { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50', subtitle: totalDebtCount > 0 && debtsPaidThisPeriod > 0 ? `${debtsPaidThisPeriod}/${totalDebtCount} paid this month` : null, paidSubtitle: debtPaidSubtitle },
+    { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50', subtitle: totalDebtCount > 0 ? `${debtsPaidThisPeriod}/${totalDebtCount} paid this month` : null, paidSubtitle: debtPaidSubtitle },
     { label: 'Savings Goals', value: null, count: savingsCount, icon: PiggyBank, color: 'text-purple-500', bg: 'bg-purple-50' },
   ];
 

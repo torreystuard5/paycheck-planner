@@ -192,6 +192,7 @@ def assign_bills_to_paycheck(
     window_start: date,
     window_end: date,
     current_date: date,
+    paid_debt_ids: set | None = None,
 ) -> list[dict]:
     """Assign bills and debts whose due dates fall within the pay-period window.
 
@@ -246,6 +247,9 @@ def assign_bills_to_paycheck(
                 }
             )
 
+    if paid_debt_ids is None:
+        paid_debt_ids = set()
+
     for debt in debts:
         due_dates = _due_dates_in_window(
             debt.due_day, "monthly", window_start, window_end
@@ -257,9 +261,10 @@ def assign_bills_to_paycheck(
             user_amount = full_amount
         is_split = bool(getattr(debt, "is_split", False))
         split_count = getattr(debt, "split_member_count", 1) or 1
+        debt_is_paid = debt.id in paid_debt_ids
         for due_dt in due_dates:
             days = (due_dt - current_date).days
-            is_overdue = days < 0  # debts don't have is_paid per-period
+            is_overdue = (due_dt < current_date) and (not debt_is_paid)
 
             items.append(
                 {
@@ -274,6 +279,7 @@ def assign_bills_to_paycheck(
                     "auto_pay": bool(debt.auto_pay),
                     "is_split": is_split,
                     "split_count": split_count if is_split else 1,
+                    "is_paid": debt_is_paid,
                     "is_overdue": is_overdue,
                 }
             )
@@ -293,6 +299,7 @@ def build_paycheck_plan(
     num_periods: int = 4,
     current_date: Optional[date] = None,
     paycheck_entries: list[Any] | None = None,
+    paid_debt_ids: set | None = None,
 ) -> dict:
     """Build a full paycheck plan across *num_periods* pay periods.
 
@@ -392,7 +399,8 @@ def build_paycheck_plan(
                 break
 
         assigned = assign_bills_to_paycheck(
-            bills, debts, window_start, window_end, current_date
+            bills, debts, window_start, window_end, current_date,
+            paid_debt_ids=paid_debt_ids,
         )
 
         total_due = sum((item["amount"] for item in assigned), Decimal("0"))

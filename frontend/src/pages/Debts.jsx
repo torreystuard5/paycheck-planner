@@ -222,8 +222,13 @@ export default function Debts() {
     try {
       const res = await api.post(`/api/v1/debts/${debtId}/mark-paid`);
       setDebts((prev) => prev.map((d) => (d.id === debtId ? res.data : d)));
-    } catch {
-      setError('Failed to mark debt as paid.');
+    } catch (err) {
+      // 409 = already paid (e.g. from Dashboard), just refresh
+      if (err?.response?.status === 409) {
+        fetchDebts();
+      } else {
+        setError('Failed to mark debt as paid.');
+      }
     } finally {
       setMarkingPaid((prev) => ({ ...prev, [debtId]: false }));
     }
