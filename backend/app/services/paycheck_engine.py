@@ -226,6 +226,8 @@ def assign_bills_to_paycheck(
                 except (ValueError, AttributeError, TypeError):
                     paid_for_period = False
 
+            is_overdue = (due_dt < current_date) and (not paid_for_period)
+
             items.append(
                 {
                     "id": bill.id,
@@ -240,6 +242,7 @@ def assign_bills_to_paycheck(
                     "is_split": is_split,
                     "split_count": split_count if is_split else 1,
                     "is_paid": paid_for_period,
+                    "is_overdue": is_overdue,
                 }
             )
 
@@ -256,6 +259,8 @@ def assign_bills_to_paycheck(
         split_count = getattr(debt, "split_member_count", 1) or 1
         for due_dt in due_dates:
             days = (due_dt - current_date).days
+            is_overdue = days < 0  # debts don't have is_paid per-period
+
             items.append(
                 {
                     "id": debt.id,
@@ -269,6 +274,7 @@ def assign_bills_to_paycheck(
                     "auto_pay": bool(debt.auto_pay),
                     "is_split": is_split,
                     "split_count": split_count if is_split else 1,
+                    "is_overdue": is_overdue,
                 }
             )
 
@@ -306,9 +312,55 @@ def build_paycheck_plan(
         frequency = user.pay_frequency
         next_pay = user.next_pay_date
 
-    # Advance next_pay so the first paycheck shown is never in the past
-    if next_pay < current_date:
-        next_pay = _advance_to_current(next_pay, frequency, current_date)
+    # Find the current pay period: the most recent pay date <= today.
+    # The plan should show from that date forward (not skip to next).
+    if next_pay <= current_date:
+        # Advance to the NEXT pay date strictly after today
+        future_pay = _advance_to_current(next_pay, frequency, current_date)
+        if future_pay <= current_date:
+            # Edge case: advance one more period
+            future_pay = _advance_to_current(next_pay, frequency, current_date + timedelta(days=1))
+
+        # Walk back one period to find the current period start
+        if frequency == "weekly":
+            current_period_start = future_pay - timedelta(weeks=1)
+        elif frequency == "biweekly":
+            current_period_start = future_pay - timedelta(weeks=2)
+        elif frequency == "semi_monthly":
+            # For semi-monthly, generate dates around the boundary
+            # to find the pay date just before future_pay
+            if next_pay.day <= 15:
+                day_a, day_b = next_pay.day, next_pay.day + 15
+            else:
+                day_a, day_b = next_pay.day - 15, next_pay.day
+            # Search backwards from future_pay's month
+            found = None
+            y, m = future_pay.year, future_pay.month
+            for _ in range(3):
+                max_day = calendar.monthrange(y, m)[1]
+                for d in sorted({min(day_a, max_day), min(day_b, max_day)}, reverse=True):
+                    candidate = date(y, m, d)
+                    if candidate < future_pay and candidate >= next_pay:
+                        if found is None or candidate > found:
+                            found = candidate
+                if found is not None:
+                    break
+                # go to previous month
+                if m == 1:
+                    y, m = y - 1, 12
+                else:
+                    m -= 1
+            current_period_start = found if found else future_pay
+        else:
+            # monthly or unknown
+            current_period_start = _add_months(future_pay, -1)
+
+        # Validate: current_period_start must be <= today
+        if current_period_start > current_date:
+            current_period_start = future_pay
+
+        next_pay = current_period_start
+    # else next_pay is already in the future — use it as first period
 
     # Index logged paycheck entries by pay_date for O(1) lookup
     entry_by_date: dict[date, Decimal] = {}
@@ -368,6 +420,10 @@ def build_paycheck_plan(
     else:
         overall = "on_track"
 
+    # Compute current/next paycheck dates for the frontend
+    current_paycheck_date = pay_dates[0] if pay_dates else None
+    next_paycheck_date = pay_dates[1] if len(pay_dates) > 1 else None
+
     return {
         "pay_frequency": frequency,
         "currency": user.currency if hasattr(user, "currency") else "USD",
@@ -376,4 +432,6 @@ def build_paycheck_plan(
         "total_income": total_income,
         "total_obligations": total_obligations,
         "overall_status": overall,
+        "current_paycheck_date": current_paycheck_date,
+        "next_paycheck_date": next_paycheck_date,
     }

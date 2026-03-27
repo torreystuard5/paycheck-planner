@@ -314,6 +314,24 @@ export default function Dashboard() {
             <Calendar className="w-5 h-5 text-blue-500" />
             Current Paycheck Plan
           </h2>
+          {paycheckPlan?.current_paycheck_date && (
+            <div className="mb-4 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Current Paycheck</span>
+                <span className="text-sm font-semibold text-gray-900">
+                  {formatPaycheckDate(paycheckPlan.current_paycheck_date)}
+                </span>
+              </div>
+              {paycheckPlan.next_paycheck_date && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Next Paycheck</span>
+                  <span className="text-sm text-gray-500">
+                    {formatPaycheckDate(paycheckPlan.next_paycheck_date)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           {paycheckPlan && Array.isArray(paycheckPlan.paychecks) && paycheckPlan.paychecks.length > 0 ? (
             <div className="space-y-3">
               {(() => {
@@ -348,7 +366,7 @@ export default function Dashboard() {
                 return (
                   <>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Next Paycheck</span>
+                      <span className="text-gray-600">Pay Period</span>
                       <span className="font-medium text-gray-900">
                         {formatPaycheckDate(next.paycheck_date)}
                       </span>
@@ -397,7 +415,7 @@ export default function Dashboard() {
                             return (
                               <div
                                 key={key}
-                                className={`flex items-center gap-2 text-sm rounded-md px-1.5 py-1 -mx-1.5 transition-colors ${isChecked ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
+                                className={`flex items-center gap-2 text-sm rounded-md px-1.5 py-1 -mx-1.5 transition-colors ${item.is_overdue && !isChecked ? 'bg-red-50 border-l-2 border-red-400' : isChecked ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
                               >
                                 <button
                                   onClick={() => toggleChecklistItem(item, payPeriodStart)}
@@ -411,6 +429,9 @@ export default function Dashboard() {
                                 </button>
                                 <span className={`flex-1 min-w-0 truncate ${isChecked ? 'line-through text-gray-400' : 'text-gray-600'}`}>
                                   {item.name}
+                                  {item.is_overdue && !isChecked && (
+                                    <span className="inline-flex items-center ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">Overdue</span>
+                                  )}
                                   {isSplit && <span className="text-xs text-purple-600 ml-1">(your share)</span>}
                                   {' '}<span className="text-xs text-gray-400">({item.item_type})</span>
                                 </span>

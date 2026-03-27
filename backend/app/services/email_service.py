@@ -175,28 +175,47 @@ async def send_password_reset_email(
     to_email: str, user_name: str, reset_token: str
 ) -> bool:
     try:
-        conf = _get_mail_config()
-        if conf is None:
+        # Use the same SMTP config that support emails use (SUPPORT_SMTP_*)
+        # so it works even when SMTP_USER/SMTP_PASSWORD are not set.
+        if not SUPPORT_SMTP_USER or not SUPPORT_SMTP_PASSWORD:
+            logger.warning("Support SMTP credentials not configured — password reset email disabled")
             return False
+        conf = ConnectionConfig(
+            MAIL_USERNAME=SUPPORT_SMTP_USER,
+            MAIL_PASSWORD=SUPPORT_SMTP_PASSWORD,
+            MAIL_FROM=SUPPORT_SMTP_USER,
+            MAIL_PORT=SUPPORT_SMTP_PORT,
+            MAIL_SERVER=SUPPORT_SMTP_HOST,
+            MAIL_STARTTLS=True,
+            MAIL_SSL_TLS=False,
+            USE_CREDENTIALS=True,
+            VALIDATE_CERTS=True,
+        )
 
-        # Use first origin from FRONTEND_URL (comma-separated list)
-        frontend_base = FRONTEND_URL.split(",")[0].strip()
+        # Pick the best frontend URL from the comma-separated FRONTEND_URL.
+        # Prefer the custom domain (not *.netlify.app) for user-facing links.
+        origins = [u.strip() for u in FRONTEND_URL.split(",") if u.strip()]
+        frontend_base = origins[0]  # fallback
+        for origin in origins:
+            if "netlify.app" not in origin and "localhost" not in origin:
+                frontend_base = origin
+                break
         reset_link = f"{frontend_base}/reset-password?token={reset_token}"
 
         html_body = f"""
-        <h2>Password Reset Request</h2>
+        <h2>PayDrift — Reset Your Password</h2>
         <p>Hi {user_name},</p>
         <p>We received a request to reset your password. Click the link below to set a new password:</p>
         <p><a href="{reset_link}" style="display:inline-block;padding:10px 24px;background-color:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Reset Password</a></p>
         <p>Or copy and paste this URL into your browser:</p>
         <p style="word-break:break-all;color:#6b7280;font-size:14px;">{reset_link}</p>
-        <p>This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email.</p>
+        <p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
         <hr>
-        <p><small>PayDrift — Keeping your finances on track</small></p>
+        <p><small>— The PayDrift Team</small></p>
         """
 
         msg = MessageSchema(
-            subject="Reset your PayDrift password",
+            subject="PayDrift — Reset Your Password",
             recipients=[to_email],
             body=html_body,
             subtype=MessageType.html,

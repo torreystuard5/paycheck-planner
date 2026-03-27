@@ -19,6 +19,7 @@ class PaycheckItem(BaseModel):
     is_split: bool = False
     split_count: int = 1
     is_paid: bool = False
+    is_overdue: bool = False
 
 
 class PaycheckPlan(BaseModel):
@@ -38,3 +39,5 @@ class PaycheckPlanResponse(BaseModel):
     total_income: Decimal
     total_obligations: Decimal
     overall_status: str
+    current_paycheck_date: Optional[date] = None
+    next_paycheck_date: Optional[date] = None
