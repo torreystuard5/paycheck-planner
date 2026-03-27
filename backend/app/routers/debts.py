@@ -2,9 +2,10 @@ import json
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -180,6 +181,7 @@ async def get_interest_projection(
 @router.post("/{debt_id}/mark-paid", response_model=DebtResponse)
 async def mark_debt_paid(
     debt_id: UUID,
+    amount: Optional[Decimal] = Body(None, embed=True),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -209,19 +211,27 @@ async def mark_debt_paid(
             detail="Debt already marked paid for this period",
         )
 
-    amount = Decimal(str(debt.minimum_payment or 0))
+    # Use caller-supplied amount, fall back to minimum_payment
+    pay_amount = amount if amount is not None else Decimal(str(debt.minimum_payment or 0))
+    if pay_amount <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Payment amount must be greater than zero",
+        )
+    current_balance = Decimal(str(debt.balance or 0))
+    if pay_amount > current_balance and current_balance > 0:
+        pay_amount = current_balance
     payment = DebtPayment(
         debt_id=debt_id,
         user_id=current_user.id,
-        amount=amount,
+        amount=pay_amount,
         period_month=today.month,
         period_year=today.year,
     )
     db.add(payment)
 
     # Subtract from balance
-    current_balance = Decimal(str(debt.balance or 0))
-    debt.balance = max(current_balance - amount, Decimal("0"))
+    debt.balance = max(current_balance - pay_amount, Decimal("0"))
 
     await db.flush()
     await db.refresh(debt)
@@ -234,7 +244,7 @@ async def mark_debt_paid(
                 action="paid",
                 entity_type="debt",
                 entity_name=debt.name,
-                details=f"${amount}",
+                details=f"${pay_amount}",
                 db=db,
             )
         except Exception:

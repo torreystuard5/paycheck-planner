@@ -140,13 +140,8 @@ export default function Dashboard() {
         pay_period_start: payPeriodStart,
         is_checked: newState,
       });
-      // Re-fetch debts and bills so summary cards stay in sync
-      const [debtsRes, billsRes] = await Promise.allSettled([
-        api.get('/api/v1/debts'),
-        api.get('/api/v1/bills'),
-      ]);
-      if (debtsRes.status === 'fulfilled') setDebts(debtsRes.value.data || []);
-      if (billsRes.status === 'fulfilled') setBills(billsRes.value.data || []);
+      // Full re-fetch so paycheck plan, checklist, and summary cards all sync
+      await fetchDashboardData();
     } catch {
       setChecklist((prev) => ({ ...prev, [key]: currentState }));
     } finally {

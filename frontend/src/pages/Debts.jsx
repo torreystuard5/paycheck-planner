@@ -65,6 +65,9 @@ export default function Debts() {
   const [expandedId, setExpandedId] = useState(null);
   const [householdMembers, setHouseholdMembers] = useState([]);
   const [markingPaid, setMarkingPaid] = useState({});
+  const [payTarget, setPayTarget] = useState(null);   // debt to pay
+  const [payAmount, setPayAmount] = useState('');       // editable amount
+  const [payError, setPayError] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -217,13 +220,31 @@ export default function Debts() {
     }
   };
 
-  const handleMarkPaid = async (debtId) => {
+  const openPayModal = (debt) => {
+    setPayTarget(debt);
+    setPayAmount(debt.minimum_payment ? String(Number(debt.minimum_payment)) : '');
+    setPayError(null);
+  };
+
+  const confirmPayment = async () => {
+    if (!payTarget) return;
+    const num = Number(payAmount);
+    if (!payAmount || isNaN(num) || num <= 0) {
+      setPayError('Enter an amount greater than $0.');
+      return;
+    }
+    const bal = Number(payTarget.balance) || 0;
+    if (bal > 0 && num > bal) {
+      setPayError(`Amount cannot exceed the balance of $${bal.toFixed(2)}.`);
+      return;
+    }
+    const debtId = payTarget.id;
+    setPayTarget(null);
     setMarkingPaid((prev) => ({ ...prev, [debtId]: true }));
     try {
-      const res = await api.post(`/api/v1/debts/${debtId}/mark-paid`);
+      const res = await api.post(`/api/v1/debts/${debtId}/mark-paid`, { amount: num });
       setDebts((prev) => prev.map((d) => (d.id === debtId ? res.data : d)));
     } catch (err) {
-      // 409 = already paid (e.g. from Dashboard), just refresh
       if (err?.response?.status === 409) {
         fetchDebts();
       } else {
@@ -414,7 +435,7 @@ export default function Debts() {
               </button>
             ) : (
               <button
-                onClick={() => handleMarkPaid(debt.id)}
+                onClick={() => openPayModal(debt)}
                 disabled={!!markingPaid[debt.id]}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
               >
@@ -958,6 +979,57 @@ export default function Debts() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* Payment Amount Modal */}
+      <Modal isOpen={!!payTarget} onClose={() => setPayTarget(null)} title="Record Payment">
+        {payTarget && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              How much are you paying toward <span className="font-semibold text-gray-900">{payTarget.name}</span>?
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Amount</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0.01"
+                  max={Number(payTarget.balance) || undefined}
+                  value={payAmount}
+                  onChange={(e) => { setPayAmount(e.target.value); setPayError(null); }}
+                  className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none text-sm"
+                  placeholder="0.00"
+                />
+              </div>
+              {payTarget.minimum_payment && (
+                <p className="text-xs text-gray-500 mt-1">Minimum payment: {fmtCurrency(payTarget.minimum_payment)}</p>
+              )}
+              {payTarget.balance && (
+                <p className="text-xs text-gray-500 mt-0.5">Current balance: {fmtCurrency(payTarget.balance)}</p>
+              )}
+            </div>
+            {payError && (
+              <p className="text-sm text-red-600">{payError}</p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setPayTarget(null)}
+                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmPayment}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Confirm Payment
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog
