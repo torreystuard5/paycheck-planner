@@ -37,12 +37,15 @@ export default function Dashboard() {
   const fetchChecklist = useCallback(async (payPeriodStart, assignedItems) => {
     if (!payPeriodStart) return;
 
-    // Seed from bill is_paid status so paid bills show immediately
+    // Build a set of items the engine considers paid (source of truth)
+    const enginePaidKeys = new Set();
     const seedMap = {};
     if (Array.isArray(assignedItems)) {
       assignedItems.forEach((item) => {
+        const key = `${item.item_type}_${item.id || item.item_id}`;
         if (item.is_paid) {
-          seedMap[`${item.item_type}_${item.id || item.item_id}`] = true;
+          seedMap[key] = true;
+          enginePaidKeys.add(key);
         }
       });
     }
@@ -52,7 +55,11 @@ export default function Dashboard() {
       const items = Array.isArray(res.data) ? res.data : res.data?.items || [];
       const map = { ...seedMap };
       items.forEach((entry) => {
-        map[`${entry.item_type}_${entry.item_id}`] = entry.is_checked;
+        const key = `${entry.item_type}_${entry.item_id}`;
+        // Engine is_paid wins — never let a stale checklist entry override it
+        if (!enginePaidKeys.has(key)) {
+          map[key] = entry.is_checked;
+        }
       });
       setChecklist(map);
     } catch {
