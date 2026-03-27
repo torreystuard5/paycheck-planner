@@ -350,7 +350,7 @@ export default function Debts() {
 
           {/* Line 4: Due info */}
           <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm text-gray-500">
-            <span>Due day {debt.due_day || '--'}</span>
+            <span>Due {debt.next_due_date ? formatFriendlyDate(debt.next_due_date) : (debt.due_day ? `day ${debt.due_day}` : '--')}</span>
             {debt.apr && (
               <>
                 <span className="text-gray-300">·</span>

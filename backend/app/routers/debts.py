@@ -1,4 +1,6 @@
 import json
+from calendar import monthrange
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
@@ -30,6 +32,33 @@ from app.services.household_service import log_activity
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/debts", tags=["Debts"])
+
+DEBT_SORT_FIELDS = {"name", "balance", "created_at", "due_date", "apr", "interest_rate"}
+
+
+def _compute_debt_next_due_date(due_day: int | None) -> date | None:
+    """Return the next upcoming due date for a monthly due_day."""
+    if not due_day:
+        return None
+    today = date.today()
+    _, max_day = monthrange(today.year, today.month)
+    clamped = min(due_day, max_day)
+    candidate = today.replace(day=clamped)
+    if candidate >= today:
+        return candidate
+    # Roll to next month
+    if today.month == 12:
+        y, m = today.year + 1, 1
+    else:
+        y, m = today.year, today.month + 1
+    _, max_day = monthrange(y, m)
+    return date(y, m, min(due_day, max_day))
+
+
+def _debt_to_response(debt: Debt) -> DebtResponse:
+    resp = DebtResponse.model_validate(debt)
+    resp.next_due_date = _compute_debt_next_due_date(debt.due_day)
+    return resp
 
 
 # ── Helper ─────────────────────────────────────────────────────────
@@ -160,10 +189,7 @@ async def create_debt(
         except Exception:
             pass
 
-    return debt
-
-
-DEBT_SORT_FIELDS = {"name", "balance", "minimum_payment", "interest_rate", "due_date", "created_at"}
+    return _debt_to_response(debt)
 
 
 @router.get("", response_model=list[DebtResponse])
@@ -186,15 +212,27 @@ async def list_debts(
     if active_only:
         query = query.where(Debt.is_active.is_(True))
 
-    # Apply sorting
+    # Apply sorting — fetch all then sort by computed next_due_date for due_date
     if sort_by not in DEBT_SORT_FIELDS:
         sort_by = "created_at"
-    col_map = {"interest_rate": "apr", "due_date": "due_day"}
+
+    if sort_by == "due_date":
+        # Sort in Python by computed next_due_date so it's calendar-correct
+        result = await db.execute(query.order_by(Debt.created_at.desc()))
+        debts = result.scalars().all()
+        responses = [_debt_to_response(d) for d in debts]
+        far_future = date(9999, 12, 31)
+        responses.sort(
+            key=lambda r: r.next_due_date or far_future,
+            reverse=(sort_order == "desc"),
+        )
+        return responses
+
+    col_map = {"interest_rate": "apr"}
     sort_col = getattr(Debt, col_map.get(sort_by, sort_by), Debt.created_at)
     query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
-
     result = await db.execute(query)
-    return result.scalars().all()
+    return [_debt_to_response(d) for d in result.scalars().all()]
 
 
 @router.get("/{debt_id}", response_model=DebtResponse)
@@ -213,7 +251,7 @@ async def get_debt(
         not current_user.household_id or debt.household_id != current_user.household_id
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
-    return debt
+    return _debt_to_response(debt)
 
 
 @router.put("/{debt_id}", response_model=DebtResponse)
@@ -253,7 +291,7 @@ async def update_debt(
         except Exception:
             pass
 
-    return debt
+    return _debt_to_response(debt)
 
 
 @router.delete("/{debt_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -64,6 +64,7 @@ class DebtResponse(BaseModel):
     is_active: bool = True
     is_split: bool = False
     split_members: Optional[list] = None
+    next_due_date: Optional[date] = None
     created_at: datetime
     updated_at: datetime
 

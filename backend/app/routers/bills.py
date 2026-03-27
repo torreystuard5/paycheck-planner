@@ -288,10 +288,22 @@ async def list_bills(
     # Apply sorting
     if sort_by not in BILL_SORT_FIELDS:
         sort_by = "created_at"
-    sort_col_name = "due_day" if sort_by == "due_date" else sort_by
-    sort_col = getattr(Bill, sort_col_name, Bill.created_at)
-    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
 
+    if sort_by == "due_date":
+        # Sort in Python by computed next_due_date (calendar-correct)
+        result = await db.execute(query.order_by(Bill.created_at.desc()))
+        bills = result.scalars().all()
+        member_count = await _get_household_member_count(db, current_user.household_id)
+        responses = [_bill_to_response(b, current_user.id, member_count) for b in bills]
+        far_future = date(9999, 12, 31)
+        responses.sort(
+            key=lambda r: r.next_due_date or far_future,
+            reverse=(sort_order == "desc"),
+        )
+        return responses
+
+    sort_col = getattr(Bill, sort_by, Bill.created_at)
+    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
     result = await db.execute(query)
     bills = result.scalars().all()
     member_count = await _get_household_member_count(db, current_user.household_id)

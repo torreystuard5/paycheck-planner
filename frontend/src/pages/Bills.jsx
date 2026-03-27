@@ -480,7 +480,7 @@ export default function Bills() {
       .filter(g => g.bills.length > 0)
       .map(g => ({
         ...g,
-        bills: g.bills.sort((a, b) => (a.due_day || 0) - (b.due_day || 0)),
+        bills: g.bills.sort((a, b) => new Date(a.next_due_date || '9999-12-31') - new Date(b.next_due_date || '9999-12-31')),
         total: g.bills.reduce((sum, b) => sum + (Number(b.payment_mode === 'split' && b.is_household_bill ? (b.user_share ?? b.amount) : b.amount) || 0), 0),
       }));
 
@@ -619,17 +619,11 @@ export default function Bills() {
             <span>
               {(bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
                 ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
-                : `Due: ${bill.due_day ? `${bill.due_day}${bill.due_day === 1 ? 'st' : bill.due_day === 2 ? 'nd' : bill.due_day === 3 ? 'rd' : 'th'}` : '--'}`
+                : `Due ${bill.next_due_date ? formatFriendlyDate(bill.next_due_date) : (bill.due_day ? `day ${bill.due_day}` : '--')}`
               }
             </span>
             <span className="text-gray-300">·</span>
             <span className="capitalize">{freqLabel(bill.frequency)}</span>
-            {bill.next_due_date && (
-              <>
-                <span className="text-gray-300">·</span>
-                <span>Next: {formatFriendlyDate(bill.next_due_date)}</span>
-              </>
-            )}
           </div>
 
           {isPaid && bill.paid_date && (

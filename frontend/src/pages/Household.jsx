@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ConfirmDialog from '../components/ConfirmDialog';
 import usePolling from '../hooks/usePolling';
+import { formatFriendlyDate } from '../utils/formatDate';
 
 const fmtCurrency = (val) => {
   const n = Number(val);
@@ -362,7 +363,7 @@ export default function Household() {
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <h3 className="text-sm font-semibold text-gray-900">{bill.name}</h3>
-                      <p className="text-xs text-gray-500">{bill.category || 'Uncategorized'} &middot; Due day {bill.due_day}</p>
+                      <p className="text-xs text-gray-500">{bill.category || 'Uncategorized'} &middot; Due {bill.next_due_date ? formatFriendlyDate(bill.next_due_date) : (bill.due_day ? `day ${bill.due_day}` : '--')}</p>
                     </div>
                     <span className="text-sm font-bold text-gray-900">{fmtCurrency(bill.amount)}</span>
                   </div>
