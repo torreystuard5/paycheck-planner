@@ -191,8 +191,28 @@ async def list_admin_users(
         )
     ).scalars().all()
 
+    now = datetime.utcnow()
+    seven_days_ago = now - timedelta(days=7)
+    users_out = []
+    for u in rows:
+        # Compute dynamic status
+        if not u.is_active or getattr(u, "account_status", "active") == "closed":
+            computed_status = "Closed"
+            admin_locked = True
+        elif u.last_login_at is None or u.last_login_at < seven_days_ago:
+            computed_status = "Inactive"
+            admin_locked = False
+        else:
+            computed_status = "Active"
+            admin_locked = False
+
+        summary = AdminUserSummary.model_validate(u)
+        summary.status = computed_status
+        summary.admin_locked = admin_locked
+        users_out.append(summary)
+
     return AdminUserListResponse(
-        users=[AdminUserSummary.model_validate(u) for u in rows],
+        users=users_out,
         total=total,
         page=page,
         per_page=per_page,

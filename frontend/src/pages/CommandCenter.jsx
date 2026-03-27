@@ -639,9 +639,12 @@ function UsersTab({ currentUser }) {
                       <td className="px-4 py-3">
                         <button
                           onClick={(e) => toggleAdmin(e, u.id, u.is_admin)}
-                          disabled={togglingAdmin === u.id}
+                          disabled={togglingAdmin === u.id || u.admin_locked}
                           className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                          style={{ backgroundColor: u.is_admin ? '#2563eb' : '#d1d5db' }}
+                          style={{
+                            backgroundColor: u.is_admin ? '#2563eb' : '#d1d5db',
+                            ...(u.admin_locked ? { opacity: 0.4, pointerEvents: 'none' } : {})
+                          }}
                           role="switch"
                           aria-checked={u.is_admin}
                           aria-label={`Toggle admin for ${u.email}`}
@@ -652,13 +655,20 @@ function UsersTab({ currentUser }) {
                       </td>
                       <td className="px-4 py-3">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                            u.account_status === 'active' ? 'bg-green-100 text-green-700'
-                              : u.account_status === 'suspended' ? 'bg-yellow-100 text-yellow-700'
-                              : 'bg-red-100 text-red-700'
-                          }`}
+                          style={{
+                            display: 'inline-block',
+                            padding: '4px 12px',
+                            borderRadius: '9999px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            color: '#fff',
+                            whiteSpace: 'nowrap',
+                            backgroundColor: u.status === 'Active' ? '#22c55e'
+                              : u.status === 'Inactive' ? '#f59e0b'
+                              : '#ef4444'
+                          }}
                         >
-                          {u.account_status ? u.account_status.charAt(0).toUpperCase() + u.account_status.slice(1) : 'Active'}
+                          {u.status}
                         </span>
                       </td>
                     </tr>

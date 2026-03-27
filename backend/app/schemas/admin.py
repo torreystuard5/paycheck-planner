@@ -31,7 +31,8 @@ class AdminUserSummary(BaseModel):
     subscription_tier: str
     referral_code: str | None
     last_login_at: datetime | None = None
-    account_status: str = "active"
+    status: str = "Active"
+    admin_locked: bool = False
 
     model_config = {"from_attributes": True}
 
