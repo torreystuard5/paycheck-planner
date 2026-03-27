@@ -31,6 +31,11 @@ import {
   ToggleRight,
   Power,
   RefreshCw,
+  Radio,
+  MailIcon,
+  UserMinus,
+  UserPlus,
+  Eye,
 } from 'lucide-react';
 import {
   LineChart,
@@ -57,6 +62,7 @@ const TABS = [
   { key: 'support', label: 'Support', icon: MessageSquare },
   { key: 'settings', label: 'Settings', icon: Settings },
   { key: 'audit', label: 'Audit Log', icon: ScrollText },
+  { key: 'broadcast', label: 'Broadcast', icon: Radio },
 ];
 
 // ─── Status helpers ──────────────────────────────────────────────────
@@ -178,6 +184,7 @@ export default function CommandCenter() {
       {activeTab === 'support' && <SupportTab />}
       {activeTab === 'settings' && <SettingsTab />}
       {activeTab === 'audit' && <AuditLogTab />}
+      {activeTab === 'broadcast' && <BroadcastTab />}
     </div>
   );
 }
@@ -1849,6 +1856,317 @@ function AuditLogTab() {
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// ─── Broadcast Tab ──────────────────────────────────────────────────
+const AUDIENCE_OPTIONS = [
+  { value: 'all', label: 'All Users' },
+  { value: 'free', label: 'Free Tier Only' },
+  { value: 'pro', label: 'Pro Tier Only' },
+  { value: 'active_30d', label: 'Active in Last 30 Days' },
+];
+
+function BroadcastTab() {
+  const [view, setView] = useState('compose'); // compose | history | unsubscribed
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [audience, setAudience] = useState('all');
+  const [sending, setSending] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [error, setError] = useState('');
+
+  // Confirmation modal
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
+  // History
+  const [broadcasts, setBroadcasts] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Unsubscribed users
+  const [unsubscribed, setUnsubscribed] = useState([]);
+  const [loadingUnsub, setLoadingUnsub] = useState(false);
+
+  const fetchHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const { data } = await api.get('/api/v1/admin/broadcasts');
+      setBroadcasts(data);
+    } catch {} finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
+  const fetchUnsubscribed = useCallback(async () => {
+    setLoadingUnsub(true);
+    try {
+      const { data } = await api.get('/api/v1/admin/unsubscribed');
+      setUnsubscribed(data);
+    } catch {} finally {
+      setLoadingUnsub(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'history') fetchHistory();
+    if (view === 'unsubscribed') fetchUnsubscribed();
+  }, [view, fetchHistory, fetchUnsubscribed]);
+
+  const handleSendClick = async () => {
+    if (!subject.trim() || !body.trim()) {
+      setError('Subject and body are required.');
+      return;
+    }
+    setError('');
+    setLoadingPreview(true);
+    try {
+      const { data } = await api.get('/api/v1/admin/broadcast/preview', { params: { audience_filter: audience } });
+      setPreview(data);
+      setShowConfirm(true);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load preview.');
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handleConfirmSend = async () => {
+    setShowConfirm(false);
+    setSending(true);
+    setError('');
+    setSuccessMsg('');
+    try {
+      const { data } = await api.post('/api/v1/admin/broadcast', { subject, body, audience_filter: audience });
+      setSuccessMsg(data.message);
+      setSubject('');
+      setBody('');
+      setAudience('all');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to send broadcast.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleResubscribe = async (userId) => {
+    try {
+      await api.post(`/api/v1/admin/resubscribe/${userId}`);
+      fetchUnsubscribed();
+    } catch {}
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Sub-nav */}
+      <div className="flex gap-2">
+        {[{ key: 'compose', label: 'Compose', icon: MailIcon }, { key: 'history', label: 'History', icon: ScrollText }, { key: 'unsubscribed', label: 'Unsubscribed', icon: UserMinus }].map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              view === key
+                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ─── Compose view ─── */}
+      {view === 'compose' && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Radio className="h-5 w-5 text-blue-600" />
+            Compose Broadcast
+          </h2>
+
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {error}
+            </div>
+          )}
+          {successMsg && (
+            <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              {successMsg}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Email subject line"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Body</label>
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="Write your email content here..."
+                rows={8}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
+              <select
+                value={audience}
+                onChange={(e) => setAudience(e.target.value)}
+                className={inputClass}
+              >
+                {AUDIENCE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={handleSendClick}
+              disabled={sending || loadingPreview || !subject.trim() || !body.trim()}
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {sending ? 'Sending...' : 'Send Broadcast'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── History view ─── */}
+      {view === 'history' && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Broadcast History</h2>
+            <button onClick={fetchHistory} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
+              <RefreshCw className={`h-4 w-4 text-gray-500 ${loadingHistory ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {loadingHistory ? (
+            <LoadingSpinner />
+          ) : broadcasts.length === 0 ? (
+            <EmptyState icon={Radio} title="No broadcasts yet" subtitle="Compose your first broadcast to get started." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Audience</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Recipients</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {broadcasts.map((b) => (
+                    <tr key={b.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDateTime(b.sent_at)}</td>
+                      <td className="px-3 py-3 text-sm text-gray-900 font-medium max-w-xs truncate">{b.subject}</td>
+                      <td className="px-3 py-3 text-sm text-gray-600">
+                        <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
+                          {AUDIENCE_OPTIONS.find((o) => o.value === b.audience_filter)?.label || b.audience_filter}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-600">{b.recipient_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Unsubscribed view ─── */}
+      {view === 'unsubscribed' && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Unsubscribed Users</h2>
+            <button onClick={fetchUnsubscribed} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
+              <RefreshCw className={`h-4 w-4 text-gray-500 ${loadingUnsub ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {loadingUnsub ? (
+            <LoadingSpinner />
+          ) : unsubscribed.length === 0 ? (
+            <EmptyState icon={UserMinus} title="No unsubscribed users" subtitle="All users are currently subscribed to emails." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unsubscribed</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {unsubscribed.map((u) => (
+                    <tr key={u.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-3 text-sm text-gray-900">{u.email}</td>
+                      <td className="px-3 py-3 text-sm text-gray-600">{u.first_name} {u.last_name}</td>
+                      <td className="px-3 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDateTime(u.unsubscribed_at)}</td>
+                      <td className="px-3 py-3">
+                        <button
+                          onClick={() => handleResubscribe(u.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                        >
+                          <UserPlus className="h-3.5 w-3.5" />
+                          Re-subscribe
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Confirmation modal ─── */}
+      {showConfirm && preview && (
+        <Modal onClose={() => setShowConfirm(false)} title="Confirm Broadcast">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              You're about to email <span className="font-semibold text-gray-900">{preview.recipient_count} users</span>
+              {preview.excluded_count > 0 && (
+                <span> ({preview.excluded_count} unsubscribed users excluded)</span>
+              )}
+            </p>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <p className="text-sm"><span className="font-medium text-gray-700">Subject:</span> {subject}</p>
+              <p className="text-sm"><span className="font-medium text-gray-700">Audience:</span> {AUDIENCE_OPTIONS.find((o) => o.value === audience)?.label}</p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowConfirm(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={handleConfirmSend} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                <Send className="h-4 w-4" />
+                Send Now
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

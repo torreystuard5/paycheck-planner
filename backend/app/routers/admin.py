@@ -1,9 +1,12 @@
 import json
+import logging
+import os
 import secrets
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel
 from sqlalchemy import cast, Date, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,11 +14,14 @@ from app.database import get_db
 from app.models.admin_audit_log import AdminAuditLog
 from app.models.announcement import Announcement
 from app.models.app_update import AppUpdate
+from app.models.broadcast import Broadcast
 from app.models.coming_soon import ComingSoon
 from app.models.household import Household
 from app.models.support_ticket import SupportTicket
 from app.models.system_setting import SystemSetting
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 from app.schemas.admin import (
     AdminStatsResponse,
     AdminToggleRequest,
@@ -1062,3 +1068,283 @@ async def delete_coming_soon(
     )
     await db.delete(item)
     await db.flush()
+
+
+# ── Broadcast Emails ───────────────────────────────────────────────
+
+BACKEND_URL = os.getenv("BACKEND_URL", "https://paydrift-api.onrender.com")
+
+
+class BroadcastRequest(BaseModel):
+    subject: str
+    body: str
+    audience_filter: str = "all"  # all, free, pro, active_30d
+
+
+class BroadcastOut(BaseModel):
+    id: int
+    subject: str
+    body: str
+    audience_filter: str
+    recipient_count: int
+    sent_at: datetime | None
+    sent_by: UUID | None
+    sender_email: str | None = None
+
+
+class UnsubscribedUserOut(BaseModel):
+    id: UUID
+    email: str
+    first_name: str
+    last_name: str
+    unsubscribed_at: datetime | None
+
+
+@router.post("/broadcast")
+async def send_broadcast(
+    body: BroadcastRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    # Rate limit: max 1 broadcast per hour
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    recent = await db.execute(
+        select(func.count(Broadcast.id)).where(Broadcast.sent_at >= one_hour_ago)
+    )
+    if (recent.scalar() or 0) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Only one broadcast per hour is allowed. Please wait before sending another.",
+        )
+
+    # Build audience query
+    query = select(User).where(
+        User.email_unsubscribed.is_(False),
+        User.is_active.is_(True),
+    )
+    if body.audience_filter == "free":
+        query = query.where(User.is_supporter.is_(False))
+    elif body.audience_filter == "pro":
+        query = query.where(User.is_supporter.is_(True))
+    elif body.audience_filter == "active_30d":
+        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        query = query.where(
+            func.coalesce(User.last_login_at, User.updated_at) >= thirty_days_ago
+        )
+
+    recipients = (await db.execute(query)).scalars().all()
+
+    # Count excluded
+    excluded_count = (
+        await db.execute(
+            select(func.count(User.id)).where(User.email_unsubscribed.is_(True))
+        )
+    ).scalar() or 0
+
+    # Send emails individually
+    from app.routers.unsubscribe import generate_unsubscribe_token
+    from app.services.email_service import send_broadcast_email
+
+    backend_base = BACKEND_URL.rstrip("/")
+    sent_count = 0
+    for user in recipients:
+        token = generate_unsubscribe_token(str(user.id))
+        unsub_url = f"{backend_base}/api/v1/unsubscribe?token={token}"
+        try:
+            ok = await send_broadcast_email(
+                to_email=user.email,
+                subject=body.subject,
+                body=body.body,
+                unsubscribe_url=unsub_url,
+            )
+            if ok:
+                sent_count += 1
+        except Exception:
+            logger.exception("Failed to send broadcast to %s", user.email)
+
+    # Record broadcast
+    broadcast = Broadcast(
+        subject=body.subject,
+        body=body.body,
+        audience_filter=body.audience_filter,
+        recipient_count=sent_count,
+        sent_by=current_user.id,
+    )
+    db.add(broadcast)
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="sent_broadcast",
+        target_type="broadcast",
+        details=json.dumps({
+            "subject": body.subject,
+            "audience": body.audience_filter,
+            "count": sent_count,
+            "excluded": excluded_count,
+        }),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+
+    return {
+        "message": f"Sent to {sent_count} users",
+        "sent_count": sent_count,
+        "excluded_count": excluded_count,
+    }
+
+
+@router.get("/broadcasts", response_model=list[BroadcastOut])
+async def list_broadcasts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    rows = (
+        await db.execute(
+            select(Broadcast).order_by(Broadcast.sent_at.desc()).limit(50)
+        )
+    ).scalars().all()
+
+    # Fetch sender emails
+    sender_ids = list({r.sent_by for r in rows if r.sent_by})
+    email_map: dict[UUID, str] = {}
+    if sender_ids:
+        sender_rows = (
+            await db.execute(
+                select(User.id, User.email).where(User.id.in_(sender_ids))
+            )
+        ).all()
+        email_map = {r[0]: r[1] for r in sender_rows}
+
+    return [
+        BroadcastOut(
+            id=b.id,
+            subject=b.subject,
+            body=b.body,
+            audience_filter=b.audience_filter,
+            recipient_count=b.recipient_count,
+            sent_at=b.sent_at,
+            sent_by=b.sent_by,
+            sender_email=email_map.get(b.sent_by),
+        )
+        for b in rows
+    ]
+
+
+@router.get("/broadcast/preview")
+async def preview_broadcast(
+    audience_filter: str = Query(default="all"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns recipient count + excluded count for confirmation modal."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    query = select(func.count(User.id)).where(
+        User.email_unsubscribed.is_(False),
+        User.is_active.is_(True),
+    )
+    if audience_filter == "free":
+        query = query.where(User.is_supporter.is_(False))
+    elif audience_filter == "pro":
+        query = query.where(User.is_supporter.is_(True))
+    elif audience_filter == "active_30d":
+        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        query = query.where(
+            func.coalesce(User.last_login_at, User.updated_at) >= thirty_days_ago
+        )
+
+    recipient_count = (await db.execute(query)).scalar() or 0
+    excluded_count = (
+        await db.execute(
+            select(func.count(User.id)).where(User.email_unsubscribed.is_(True))
+        )
+    ).scalar() or 0
+
+    return {"recipient_count": recipient_count, "excluded_count": excluded_count}
+
+
+@router.get("/unsubscribed", response_model=list[UnsubscribedUserOut])
+async def list_unsubscribed_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    rows = (
+        await db.execute(
+            select(User)
+            .where(User.email_unsubscribed.is_(True))
+            .order_by(User.unsubscribed_at.desc())
+        )
+    ).scalars().all()
+
+    return [
+        UnsubscribedUserOut(
+            id=u.id,
+            email=u.email,
+            first_name=u.first_name,
+            last_name=u.last_name,
+            unsubscribed_at=u.unsubscribed_at,
+        )
+        for u in rows
+    ]
+
+
+@router.post("/resubscribe/{user_id}")
+async def resubscribe_user(
+    user_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.email_unsubscribed = False
+    user.unsubscribed_at = None
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="resubscribed_user",
+        target_type="user",
+        target_id=str(user_id),
+        details=json.dumps({"email": user.email}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+
+    return {"message": f"{user.email} has been re-subscribed"}

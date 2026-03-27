@@ -65,6 +65,14 @@ class User(Base):
     pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes_lock_timeout: Mapped[int] = mapped_column(Integer, server_default=text("5"))
 
+    # Email unsubscribe fields
+    email_unsubscribed: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false")
+    )
+    unsubscribed_at: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
