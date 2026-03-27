@@ -64,6 +64,7 @@ export default function Debts() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [householdMembers, setHouseholdMembers] = useState([]);
+  const [markingPaid, setMarkingPaid] = useState({});
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -216,6 +217,30 @@ export default function Debts() {
     }
   };
 
+  const handleMarkPaid = async (debtId) => {
+    setMarkingPaid((prev) => ({ ...prev, [debtId]: true }));
+    try {
+      const res = await api.post(`/api/v1/debts/${debtId}/mark-paid`);
+      setDebts((prev) => prev.map((d) => (d.id === debtId ? res.data : d)));
+    } catch {
+      setError('Failed to mark debt as paid.');
+    } finally {
+      setMarkingPaid((prev) => ({ ...prev, [debtId]: false }));
+    }
+  };
+
+  const handleUnmarkPaid = async (debtId) => {
+    setMarkingPaid((prev) => ({ ...prev, [debtId]: true }));
+    try {
+      const res = await api.delete(`/api/v1/debts/${debtId}/unmark-paid`);
+      setDebts((prev) => prev.map((d) => (d.id === debtId ? res.data : d)));
+    } catch {
+      setError('Failed to undo payment.');
+    } finally {
+      setMarkingPaid((prev) => ({ ...prev, [debtId]: false }));
+    }
+  };
+
   const handleExport = async () => {
     try {
       const response = await api.get('/api/v1/export/debts?format=csv', {
@@ -320,6 +345,11 @@ export default function Debts() {
 
           {/* Line 2: Badges */}
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            {debt.is_paid_this_period && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <CheckCircle className="w-3 h-3" /> Paid
+              </span>
+            )}
             {debt.is_household_bill && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
                 <Users className="w-3 h-3" /> Shared
@@ -362,6 +392,30 @@ export default function Debts() {
                 <span className="text-gray-300">·</span>
                 <span>Min: {fmtCurrency(debt.minimum_payment)}</span>
               </>
+            )}
+          </div>
+
+          {/* Mark Paid / Undo */}
+          <div className="mt-3">
+            {debt.is_paid_this_period ? (
+              <button
+                onClick={() => handleUnmarkPaid(debt.id)}
+                disabled={!!markingPaid[debt.id]}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
+              >
+                <CheckCircle className="w-4 h-4" />
+                {markingPaid[debt.id] ? 'Undoing…' : 'Paid ✓'}
+                {!markingPaid[debt.id] && <span className="text-xs text-green-500 ml-1">Undo</span>}
+              </button>
+            ) : (
+              <button
+                onClick={() => handleMarkPaid(debt.id)}
+                disabled={!!markingPaid[debt.id]}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+              >
+                <DollarSign className="w-4 h-4" />
+                {markingPaid[debt.id] ? 'Marking…' : 'Mark Paid'}
+              </button>
             )}
           </div>
         </div>

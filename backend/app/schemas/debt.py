@@ -65,6 +65,8 @@ class DebtResponse(BaseModel):
     is_split: bool = False
     split_members: Optional[list] = None
     next_due_date: Optional[date] = None
+    is_paid_this_period: bool = False
+    last_payment_date: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.debt import Debt
+from app.models.debt_payment import DebtPayment
 from app.models.user import User
 from app.schemas.debt import DebtCreate, DebtResponse, DebtUpdate
 from app.schemas.debt_calculator import (
@@ -55,9 +56,35 @@ def _compute_debt_next_due_date(due_day: int | None) -> date | None:
     return date(y, m, min(due_day, max_day))
 
 
-def _debt_to_response(debt: Debt) -> DebtResponse:
+async def _debt_to_response(
+    debt: Debt, db: AsyncSession, user_id: UUID
+) -> DebtResponse:
     resp = DebtResponse.model_validate(debt)
     resp.next_due_date = _compute_debt_next_due_date(debt.due_day)
+
+    today = date.today()
+    result = await db.execute(
+        select(DebtPayment)
+        .where(
+            DebtPayment.debt_id == debt.id,
+            DebtPayment.user_id == user_id,
+            DebtPayment.period_month == today.month,
+            DebtPayment.period_year == today.year,
+        )
+        .limit(1)
+    )
+    period_payment = result.scalar_one_or_none()
+    resp.is_paid_this_period = period_payment is not None
+
+    last_result = await db.execute(
+        select(DebtPayment)
+        .where(DebtPayment.debt_id == debt.id, DebtPayment.user_id == user_id)
+        .order_by(DebtPayment.payment_date.desc())
+        .limit(1)
+    )
+    last_payment = last_result.scalar_one_or_none()
+    resp.last_payment_date = last_payment.payment_date if last_payment else None
+
     return resp
 
 
@@ -147,6 +174,119 @@ async def get_interest_projection(
     return project_interest_over_time(debt_dicts, months=months)
 
 
+# ── Mark Paid / Unmark Paid ───────────────────────────────────────
+
+
+@router.post("/{debt_id}/mark-paid", response_model=DebtResponse)
+async def mark_debt_paid(
+    debt_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Debt).where(Debt.id == debt_id)
+    )
+    debt = result.scalar_one_or_none()
+    if not debt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+    if debt.user_id != current_user.id and (
+        not current_user.household_id or debt.household_id != current_user.household_id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+
+    today = date.today()
+    existing = await db.execute(
+        select(DebtPayment).where(
+            DebtPayment.debt_id == debt_id,
+            DebtPayment.user_id == current_user.id,
+            DebtPayment.period_month == today.month,
+            DebtPayment.period_year == today.year,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Debt already marked paid for this period",
+        )
+
+    amount = Decimal(str(debt.minimum_payment or 0))
+    payment = DebtPayment(
+        debt_id=debt_id,
+        user_id=current_user.id,
+        amount=amount,
+        period_month=today.month,
+        period_year=today.year,
+    )
+    db.add(payment)
+
+    # Subtract from balance
+    current_balance = Decimal(str(debt.balance or 0))
+    debt.balance = max(current_balance - amount, Decimal("0"))
+
+    await db.flush()
+    await db.refresh(debt)
+
+    if current_user.household_id:
+        try:
+            await log_activity(
+                household_id=current_user.household_id,
+                user_id=current_user.id,
+                action="paid",
+                entity_type="debt",
+                entity_name=debt.name,
+                details=f"${amount}",
+                db=db,
+            )
+        except Exception:
+            pass
+
+    return await _debt_to_response(debt, db, current_user.id)
+
+
+@router.delete("/{debt_id}/unmark-paid", response_model=DebtResponse)
+async def unmark_debt_paid(
+    debt_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Debt).where(Debt.id == debt_id)
+    )
+    debt = result.scalar_one_or_none()
+    if not debt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+    if debt.user_id != current_user.id and (
+        not current_user.household_id or debt.household_id != current_user.household_id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+
+    today = date.today()
+    payment_result = await db.execute(
+        select(DebtPayment).where(
+            DebtPayment.debt_id == debt_id,
+            DebtPayment.user_id == current_user.id,
+            DebtPayment.period_month == today.month,
+            DebtPayment.period_year == today.year,
+        )
+    )
+    payment = payment_result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No payment found for this period",
+        )
+
+    # Add amount back to balance
+    current_balance = Decimal(str(debt.balance or 0))
+    debt.balance = current_balance + Decimal(str(payment.amount))
+
+    await db.delete(payment)
+    await db.flush()
+    await db.refresh(debt)
+
+    return await _debt_to_response(debt, db, current_user.id)
+
+
 # ── Standard CRUD (keep /{debt_id} routes AFTER analytical routes) ─
 
 
@@ -189,7 +329,7 @@ async def create_debt(
         except Exception:
             pass
 
-    return _debt_to_response(debt)
+    return await _debt_to_response(debt, db, current_user.id)
 
 
 @router.get("", response_model=list[DebtResponse])
@@ -220,7 +360,7 @@ async def list_debts(
         # Sort in Python by computed next_due_date so it's calendar-correct
         result = await db.execute(query.order_by(Debt.created_at.desc()))
         debts = result.scalars().all()
-        responses = [_debt_to_response(d) for d in debts]
+        responses = [await _debt_to_response(d, db, current_user.id) for d in debts]
         far_future = date(9999, 12, 31)
         responses.sort(
             key=lambda r: r.next_due_date or far_future,
@@ -232,7 +372,7 @@ async def list_debts(
     sort_col = getattr(Debt, col_map.get(sort_by, sort_by), Debt.created_at)
     query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
     result = await db.execute(query)
-    return [_debt_to_response(d) for d in result.scalars().all()]
+    return [await _debt_to_response(d, db, current_user.id) for d in result.scalars().all()]
 
 
 @router.get("/{debt_id}", response_model=DebtResponse)
@@ -251,7 +391,7 @@ async def get_debt(
         not current_user.household_id or debt.household_id != current_user.household_id
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
-    return _debt_to_response(debt)
+    return await _debt_to_response(debt, db, current_user.id)
 
 
 @router.put("/{debt_id}", response_model=DebtResponse)
@@ -291,7 +431,7 @@ async def update_debt(
         except Exception:
             pass
 
-    return _debt_to_response(debt)
+    return await _debt_to_response(debt, db, current_user.id)
 
 
 @router.delete("/{debt_id}", status_code=status.HTTP_204_NO_CONTENT)

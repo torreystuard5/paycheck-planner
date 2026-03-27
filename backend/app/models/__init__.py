@@ -6,6 +6,7 @@ from app.models.bill import Bill
 from app.models.bill_history import BillHistory
 from app.models.bill_member_payment import BillMemberPayment
 from app.models.debt import Debt
+from app.models.debt_payment import DebtPayment
 from app.models.savings_goal import SavingsContribution, SavingsGoal
 from app.models.transaction import Payment
 from app.models.support_ticket import SupportTicket
@@ -33,6 +34,7 @@ __all__ = [
     "BillHistory",
     "BillMemberPayment",
     "Debt",
+    "DebtPayment",
     "SavingsGoal",
     "SavingsContribution",
     "Payment",

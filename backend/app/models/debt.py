@@ -59,6 +59,7 @@ class Debt(Base):
     user = relationship("User", back_populates="debts")
     household = relationship("Household", back_populates="debts")
     payments = relationship("Payment", back_populates="debt")
+    debt_payments = relationship("DebtPayment", back_populates="debt", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_debts_user_id", "user_id"),

@@ -152,6 +152,8 @@ export default function Dashboard() {
   const totalIncome = Array.isArray(income) ? income.reduce((sum, i) => sum + (Number(i.amount) || 0), 0) : 0;
   const totalBills = Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false).reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0) : 0;
   const totalDebt = Array.isArray(debts) ? debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0) : 0;
+  const debtsPaidThisPeriod = Array.isArray(debts) ? debts.filter(d => d.is_paid_this_period).length : 0;
+  const totalDebtCount = Array.isArray(debts) ? debts.length : 0;
   const savingsCount = Array.isArray(savingsGoals) ? savingsGoals.length : 0;
 
   const now = new Date();
@@ -218,7 +220,7 @@ export default function Dashboard() {
   const summaryCards = [
     { label: 'Total Income', value: totalIncome, icon: DollarSign, color: 'text-green-500', bg: 'bg-green-50' },
     { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50', subtitle: getBillSubtitle(), paidSubtitle: billsPaidSubtitle },
-    { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50', paidSubtitle: debtPaidSubtitle },
+    { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50', subtitle: totalDebtCount > 0 && debtsPaidThisPeriod > 0 ? `${debtsPaidThisPeriod}/${totalDebtCount} paid this month` : null, paidSubtitle: debtPaidSubtitle },
     { label: 'Savings Goals', value: null, count: savingsCount, icon: PiggyBank, color: 'text-purple-500', bg: 'bg-purple-50' },
   ];
 
