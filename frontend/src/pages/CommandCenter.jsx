@@ -622,7 +622,7 @@ function UsersTab({ currentUser }) {
                     <th className="px-4 py-3 font-medium text-gray-600">Join Date</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Last Login</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Admin</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Active</th>
+                    <th className="px-4 py-3 font-medium text-gray-600">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -651,14 +651,15 @@ function UsersTab({ currentUser }) {
                         </button>
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleToggleActive(u.id, u.is_active !== false); }}
+                        <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                            u.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            u.account_status === 'active' ? 'bg-green-100 text-green-700'
+                              : u.account_status === 'suspended' ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-red-100 text-red-700'
                           }`}
                         >
-                          {u.is_active !== false ? 'Active' : 'Disabled'}
-                        </button>
+                          {u.account_status ? u.account_status.charAt(0).toUpperCase() + u.account_status.slice(1) : 'Active'}
+                        </span>
                       </td>
                     </tr>
                   ))}

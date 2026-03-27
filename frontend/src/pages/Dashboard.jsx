@@ -327,8 +327,9 @@ export default function Dashboard() {
                   const bKey = `${b.item_type}_${b.id || b.item_id}`;
                   const aChecked = !!checklist[aKey];
                   const bChecked = !!checklist[bKey];
-                  if (aChecked === bChecked) return 0;
-                  return aChecked ? 1 : -1;
+                  if (aChecked !== bChecked) return aChecked ? 1 : -1;
+                  // Within same checked group, sort by due date ascending
+                  return new Date(a.due_date) - new Date(b.due_date);
                 });
 
                 const checkedCount = assignedItems.filter(
