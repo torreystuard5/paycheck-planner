@@ -115,10 +115,11 @@ export default function CommandCenter() {
   const [initialLoading, setInitialLoading] = useState(true);
 
   useEffect(() => {
-    // Quick admin check
+    // Quick admin check + log access
     const checkAdmin = async () => {
       try {
         await api.get('/api/v1/admin/stats');
+        api.post('/api/v1/admin/log-access').catch(() => {});
       } catch (err) {
         if (err.response?.status === 403) setForbidden(true);
       } finally {

@@ -155,6 +155,29 @@ async def get_admin_stats(
     )
 
 
+# ── Command Center access log ─────────────────────────────────────
+
+
+@router.post("/log-access")
+async def log_command_center_access(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="accessed_command_center",
+        ip_address=_get_client_ip(request),
+    )
+    return {"detail": "ok"}
+
+
 # ── Users ──────────────────────────────────────────────────────────
 
 

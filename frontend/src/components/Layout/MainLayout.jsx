@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { Outlet, Link } from 'react-router-dom';
-import { Menu } from 'lucide-react';
+import { Menu, Shield } from 'lucide-react';
 import Sidebar from './Sidebar';
 import EarlyAccessBanner from '../EarlyAccessBanner';
 import AnnouncementBanner from '../AnnouncementBanner';
 import Footer from '../Footer';
+import { useAuth } from '../../context/AuthContext';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -30,6 +32,15 @@ export default function MainLayout() {
             <img src={logo} alt="PayDrift logo" className="h-8 w-auto" />
             <span className="text-sm font-semibold text-gray-900">PayDrift</span>
           </Link>
+          {user?.is_admin && (
+            <Link
+              to="/admin/command-center"
+              className="ml-auto p-2 text-gray-400 hover:text-blue-600 transition-colors"
+              aria-label="Command Center"
+            >
+              <Shield className="h-4 w-4" />
+            </Link>
+          )}
         </div>
 
         <main className="p-4 md:p-6">
