@@ -637,39 +637,48 @@ function UsersTab({ currentUser }) {
                       <td className="px-4 py-3 text-gray-500">{formatDate(u.created_at)}</td>
                       <td className="px-4 py-3 text-gray-500">{formatDate(u.last_login_at)}</td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={(e) => toggleAdmin(e, u.id, u.is_admin)}
-                          disabled={togglingAdmin === u.id || u.admin_locked}
-                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                          style={{
-                            backgroundColor: u.is_admin ? '#2563eb' : '#d1d5db',
-                            ...(u.admin_locked ? { opacity: 0.4, pointerEvents: 'none' } : {})
-                          }}
-                          role="switch"
-                          aria-checked={u.is_admin}
-                          aria-label={`Toggle admin for ${u.email}`}
-                        >
-                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${u.is_admin ? 'translate-x-6' : 'translate-x-1'}`} />
-                          {togglingAdmin === u.id && <Loader2 className="absolute -right-6 h-4 w-4 animate-spin text-blue-600" />}
-                        </button>
+                        {(() => {
+                          const isClosed = u.status === 'Closed' || u.admin_locked;
+                          return (
+                            <button
+                              onClick={(e) => toggleAdmin(e, u.id, u.is_admin)}
+                              disabled={togglingAdmin === u.id || isClosed}
+                              className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                              style={{
+                                backgroundColor: u.is_admin ? '#2563eb' : '#d1d5db',
+                                ...(isClosed ? { opacity: 0.4, pointerEvents: 'none' } : {})
+                              }}
+                              role="switch"
+                              aria-checked={u.is_admin}
+                              aria-label={`Toggle admin for ${u.email}`}
+                            >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${u.is_admin ? 'translate-x-6' : 'translate-x-1'}`} />
+                              {togglingAdmin === u.id && <Loader2 className="absolute -right-6 h-4 w-4 animate-spin text-blue-600" />}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '4px 12px',
-                            borderRadius: '9999px',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            color: '#fff',
-                            whiteSpace: 'nowrap',
-                            backgroundColor: u.status === 'Active' ? '#22c55e'
-                              : u.status === 'Inactive' ? '#f59e0b'
-                              : '#ef4444'
-                          }}
-                        >
-                          {u.status}
-                        </span>
+                        {(() => {
+                          const st = u.status || 'Active';
+                          const bg = st === 'Active' ? '#22c55e' : st === 'Inactive' ? '#f59e0b' : '#ef4444';
+                          return (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '4px 12px',
+                                borderRadius: '9999px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                color: '#fff',
+                                whiteSpace: 'nowrap',
+                                backgroundColor: bg
+                              }}
+                            >
+                              {st}
+                            </span>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}

@@ -191,24 +191,28 @@ async def list_admin_users(
         )
     ).scalars().all()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     seven_days_ago = now - timedelta(days=7)
     users_out = []
     for u in rows:
         # Compute dynamic status
         if not u.is_active or getattr(u, "account_status", "active") == "closed":
             computed_status = "Closed"
-            admin_locked = True
-        elif u.last_login_at is None or u.last_login_at < seven_days_ago:
+            locked = True
+        elif u.last_login_at is None:
             computed_status = "Inactive"
-            admin_locked = False
+            locked = False
         else:
-            computed_status = "Active"
-            admin_locked = False
+            # Ensure tz-aware comparison
+            login = u.last_login_at
+            if login.tzinfo is None:
+                login = login.replace(tzinfo=timezone.utc)
+            computed_status = "Inactive" if login < seven_days_ago else "Active"
+            locked = False
 
         summary = AdminUserSummary.model_validate(u)
         summary.status = computed_status
-        summary.admin_locked = admin_locked
+        summary.admin_locked = locked
         users_out.append(summary)
 
     return AdminUserListResponse(
