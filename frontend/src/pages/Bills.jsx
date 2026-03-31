@@ -62,8 +62,8 @@ export default function Bills() {
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState('desc');
+  const [sortBy, setSortBy] = useState('due_date');
+  const [sortOrder, setSortOrder] = useState('asc');
   const [showModal, setShowModal] = useState(false);
   const [editingBill, setEditingBill] = useState(null);
   const [form, setForm] = useState(defaultForm);

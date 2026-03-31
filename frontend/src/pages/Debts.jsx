@@ -44,8 +44,8 @@ export default function Debts() {
   const [debts, setDebts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState('desc');
+  const [sortBy, setSortBy] = useState('due_date');
+  const [sortOrder, setSortOrder] = useState('asc');
   const [showModal, setShowModal] = useState(false);
   const [editingDebt, setEditingDebt] = useState(null);
   const [form, setForm] = useState(defaultForm);
