@@ -404,6 +404,19 @@ export default function Debts() {
             )}
           </div>
 
+          {/* Progress bar */}
+          <div className="mt-2 flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                style={{ width: `${Math.min(debt.percent_paid ?? 0, 100)}%` }}
+              />
+            </div>
+            <span className="text-xs font-medium text-gray-500 shrink-0 w-[72px] text-right">
+              {(debt.percent_paid ?? 0) >= 100 ? 'Paid off! \u{1F389}' : `${debt.percent_paid ?? 0}% paid`}
+            </span>
+          </div>
+
           {/* Line 4: Due info */}
           <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm text-gray-500">
             <span>Due {debt.next_due_date ? formatFriendlyDate(debt.next_due_date) : (debt.due_day ? `day ${debt.due_day}` : '--')}</span>

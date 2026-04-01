@@ -22,10 +22,26 @@ export default function RecentUpdates() {
   const [comingSoon, setComingSoon] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
+  const [unseenCount, setUnseenCount] = useState(0);
 
   useEffect(() => {
     localStorage.setItem(COLLAPSED_KEY, String(collapsed));
   }, [collapsed]);
+
+  // Fetch unseen count on mount
+  useEffect(() => {
+    api.get('/api/v1/whats-new-unseen-count')
+      .then(({ data }) => setUnseenCount(data.unseen_count || 0))
+      .catch(() => {});
+  }, []);
+
+  // Mark as seen whenever the user expands the panel
+  useEffect(() => {
+    if (!collapsed && unseenCount > 0) {
+      setUnseenCount(0);
+      api.patch('/api/v1/whats-new-seen').catch(() => {});
+    }
+  }, [collapsed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!collapsed && !fetched) {
@@ -70,6 +86,11 @@ export default function RecentUpdates() {
       >
         <div className="flex items-center gap-2">
           <span className="font-medium text-gray-900">What&apos;s New</span>
+          {unseenCount > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold bg-red-500 text-white">
+              {unseenCount}
+            </span>
+          )}
         </div>
         <ChevronDown
           className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}

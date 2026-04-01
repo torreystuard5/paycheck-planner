@@ -67,6 +67,8 @@ class DebtResponse(BaseModel):
     next_due_date: Optional[date] = None
     is_paid_this_period: bool = False
     last_payment_date: Optional[datetime] = None
+    total_paid: Decimal = Decimal("0")
+    percent_paid: int = 0
     created_at: datetime
     updated_at: datetime
 

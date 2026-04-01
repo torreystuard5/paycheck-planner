@@ -61,6 +61,11 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # What's New tracking
+    last_seen_whats_new: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Secure vault fields
     pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes_lock_timeout: Mapped[int] = mapped_column(Integer, server_default=text("5"))

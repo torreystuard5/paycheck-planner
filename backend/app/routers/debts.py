@@ -6,7 +6,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from sqlalchemy import or_, select
+from sqlalchemy import func as sa_func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -87,6 +87,20 @@ async def _debt_to_response(
     )
     last_payment = last_result.scalar_one_or_none()
     resp.last_payment_date = last_payment.payment_date if last_payment else None
+
+    # Compute total paid and percent paid for progress bar
+    total_paid_result = await db.execute(
+        select(sa_func.coalesce(sa_func.sum(DebtPayment.amount), 0))
+        .where(DebtPayment.debt_id == debt.id)
+    )
+    total_paid = Decimal(str(total_paid_result.scalar() or 0))
+    resp.total_paid = total_paid
+    current_bal = Decimal(str(debt.balance or 0))
+    original = total_paid + current_bal
+    if original > 0:
+        resp.percent_paid = int(round(total_paid * 100 / original))
+    else:
+        resp.percent_paid = 0
 
     return resp
 
