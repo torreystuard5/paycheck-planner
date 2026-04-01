@@ -2154,7 +2154,7 @@ function BroadcastTab() {
 
       {/* ─── Confirmation modal ─── */}
       {showConfirm && preview && (
-        <Modal onClose={() => setShowConfirm(false)} title="Confirm Broadcast">
+        <Modal isOpen={showConfirm && !!preview} onClose={() => setShowConfirm(false)} title="Confirm Broadcast">
           <div className="space-y-4">
             <p className="text-sm text-gray-700">
               You're about to email <span className="font-semibold text-gray-900">{preview.recipient_count} users</span>
