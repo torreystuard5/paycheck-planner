@@ -50,15 +50,21 @@ TOS_EXEMPT_PATHS = {
     "/health",
 }
 
-# Paths exempt from maintenance mode
-MAINTENANCE_EXEMPT_PREFIXES = (
-    "/api/v1/auth/",
-    "/api/v1/admin/",
-    "/api/v1/version",
+# Paths exempt from maintenance mode — only minimal auth endpoints, not /me
+MAINTENANCE_EXEMPT_PATHS_EXACT = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
     "/health",
+    "/openapi.json",
+}
+MAINTENANCE_EXEMPT_PREFIXES = (
+    "/api/v1/admin/",
+    "/api/v1/unsubscribe",
     "/docs",
     "/redoc",
-    "/openapi.json",
 )
 
 # Cached maintenance mode state
@@ -140,6 +146,8 @@ async def maintenance_mode_middleware(request: Request, call_next):
     path = request.url.path
 
     # Always allow exempt paths
+    if path in MAINTENANCE_EXEMPT_PATHS_EXACT:
+        return await call_next(request)
     if any(path.startswith(prefix) for prefix in MAINTENANCE_EXEMPT_PREFIXES):
         return await call_next(request)
 

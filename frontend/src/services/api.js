@@ -16,6 +16,12 @@ export function onTosRequired(cb) {
   tosRequiredCallback = cb;
 }
 
+// Maintenance mode state — shared globally
+let maintenanceCallback = null;
+export function onMaintenanceMode(cb) {
+  maintenanceCallback = cb;
+}
+
 // Attach access token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
@@ -41,6 +47,12 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
+
+    // Intercept 503 maintenance mode responses
+    if (error.response?.status === 503 && maintenanceCallback) {
+      maintenanceCallback(true);
+      return Promise.reject(error);
+    }
 
     // Intercept TOS-required 403 responses
     if (

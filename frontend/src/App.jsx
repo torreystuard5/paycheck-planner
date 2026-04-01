@@ -1,9 +1,12 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
 import MainLayout from './components/Layout/MainLayout';
 import TosOverlay from './components/TosOverlay';
+import MaintenanceOverlay from './components/MaintenanceOverlay';
 import { ToastProvider } from './components/Toast';
+import { onMaintenanceMode } from './services/api';
 
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -42,10 +45,21 @@ function TosGate({ children }) {
   return children;
 }
 
+function MaintenanceGate({ children }) {
+  const [maintenance, setMaintenance] = useState(false);
+  useEffect(() => {
+    onMaintenanceMode(setMaintenance);
+    return () => onMaintenanceMode(null);
+  }, []);
+  if (maintenance) return <MaintenanceOverlay />;
+  return children;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <MaintenanceGate>
         <ToastProvider>
         <TosGate>
         <Routes>
@@ -94,6 +108,7 @@ export default function App() {
         </Routes>
         </TosGate>
         </ToastProvider>
+        </MaintenanceGate>
       </AuthProvider>
     </BrowserRouter>
   );
