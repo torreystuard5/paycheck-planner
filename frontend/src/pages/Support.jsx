@@ -6,7 +6,7 @@ import { formatFriendlyDate } from '../utils/formatDate';
 const FAQ_ITEMS = [
   {
     question: 'How do I set up my paycheck plan?',
-    answer: 'Go to the Dashboard and your paycheck plan will automatically be generated based on your income, bills, and pay schedule. Make sure you\'ve added your income sources and bills first.',
+    answer: 'Go to the Dashboard and your paycheck plan will automatically be generated based on your logged paychecks, bills, and pay schedule. Make sure you\'ve logged your paychecks and added your bills first.',
   },
   {
     question: 'How does the debt payoff strategy work?',
@@ -17,8 +17,8 @@ const FAQ_ITEMS = [
     answer: 'The credit efficiency score is based on your credit utilization ratio, payment history, and debt-to-income ratio. Keep your credit utilization below 30% and make on-time payments to improve your score.',
   },
   {
-    question: 'Can I track multiple income sources?',
-    answer: 'Yes! Go to the Dashboard to see all your income sources. You can add multiple income entries with different pay frequencies to get an accurate picture of your total income.',
+    question: 'Can I track multiple paychecks?',
+    answer: 'Yes! Go to the Income page to log paychecks from different jobs or sources. Each paycheck records the source name, pay date, and net amount for an accurate picture of your total income.',
   },
   {
     question: 'How do savings goals work?',
