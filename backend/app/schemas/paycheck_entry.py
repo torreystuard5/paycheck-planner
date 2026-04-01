@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class PaycheckEntryCreate(BaseModel):
     income_source_id: Optional[UUID] = None
+    source_name: Optional[str] = Field(default=None, max_length=150)
     pay_date: date
     gross_amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
     net_amount: Decimal = Field(..., max_digits=12, decimal_places=2)
@@ -16,6 +17,7 @@ class PaycheckEntryCreate(BaseModel):
 
 class PaycheckEntryUpdate(BaseModel):
     income_source_id: Optional[UUID] = None
+    source_name: Optional[str] = Field(default=None, max_length=150)
     pay_date: Optional[date] = None
     gross_amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
     net_amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
@@ -26,6 +28,7 @@ class PaycheckEntryResponse(BaseModel):
     id: UUID
     user_id: UUID
     income_source_id: Optional[UUID] = None
+    source_name: Optional[str] = None
     pay_date: date
     gross_amount: Optional[Decimal] = None
     net_amount: Decimal

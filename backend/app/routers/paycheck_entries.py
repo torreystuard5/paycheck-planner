@@ -28,6 +28,7 @@ async def create_entry(
     entry = PaycheckEntry(
         user_id=current_user.id,
         income_source_id=data.income_source_id,
+        source_name=data.source_name,
         pay_date=data.pay_date,
         gross_amount=data.gross_amount,
         net_amount=data.net_amount,
@@ -55,6 +56,28 @@ async def list_entries(
     query = query.order_by(PaycheckEntry.pay_date.desc())
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.get("/distinct-sources")
+async def distinct_sources(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return distinct source names from the user's paycheck history, most recent first."""
+    result = await db.execute(
+        select(
+            PaycheckEntry.source_name,
+            func.max(PaycheckEntry.pay_date).label("last_used"),
+        )
+        .where(
+            PaycheckEntry.user_id == current_user.id,
+            PaycheckEntry.source_name.isnot(None),
+            PaycheckEntry.source_name != "",
+        )
+        .group_by(PaycheckEntry.source_name)
+        .order_by(func.max(PaycheckEntry.pay_date).desc())
+    )
+    return [row.source_name for row in result.all()]
 
 
 @router.get("/monthly-summary", response_model=MonthlyIncomeSummary)

@@ -33,6 +33,7 @@ class PaycheckEntry(Base):
     net_amount: Mapped[float] = mapped_column(
         Numeric(12, 2), nullable=False
     )
+    source_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     memo: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
