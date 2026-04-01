@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Numeric,
+    String,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -43,6 +44,8 @@ class Payment(Base):
     paid_date: Mapped[str | None] = mapped_column(Date, nullable=True)
     pay_period_date: Mapped[str | None] = mapped_column(Date, nullable=True)
     is_extra: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    auto_logged: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

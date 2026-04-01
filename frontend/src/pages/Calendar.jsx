@@ -209,7 +209,7 @@ export default function Calendar() {
       if (evt.is_paid) {
         await api.patch(`/api/v1/bills/${billId}/unpay`);
       } else {
-        await api.patch(`/api/v1/bills/${billId}/pay`);
+        await api.patch(`/api/v1/bills/${billId}/pay?source=calendar`);
       }
       fetchEvents();
       setSelectedEvt(null);

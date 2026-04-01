@@ -10,6 +10,7 @@ from app.models.bill import Bill
 from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
 from app.models.paycheck_checklist import PaycheckChecklist
+from app.models.transaction import Payment
 from app.models.user import User
 from app.schemas.paycheck_checklist import ChecklistItemOut, ChecklistToggle
 from app.utils.security import get_current_user
@@ -116,11 +117,37 @@ async def _sync_debt_payment(
         # Subtract from balance
         current_balance = Decimal(str(debt.balance or 0))
         debt.balance = max(current_balance - amount, Decimal("0"))
+        # Auto-log payment record
+        try:
+            auto_payment = Payment(
+                user_id=user.id,
+                debt_id=debt_id,
+                amount=amount,
+                paid_date=today,
+                source="dashboard",
+                auto_logged=True,
+            )
+            db.add(auto_payment)
+        except Exception:
+            pass
     elif not is_checked and existing:
         # Restore balance
         current_balance = Decimal(str(debt.balance or 0))
         debt.balance = current_balance + Decimal(str(existing.amount))
         await db.delete(existing)
+        # Remove auto-logged payment record
+        try:
+            auto_result = await db.execute(
+                select(Payment).where(
+                    Payment.debt_id == debt_id,
+                    Payment.user_id == user.id,
+                    Payment.auto_logged.is_(True),
+                )
+            )
+            for auto_pay in auto_result.scalars().all():
+                await db.delete(auto_pay)
+        except Exception:
+            pass
 
 
 async def _sync_bill_payment(
@@ -150,10 +177,36 @@ async def _sync_bill_payment(
         bill.is_paid = True
         bill.paid_date = datetime.now(timezone.utc)
         bill.paid_amount = bill.amount
+        # Auto-log payment record
+        try:
+            auto_payment = Payment(
+                user_id=user.id,
+                bill_id=bill.id,
+                amount=bill.amount,
+                paid_date=datetime.now(timezone.utc),
+                source="dashboard",
+                auto_logged=True,
+            )
+            db.add(auto_payment)
+        except Exception:
+            pass
     else:
         bill.is_paid = False
         bill.paid_date = None
         bill.paid_amount = None
+        # Remove auto-logged payment record
+        try:
+            auto_result = await db.execute(
+                select(Payment).where(
+                    Payment.bill_id == bill.id,
+                    Payment.user_id == user.id,
+                    Payment.auto_logged.is_(True),
+                )
+            )
+            for auto_pay in auto_result.scalars().all():
+                await db.delete(auto_pay)
+        except Exception:
+            pass
 
 
 @router.delete("")

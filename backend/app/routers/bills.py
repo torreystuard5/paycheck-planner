@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models.bill import Bill
 from app.models.bill_history import BillHistory
 from app.models.bill_member_payment import BillMemberPayment
+from app.models.transaction import Payment
 from app.models.user import User
 from app.schemas.bill import (
     BillBreakdownResponse,
@@ -658,6 +659,7 @@ async def delete_bill(
 async def pay_bill(
     bill_id: UUID,
     data: BillPayRequest | None = None,
+    source: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -705,6 +707,21 @@ async def pay_bill(
             )
         except Exception:
             pass
+
+    # Auto-log payment record
+    try:
+        auto_payment = Payment(
+            user_id=current_user.id,
+            bill_id=bill.id,
+            amount=bill.paid_amount or bill.amount,
+            paid_date=bill.paid_date or datetime.now(timezone.utc),
+            source=source or "bills_page",
+            auto_logged=True,
+        )
+        db.add(auto_payment)
+        await db.flush()
+    except Exception:
+        pass
 
     member_count = await _get_household_member_count(db, current_user.household_id)
     return _bill_to_response(bill, current_user.id, member_count)
@@ -827,6 +844,21 @@ async def unpay_bill(
             )
         except Exception:
             pass
+
+    # Remove auto-logged payment record for this bill
+    try:
+        auto_result = await db.execute(
+            select(Payment).where(
+                Payment.bill_id == bill.id,
+                Payment.user_id == current_user.id,
+                Payment.auto_logged.is_(True),
+            )
+        )
+        for auto_pay in auto_result.scalars().all():
+            await db.delete(auto_pay)
+        await db.flush()
+    except Exception:
+        pass
 
     member_count = await _get_household_member_count(db, current_user.household_id)
     return _bill_to_response(bill, current_user.id, member_count)

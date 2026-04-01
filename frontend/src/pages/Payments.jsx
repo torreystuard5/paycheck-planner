@@ -249,6 +249,7 @@ export default function Payments() {
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">For</th>
                   <th className="text-right px-6 py-3 text-gray-600 font-medium">Amount</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Type</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Source</th>
                   <th className="px-6 py-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
@@ -272,6 +273,15 @@ export default function Payments() {
                       </td>
                       <td className="px-6 py-4 text-gray-600">
                         {payment.is_extra ? <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">Extra</span> : <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">Regular</span>}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {payment.auto_logged ? (
+                          <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                            {payment.source === 'dashboard' ? 'Dashboard' : payment.source === 'bills_page' ? 'Bills' : payment.source === 'debts_page' ? 'Debts' : payment.source === 'calendar' ? 'Calendar' : 'Auto'}
+                          </span>
+                        ) : (
+                          <span className="text-xs px-2 py-0.5 bg-gray-50 text-gray-400 rounded-full">Manual</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button

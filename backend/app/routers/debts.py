@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
+from app.models.transaction import Payment
 from app.models.user import User
 from app.schemas.debt import DebtCreate, DebtResponse, DebtUpdate
 from app.schemas.debt_calculator import (
@@ -250,6 +251,21 @@ async def mark_debt_paid(
         except Exception:
             pass
 
+    # Auto-log payment record
+    try:
+        auto_payment = Payment(
+            user_id=current_user.id,
+            debt_id=debt.id,
+            amount=pay_amount,
+            paid_date=date.today(),
+            source="debts_page",
+            auto_logged=True,
+        )
+        db.add(auto_payment)
+        await db.flush()
+    except Exception:
+        pass
+
     return await _debt_to_response(debt, db, current_user.id)
 
 
@@ -293,6 +309,21 @@ async def unmark_debt_paid(
     await db.delete(payment)
     await db.flush()
     await db.refresh(debt)
+
+    # Remove auto-logged payment record for this debt
+    try:
+        auto_result = await db.execute(
+            select(Payment).where(
+                Payment.debt_id == debt.id,
+                Payment.user_id == current_user.id,
+                Payment.auto_logged.is_(True),
+            )
+        )
+        for auto_pay in auto_result.scalars().all():
+            await db.delete(auto_pay)
+        await db.flush()
+    except Exception:
+        pass
 
     return await _debt_to_response(debt, db, current_user.id)
 
