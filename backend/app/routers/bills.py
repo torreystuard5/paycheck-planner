@@ -178,6 +178,7 @@ def _bill_to_response(
         is_active=bill.is_active,
         is_tax_deductible=bill.is_tax_deductible,
         tax_category=bill.tax_category,
+        hidden_overdue=bill.hidden_overdue,
         payment_mode=bill.payment_mode,
         assigned_member_id=bill.assigned_member_id,
         assigned_member_name=assigned_name,
@@ -704,6 +705,74 @@ async def pay_bill(
             )
         except Exception:
             pass
+
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    return _bill_to_response(bill, current_user.id, member_count)
+
+
+@router.patch("/{bill_id}/hide-overdue", response_model=BillResponse)
+async def hide_overdue_bill(
+    bill_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Hide an overdue bill from the dashboard assigned items list."""
+    if current_user.household_id:
+        result = await db.execute(
+            select(Bill).where(
+                Bill.id == bill_id,
+                or_(
+                    Bill.user_id == current_user.id,
+                    Bill.household_id == current_user.household_id,
+                ),
+            ).options(selectinload(Bill.assigned_member))
+        )
+    else:
+        result = await db.execute(
+            select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+                .options(selectinload(Bill.assigned_member))
+        )
+    bill = result.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    bill.hidden_overdue = True
+    await db.flush()
+    await db.refresh(bill)
+
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    return _bill_to_response(bill, current_user.id, member_count)
+
+
+@router.patch("/{bill_id}/unhide-overdue", response_model=BillResponse)
+async def unhide_overdue_bill(
+    bill_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Unhide a previously hidden overdue bill."""
+    if current_user.household_id:
+        result = await db.execute(
+            select(Bill).where(
+                Bill.id == bill_id,
+                or_(
+                    Bill.user_id == current_user.id,
+                    Bill.household_id == current_user.household_id,
+                ),
+            ).options(selectinload(Bill.assigned_member))
+        )
+    else:
+        result = await db.execute(
+            select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+                .options(selectinload(Bill.assigned_member))
+        )
+    bill = result.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    bill.hidden_overdue = False
+    await db.flush()
+    await db.refresh(bill)
 
     member_count = await _get_household_member_count(db, current_user.household_id)
     return _bill_to_response(bill, current_user.id, member_count)

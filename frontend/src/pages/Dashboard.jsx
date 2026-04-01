@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle, ChevronRight, Square, CheckSquare } from 'lucide-react';
+import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle, ChevronRight, Square, CheckSquare, EyeOff, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +33,8 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [checklist, setChecklist] = useState({});
   const [checklistLoading, setChecklistLoading] = useState({});
+  const [showHiddenOverdue, setShowHiddenOverdue] = useState(false);
+  const [hidingOverdue, setHidingOverdue] = useState({});
 
   const fetchChecklist = useCallback(async (payPeriodStart, assignedItems) => {
     if (!payPeriodStart) return;
@@ -153,6 +155,19 @@ export default function Dashboard() {
       setChecklist((prev) => ({ ...prev, [key]: currentState }));
     } finally {
       setChecklistLoading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const toggleHideOverdue = async (billId, currentlyHidden) => {
+    const action = currentlyHidden ? 'unhide-overdue' : 'hide-overdue';
+    setHidingOverdue((prev) => ({ ...prev, [billId]: true }));
+    try {
+      await api.patch(`/api/v1/bills/${billId}/${action}`);
+      await fetchDashboardData();
+    } catch {
+      // ignore
+    } finally {
+      setHidingOverdue((prev) => ({ ...prev, [billId]: false }));
     }
   };
 
@@ -331,8 +346,12 @@ export default function Dashboard() {
                 const payPeriodStart = next.pay_period_start || next.paycheck_date;
                 const assignedItems = Array.isArray(next.assigned_items) ? next.assigned_items : [];
 
+                // Separate hidden overdue items from visible items
+                const visibleItems = assignedItems.filter((item) => !(item.is_overdue && item.hidden_overdue && !checklist[`${item.item_type}_${item.id || item.item_id}`]));
+                const hiddenOverdueItems = assignedItems.filter((item) => item.is_overdue && item.hidden_overdue && !checklist[`${item.item_type}_${item.id || item.item_id}`]);
+
                 // Sort: unchecked first, checked last
-                const sortedItems = [...assignedItems].sort((a, b) => {
+                const sortedItems = [...visibleItems].sort((a, b) => {
                   const aKey = `${a.item_type}_${a.id || a.item_id}`;
                   const bKey = `${b.item_type}_${b.id || b.item_id}`;
                   const aChecked = !!checklist[aKey];
@@ -342,15 +361,15 @@ export default function Dashboard() {
                   return new Date(a.due_date) - new Date(b.due_date);
                 });
 
-                const checkedCount = assignedItems.filter(
+                const checkedCount = visibleItems.filter(
                   (item) => !!checklist[`${item.item_type}_${item.id || item.item_id}`]
                 ).length;
-                const totalItems = assignedItems.length;
+                const totalItems = visibleItems.length;
                 const progressPct = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0;
 
-                // Paid / Still Owed totals
-                const totalAssignedAmount = assignedItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-                const paidAmount = assignedItems
+                // Paid / Still Owed totals (excludes hidden overdue)
+                const totalAssignedAmount = visibleItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                const paidAmount = visibleItems
                   .filter((item) => !!checklist[`${item.item_type}_${item.id || item.item_id}`])
                   .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
                 const stillOwed = totalAssignedAmount - paidAmount;
@@ -403,6 +422,7 @@ export default function Dashboard() {
                             const isChecked = !!checklist[key];
                             const isToggling = !!checklistLoading[key];
                             const isSplit = item.is_split || (item.split_count && item.split_count > 1);
+                            const isHiding = !!hidingOverdue[item.id || item.item_id];
 
                             return (
                               <div
@@ -435,10 +455,63 @@ export default function Dashboard() {
                                     of {fmtCurrency(item.full_amount)}
                                   </span>
                                 )}
+                                {item.is_overdue && !isChecked && item.item_type === 'bill' && (
+                                  <button
+                                    onClick={() => toggleHideOverdue(item.id || item.item_id, false)}
+                                    disabled={isHiding}
+                                    className={`shrink-0 p-0.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${isHiding ? 'opacity-50' : ''}`}
+                                    title="Hide overdue"
+                                  >
+                                    <EyeOff className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             );
                           })}
                         </div>
+
+                        {hiddenOverdueItems.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <button
+                              onClick={() => setShowHiddenOverdue((prev) => !prev)}
+                              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors w-full"
+                            >
+                              {showHiddenOverdue ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                              <span>{hiddenOverdueItems.length} hidden overdue {hiddenOverdueItems.length === 1 ? 'item' : 'items'}</span>
+                            </button>
+                            {showHiddenOverdue && (
+                              <div className="mt-2 space-y-1.5">
+                                {hiddenOverdueItems.map((item) => {
+                                  const key = `${item.item_type}_${item.id || item.item_id}`;
+                                  const isHiding = !!hidingOverdue[item.id || item.item_id];
+                                  return (
+                                    <div
+                                      key={key}
+                                      className="flex items-center gap-2 text-sm rounded-md px-1.5 py-1 -mx-1.5 bg-gray-50 opacity-60"
+                                    >
+                                      <span className="shrink-0 w-4" />
+                                      <span className="flex-1 min-w-0 truncate text-gray-400">
+                                        {item.name}
+                                        <span className="inline-flex items-center ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-500">Hidden</span>
+                                      </span>
+                                      <span className="shrink-0 text-right text-gray-400">
+                                        <CurrencyDisplay amount={item.amount} className="inline" />
+                                      </span>
+                                      <button
+                                        onClick={() => toggleHideOverdue(item.id || item.item_id, true)}
+                                        disabled={isHiding}
+                                        className={`shrink-0 p-0.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${isHiding ? 'opacity-50' : ''}`}
+                                        title="Show overdue"
+                                      >
+                                        <Eye className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </>

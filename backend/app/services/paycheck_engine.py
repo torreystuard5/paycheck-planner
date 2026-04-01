@@ -199,6 +199,7 @@ def assign_bills_to_paycheck(
     Returns a list of dicts sorted by due_date (soonest first).
     """
     items: list[dict] = []
+    seen_bill_ids: set = set()
 
     for bill in bills:
         due_dates = _due_dates_in_window(
@@ -229,6 +230,7 @@ def assign_bills_to_paycheck(
 
             is_overdue = (due_dt < current_date) and (not paid_for_period)
 
+            seen_bill_ids.add(bill.id)
             items.append(
                 {
                     "id": bill.id,
@@ -244,6 +246,55 @@ def assign_bills_to_paycheck(
                     "split_count": split_count if is_split else 1,
                     "is_paid": paid_for_period,
                     "is_overdue": is_overdue,
+                    "hidden_overdue": bool(getattr(bill, "hidden_overdue", False)),
+                }
+            )
+
+    # ── Carry forward overdue bills from previous periods ──
+    # Only for the current pay period (the one containing today)
+    if window_start <= current_date <= window_end:
+        for bill in bills:
+            if bill.id in seen_bill_ids:
+                continue
+            # Bill is unpaid and its due date has passed (before this window)
+            if getattr(bill, "is_paid", False):
+                continue
+            full_amount = Decimal(str(bill.amount or 0))
+            user_amount = getattr(bill, "user_share_amount", None)
+            if user_amount is None:
+                user_amount = full_amount
+            is_split = getattr(bill, "payment_mode", "single") == "split" and bill.household_id is not None
+            split_count = getattr(bill, "split_member_count", 1) or 1
+            # Compute the most recent due date before window_start
+            due_day = bill.due_day or 1
+            overdue_date = _actual_due_date(due_day, window_start.year, window_start.month)
+            if overdue_date >= window_start:
+                # Try previous month
+                prev_m = window_start.month - 1
+                prev_y = window_start.year
+                if prev_m < 1:
+                    prev_m = 12
+                    prev_y -= 1
+                overdue_date = _actual_due_date(due_day, prev_y, prev_m)
+            if overdue_date >= window_start or overdue_date >= current_date:
+                continue
+            days = (overdue_date - current_date).days
+            items.append(
+                {
+                    "id": bill.id,
+                    "name": bill.name,
+                    "item_type": "bill",
+                    "amount": user_amount,
+                    "full_amount": full_amount if is_split else None,
+                    "due_date": overdue_date,
+                    "days_until_due": days,
+                    "status": "overdue",
+                    "auto_pay": bool(bill.auto_pay),
+                    "is_split": is_split,
+                    "split_count": split_count if is_split else 1,
+                    "is_paid": False,
+                    "is_overdue": True,
+                    "hidden_overdue": bool(getattr(bill, "hidden_overdue", False)),
                 }
             )
 

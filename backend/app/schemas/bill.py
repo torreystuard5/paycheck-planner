@@ -71,6 +71,7 @@ class BillResponse(BaseModel):
     is_active: bool = True
     is_tax_deductible: bool = False
     tax_category: Optional[str] = None
+    hidden_overdue: bool = False
     payment_mode: Optional[str] = "single"
     assigned_member_id: Optional[UUID] = None
     assigned_member_name: Optional[str] = None
