@@ -123,6 +123,57 @@ def _advance_to_current(
     return candidate
 
 
+def _most_recent_pay_date(
+    anchor: date, frequency: str, current_date: date
+) -> date:
+    """Find the most recent pay date that is ON or BEFORE *current_date*.
+
+    This is the start of the pay period the user is currently living in.
+    """
+    if frequency == "weekly":
+        periods = (current_date - anchor).days // 7  # floor
+        candidate = anchor + timedelta(weeks=periods)
+        # Clamp: if anchor is in the future, candidate could overshoot
+        if candidate > current_date and periods > 0:
+            candidate = anchor + timedelta(weeks=periods - 1)
+        return candidate
+
+    if frequency == "biweekly":
+        periods = (current_date - anchor).days // 14  # floor
+        candidate = anchor + timedelta(weeks=2 * periods)
+        if candidate > current_date and periods > 0:
+            candidate = anchor + timedelta(weeks=2 * (periods - 1))
+        return candidate
+
+    if frequency == "semi_monthly":
+        if anchor.day <= 15:
+            day_a, day_b = anchor.day, anchor.day + 15
+        else:
+            day_a, day_b = anchor.day - 15, anchor.day
+
+        # Walk backwards from current_date's month
+        y, m = current_date.year, current_date.month
+        for _ in range(3):
+            max_day = calendar.monthrange(y, m)[1]
+            for d in sorted({min(day_a, max_day), min(day_b, max_day)}, reverse=True):
+                candidate = date(y, m, d)
+                if candidate <= current_date:
+                    return candidate
+            if m == 1:
+                y, m = y - 1, 12
+            else:
+                m -= 1
+        return anchor  # fallback
+
+    # monthly or unknown
+    candidate = anchor
+    prev = candidate
+    while candidate <= current_date:
+        prev = candidate
+        candidate = _add_months(candidate, 1)
+    return prev
+
+
 # ── Pay-period windows ─────────────────────────────────────────────
 
 
@@ -344,54 +395,13 @@ def build_paycheck_plan(
         next_pay = user.next_pay_date
 
     # Find the current pay period: the most recent pay date <= today.
-    # The plan should show from that date forward (not skip to next).
-    if next_pay <= current_date:
-        # Advance to the NEXT pay date strictly after today
-        future_pay = _advance_to_current(next_pay, frequency, current_date)
-        if future_pay <= current_date:
-            # Edge case: advance one more period
-            future_pay = _advance_to_current(next_pay, frequency, current_date + timedelta(days=1))
-
-        # Walk back one period to find the current period start
-        if frequency == "weekly":
-            current_period_start = future_pay - timedelta(weeks=1)
-        elif frequency == "biweekly":
-            current_period_start = future_pay - timedelta(weeks=2)
-        elif frequency == "semi_monthly":
-            # For semi-monthly, generate dates around the boundary
-            # to find the pay date just before future_pay
-            if next_pay.day <= 15:
-                day_a, day_b = next_pay.day, next_pay.day + 15
-            else:
-                day_a, day_b = next_pay.day - 15, next_pay.day
-            # Search backwards from future_pay's month
-            found = None
-            y, m = future_pay.year, future_pay.month
-            for _ in range(3):
-                max_day = calendar.monthrange(y, m)[1]
-                for d in sorted({min(day_a, max_day), min(day_b, max_day)}, reverse=True):
-                    candidate = date(y, m, d)
-                    if candidate < future_pay and candidate >= next_pay:
-                        if found is None or candidate > found:
-                            found = candidate
-                if found is not None:
-                    break
-                # go to previous month
-                if m == 1:
-                    y, m = y - 1, 12
-                else:
-                    m -= 1
-            current_period_start = found if found else future_pay
-        else:
-            # monthly or unknown
-            current_period_start = _add_months(future_pay, -1)
-
-        # Validate: current_period_start must be <= today
-        if current_period_start > current_date:
-            current_period_start = future_pay
-
-        next_pay = current_period_start
-    # else next_pay is already in the future — use it as first period
+    # This works identically regardless of whether next_pay is in the past
+    # or future, so both household members always get the same result.
+    most_recent = _most_recent_pay_date(next_pay, frequency, current_date)
+    if most_recent <= current_date:
+        next_pay = most_recent
+    # else: next_pay is in the future and there's no prior pay date
+    #       from this anchor — use it as the first upcoming period
 
     # Index logged paycheck entries by pay_date for O(1) lookup
     entry_by_date: dict[date, Decimal] = {}
