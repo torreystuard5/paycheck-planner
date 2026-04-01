@@ -9,13 +9,10 @@ import {
   Calendar as CalendarIcon,
   X,
   ExternalLink,
-  Lock,
-  Heart,
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -79,30 +76,6 @@ function EventPill({ evt, onClick }) {
       {evt.type === 'paycheck' && <span className="mr-0.5">$</span>}
       {evt.title}
     </button>
-  );
-}
-
-// ── Upgrade CTA ──
-function UpgradePrompt() {
-  return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-8 max-w-md space-y-5">
-        <div className="mx-auto w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
-          <Lock className="h-7 w-7 text-blue-600" />
-        </div>
-        <h2 className="text-xl font-bold text-gray-900">Calendar View is a Pro Feature</h2>
-        <p className="text-sm text-gray-600 leading-relaxed">
-          See all your bills, debts, and paychecks on one visual calendar. Upgrade to Pro to unlock this and other premium features.
-        </p>
-        <Link
-          to="/supporter"
-          className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Heart className="h-4 w-4" />
-          Upgrade to Pro
-        </Link>
-      </div>
-    </div>
   );
 }
 
@@ -177,7 +150,6 @@ function EventDetail({ evt, onClose, onTogglePaid }) {
 
 // ── Main component ──
 export default function Calendar() {
-  const { user } = useAuth();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth()); // 0-indexed
@@ -185,9 +157,6 @@ export default function Calendar() {
   const [loading, setLoading] = useState(true);
   const [selectedEvt, setSelectedEvt] = useState(null);
   const [expandedDay, setExpandedDay] = useState(null);
-
-  // Pro gate check
-  const isPro = user?.is_supporter || user?.subscription_tier === 'lifetime';
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -201,9 +170,7 @@ export default function Calendar() {
     }
   }, [month, year]);
 
-  useEffect(() => { if (isPro) fetchEvents(); else setLoading(false); }, [isPro, fetchEvents]);
-
-  if (!isPro) return <UpgradePrompt />;
+  useEffect(() => { fetchEvents(); }, [fetchEvents]);
 
   const goPrev = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }

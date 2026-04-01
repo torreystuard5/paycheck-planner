@@ -31,7 +31,7 @@ const links = [
   { to: '/payments', label: 'Payments', icon: DollarSign },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/household', label: 'Household', icon: Users },
-  { to: '/calendar', label: 'Calendar', icon: CalendarDays, proOnly: true },
+  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/vault', label: 'Secure Vault', icon: Lock },
   { to: '/refer', label: 'Refer a Friend', icon: Gift },
   { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
