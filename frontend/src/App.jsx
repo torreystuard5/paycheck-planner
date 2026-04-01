@@ -27,6 +27,7 @@ import AdminUsers from './pages/AdminUsers';
 import CommandCenter from './pages/CommandCenter';
 import Refer from './pages/Refer';
 import Vault from './pages/Vault';
+import Calendar from './pages/Calendar';
 import NotFound from './pages/NotFound';
 import TermsOfService from './pages/legal/TermsOfService';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
@@ -81,6 +82,7 @@ export default function App() {
             <Route path="income" element={<Income />} />
             <Route path="refer" element={<Refer />} />
             <Route path="vault" element={<Vault />} />
+            <Route path="calendar" element={<Calendar />} />
             <Route path="admin/tickets" element={<AdminTickets />} />
             <Route path="admin/stats" element={<AdminStats />} />
             <Route path="admin/users" element={<AdminUsers />} />

@@ -17,6 +17,7 @@ import {
   Gift,
   Shield,
   Lock,
+  CalendarDays,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import logo from '../../assets/PayDrift-Logo.jpg';
@@ -30,6 +31,7 @@ const links = [
   { to: '/payments', label: 'Payments', icon: DollarSign },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/household', label: 'Household', icon: Users },
+  { to: '/calendar', label: 'Calendar', icon: CalendarDays, proOnly: true },
   { to: '/vault', label: 'Secure Vault', icon: Lock },
   { to: '/refer', label: 'Refer a Friend', icon: Gift },
   { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
@@ -72,7 +74,7 @@ export default function Sidebar({ open, onClose }) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {links.filter(l => !l.adminOnly || user?.is_admin).map(({ to, label, icon: Icon, warm }) => (
+        {links.filter(l => (!l.adminOnly || user?.is_admin) && (!l.proOnly || user?.is_supporter || user?.subscription_tier === 'lifetime')).map(({ to, label, icon: Icon, warm }) => (
           <NavLink
             key={to}
             to={to}

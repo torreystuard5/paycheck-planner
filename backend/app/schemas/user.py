@@ -36,6 +36,8 @@ class UserResponse(BaseModel):
     household_id: UUID | None
     is_active: bool
     is_admin: bool = False
+    is_supporter: bool = False
+    subscription_tier: str = "early_access"
     tos_accepted_at: datetime | None = None
     tos_version: str | None = None
     created_at: datetime
