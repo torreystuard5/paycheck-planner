@@ -21,6 +21,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { APP_VERSION } from '../../config';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
 const links = [
@@ -114,6 +115,7 @@ export default function Sidebar({ open, onClose }) {
             <LogOut className="h-5 w-5" />
           </button>
         </div>
+        <p className="text-[11px] text-gray-400 mt-2 text-center">PayDrift {APP_VERSION}</p>
       </div>
     </div>
   );

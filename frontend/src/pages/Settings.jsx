@@ -7,6 +7,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { getFormatPreview, formatFriendlyDate } from '../utils/formatDate';
 import DateInput from '../components/DateInput';
+import { APP_VERSION } from '../config';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const SCHEDULE_FREQUENCIES = ['weekly', 'biweekly', 'semi_monthly', 'monthly'];
@@ -560,6 +561,9 @@ export default function Settings() {
           </form>
         </div>
       </div>
+
+      {/* Version footer */}
+      <p className="text-xs text-gray-400 text-center pt-4">PayDrift {APP_VERSION}</p>
 
       {/* Paycheck Schedule Modal */}
       <Modal isOpen={showScheduleModal} onClose={() => setShowScheduleModal(false)} title={editingSchedule ? 'Edit Schedule' : 'Add Paycheck Schedule'}>
