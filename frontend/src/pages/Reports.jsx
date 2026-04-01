@@ -111,14 +111,12 @@ export default function Reports() {
                     cy="50%"
                     outerRadius={100}
                     dataKey="value"
-                    label={({ name, percent }) => `${name} ${(toSafeNumber(percent) * 100).toFixed(0)}%`}
                   >
                     {categoryData.map((_, idx) => (
                       <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value) => [`$${toSafeNumber(value).toFixed(2)}`, 'Amount']} />
-                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
               <div className="w-full lg:w-64 space-y-2">

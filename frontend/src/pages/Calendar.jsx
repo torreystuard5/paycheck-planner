@@ -171,18 +171,19 @@ export default function Calendar() {
   const [loading, setLoading] = useState(true);
   const [selectedEvt, setSelectedEvt] = useState(null);
   const [expandedDay, setExpandedDay] = useState(null);
+  const [view, setView] = useState('household');
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/api/v1/calendar', { params: { month: month + 1, year } });
+      const { data } = await api.get('/api/v1/calendar', { params: { month: month + 1, year, view } });
       setEvents(data);
     } catch {
       setEvents([]);
     } finally {
       setLoading(false);
     }
-  }, [month, year]);
+  }, [month, year, view]);
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
 
@@ -241,6 +242,32 @@ export default function Calendar() {
       <div className="flex items-center gap-3">
         <CalendarIcon className="h-7 w-7 text-blue-600" />
         <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
+      </div>
+
+      {/* View toggle */}
+      <div className="flex justify-center">
+        <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+          <button
+            onClick={() => setView('household')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              view === 'household'
+                ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Household
+          </button>
+          <button
+            onClick={() => setView('personal')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              view === 'personal'
+                ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Personal
+          </button>
+        </div>
       </div>
 
       {/* Month nav */}
