@@ -12,8 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.debt import Debt
+from app.models.debt_payment import DebtPayment
+from app.models.income import IncomeSource
 from app.models.paycheck_entry import PaycheckEntry
 from app.models.user import User
+from app.services.paycheck_engine import _advance_to_current, generate_pay_dates
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/calendar", tags=["Calendar"])
@@ -147,6 +150,16 @@ async def get_calendar_events(
     )
     debts = debt_result.scalars().all()
 
+    # Fetch debt payments for this month to determine paid status
+    debt_payment_result = await db.execute(
+        select(DebtPayment.debt_id).where(
+            DebtPayment.user_id == current_user.id,
+            DebtPayment.period_month == month,
+            DebtPayment.period_year == year,
+        )
+    )
+    paid_debt_ids = {row[0] for row in debt_payment_result.all()}
+
     for debt in debts:
         due_day = debt.due_day
         if due_day:
@@ -159,10 +172,11 @@ async def get_calendar_events(
                 title=debt.name or "Untitled Debt",
                 amount=float(debt.minimum_payment or 0),
                 category=None,
-                is_paid=None,
+                is_paid=debt.id in paid_debt_ids,
             ))
 
     # ── Paychecks ──────────────────────────────────────────────
+    # Include manually-logged paycheck entries
     paycheck_result = await db.execute(
         select(PaycheckEntry).where(
             PaycheckEntry.user_id == current_user.id,
@@ -171,22 +185,74 @@ async def get_calendar_events(
         )
     )
     paychecks = paycheck_result.scalars().all()
+    logged_pay_dates: set[date] = set()
 
     for pc in paychecks:
         source_name = ""
         if pc.income_source_id:
-            from app.models.income import IncomeSource
             src = await db.get(IncomeSource, pc.income_source_id)
             source_name = src.name if src else ""
+        pd = pc.pay_date
+        if hasattr(pd, 'date'):
+            pd = pd.date()
+        logged_pay_dates.add(pd)
         events.append(CalendarEvent(
             id=f"paycheck_{pc.id}",
             type="paycheck",
-            date=pc.pay_date,
+            date=pd,
             title=f"Paycheck{' - ' + source_name if source_name else ''}",
             amount=float(pc.net_amount or 0),
             category=None,
             is_paid=None,
         ))
+
+    # Generate scheduled paycheck dates from income sources
+    income_result = await db.execute(
+        select(IncomeSource).where(
+            IncomeSource.user_id == current_user.id,
+            IncomeSource.is_active.is_(True),
+        )
+    )
+    income_sources = income_result.scalars().all()
+
+    month_start = date(year, month, 1)
+    last_day_num = calendar.monthrange(year, month)[1]
+    month_end = date(year, month, last_day_num)
+
+    for src in income_sources:
+        if not src.next_pay_date or not src.frequency:
+            continue
+        anchor = src.next_pay_date
+        if hasattr(anchor, 'date'):
+            anchor = anchor.date()
+        # Advance anchor to near the start of the target month
+        if anchor < month_start:
+            anchor = _advance_to_current(anchor, src.frequency, month_start)
+            # Step back one period so we don't miss a date at month_start
+            back_dates = generate_pay_dates(anchor, src.frequency, 2)
+            if len(back_dates) >= 2:
+                step = (back_dates[1] - back_dates[0]).days
+                candidate = anchor - timedelta(days=step)
+                if candidate >= month_start:
+                    anchor = candidate
+        # Generate enough dates to cover the month (6 is plenty for any frequency)
+        gen_dates = generate_pay_dates(anchor, src.frequency, 6)
+        for pd in gen_dates:
+            if pd < month_start:
+                continue
+            if pd > month_end:
+                break
+            if pd in logged_pay_dates:
+                continue  # already have a manual entry for this date
+            events.append(CalendarEvent(
+                id=f"scheduled_paycheck_{src.id}_{pd.isoformat()}",
+                type="paycheck",
+                date=pd,
+                title=f"Paycheck{' - ' + (src.name or '') if src.name else ''}",
+                amount=float(src.amount or 0),
+                category=None,
+                is_paid=None,
+            ))
 
     # Sort by date
     events.sort(key=lambda e: e.date)

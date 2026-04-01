@@ -54,7 +54,10 @@ function formatCurrency(n) {
 // ── Pill colors ──
 function eventColor(evt) {
   if (evt.type === 'paycheck') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-  if (evt.type === 'debt') return 'bg-violet-100 text-violet-700 border-violet-200';
+  if (evt.type === 'debt') {
+    if (evt.is_paid) return 'bg-green-100 text-green-700 border-green-200';
+    return 'bg-violet-100 text-violet-700 border-violet-200';
+  }
   // bill
   return evt.is_paid
     ? 'bg-green-100 text-green-700 border-green-200'
@@ -63,7 +66,7 @@ function eventColor(evt) {
 
 function eventDot(evt) {
   if (evt.type === 'paycheck') return 'bg-emerald-500';
-  if (evt.type === 'debt') return 'bg-violet-500';
+  if (evt.type === 'debt') return evt.is_paid ? 'bg-green-500' : 'bg-violet-500';
   return evt.is_paid ? 'bg-green-500' : 'bg-amber-500';
 }
 
@@ -117,20 +120,31 @@ function EventDetail({ evt, onClose, onTogglePaid }) {
               <span className="text-sm text-gray-700">{evt.category}</span>
             </div>
           )}
-          {evt.type === 'bill' && evt.is_paid !== null && (
+          {(evt.type === 'bill' || evt.type === 'debt') && evt.is_paid !== null && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Status</span>
-              <button
-                onClick={() => onTogglePaid(evt)}
-                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+              {evt.type === 'bill' ? (
+                <button
+                  onClick={() => onTogglePaid(evt)}
+                  className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                    evt.is_paid
+                      ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                      : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  }`}
+                >
+                  {evt.is_paid ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                  {evt.is_paid ? 'Paid' : 'Unpaid'}
+                </button>
+              ) : (
+                <span className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border ${
                   evt.is_paid
-                    ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                }`}
-              >
-                {evt.is_paid ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
-                {evt.is_paid ? 'Paid' : 'Unpaid'}
-              </button>
+                    ? 'bg-green-50 text-green-700 border-green-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}>
+                  {evt.is_paid ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                  {evt.is_paid ? 'Paid' : 'Unpaid'}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -365,7 +379,7 @@ export default function Calendar() {
                           <p className={`text-sm font-semibold ${evt.type === 'paycheck' ? 'text-emerald-600' : 'text-gray-900'}`}>
                             {formatCurrency(evt.amount)}
                           </p>
-                          {evt.type === 'bill' && (
+                          {(evt.type === 'bill' || evt.type === 'debt') && evt.is_paid !== null && (
                             <p className={`text-[10px] font-medium ${evt.is_paid ? 'text-green-600' : 'text-amber-600'}`}>
                               {evt.is_paid ? 'Paid' : 'Unpaid'}
                             </p>
