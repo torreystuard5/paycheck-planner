@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import {
   FileText,
   Plus,
@@ -8,15 +7,12 @@ import {
   Trash2,
   Search,
   ArrowUpDown,
-  Lock,
-  Heart,
   DollarSign,
   TrendingUp,
   Hash,
   Tag,
 } from 'lucide-react';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -58,30 +54,6 @@ const defaultForm = {
   receipt_note: '',
 };
 
-// ── Upgrade CTA ──
-function UpgradePrompt() {
-  return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-8 max-w-md space-y-5">
-        <div className="mx-auto w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
-          <Lock className="h-7 w-7 text-blue-600" />
-        </div>
-        <h2 className="text-xl font-bold text-gray-900">Tax Prep is a Pro Feature</h2>
-        <p className="text-sm text-gray-600 leading-relaxed">
-          Track tax-deductible expenses, generate summaries by category, and export CSV reports for tax filing. Upgrade to Pro to unlock.
-        </p>
-        <Link
-          to="/supporter"
-          className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Heart className="h-4 w-4" />
-          Upgrade to Pro
-        </Link>
-      </div>
-    </div>
-  );
-}
-
 // ── Category bar chart ──
 function CategoryBars({ byCategory, total }) {
   const entries = Object.entries(byCategory).sort(([, a], [, b]) => Number(b) - Number(a));
@@ -113,7 +85,6 @@ function CategoryBars({ byCategory, total }) {
 
 // ── Main component ──
 export default function TaxPrep() {
-  const { user } = useAuth();
   const toast = useToast();
   const currentYear = new Date().getFullYear();
 
@@ -135,9 +106,6 @@ export default function TaxPrep() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  // Pro gate
-  const isPro = user?.is_supporter || user?.subscription_tier === 'lifetime';
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -155,12 +123,7 @@ export default function TaxPrep() {
     }
   }, [taxYear]);
 
-  useEffect(() => {
-    if (isPro) fetchData();
-    else setLoading(false);
-  }, [isPro, fetchData]);
-
-  if (!isPro) return <UpgradePrompt />;
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   // Year options
   const yearOptions = [];

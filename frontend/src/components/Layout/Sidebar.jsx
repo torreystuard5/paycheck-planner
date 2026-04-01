@@ -33,7 +33,7 @@ const links = [
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/household', label: 'Household', icon: Users },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
-  { to: '/tax-prep', label: 'Tax Prep', icon: FileText, proOnly: true },
+  { to: '/tax-prep', label: 'Tax Prep', icon: FileText },
   { to: '/vault', label: 'Secure Vault', icon: Lock },
   { to: '/refer', label: 'Refer a Friend', icon: Gift },
   { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
