@@ -165,22 +165,15 @@ export default function Dashboard() {
   const totalDebtCount = Array.isArray(debts) ? debts.length : 0;
   const savingsCount = Array.isArray(savingsGoals) ? savingsGoals.length : 0;
 
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
   const billsThisMonth = Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false) : [];
-  const paidThisMonth = billsThisMonth.filter((b) => {
-    if (!b.is_paid || !b.paid_date) return false;
-    const pd = new Date(b.paid_date);
-    return pd.getMonth() === currentMonth && pd.getFullYear() === currentYear;
-  });
-  const paidCount = paidThisMonth.length;
+  const paidBills = billsThisMonth.filter(b => b.is_paid);
+  const paidCount = paidBills.length;
   const totalBillCount = billsThisMonth.length;
 
   // Build unified bill subtitle — combined count + dollar amounts
   const getBillSubtitle = () => {
     if (totalBillCount === 0) return null;
-    const paidBillsTotal = paidThisMonth.reduce((s, b) => s + (Number(b.user_share ?? b.amount) || 0), 0);
+    const paidBillsTotal = paidBills.reduce((s, b) => s + (Number(b.user_share ?? b.amount) || 0), 0);
     return `${paidCount}/${totalBillCount} bills paid \u00b7 ${fmtCurrency(paidBillsTotal)} of ${fmtCurrency(totalBills)}`;
   };
 

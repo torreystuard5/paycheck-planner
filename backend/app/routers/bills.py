@@ -176,6 +176,8 @@ def _bill_to_response(
         paid_date=bill.paid_date,
         paid_amount=bill.paid_amount,
         is_active=bill.is_active,
+        is_tax_deductible=bill.is_tax_deductible,
+        tax_category=bill.tax_category,
         payment_mode=bill.payment_mode,
         assigned_member_id=bill.assigned_member_id,
         assigned_member_name=assigned_name,
@@ -222,6 +224,8 @@ async def create_bill(
         assigned_member_id=data.assigned_member_id,
         day_of_week=data.day_of_week,
         start_date=data.start_date,
+        is_tax_deductible=data.is_tax_deductible,
+        tax_category=data.tax_category,
     )
     db.add(bill)
     await db.flush()
