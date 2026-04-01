@@ -14,10 +14,8 @@ from app.database import get_db
 from app.models.bill import Bill
 from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
-from app.models.income import IncomeSource
 from app.models.paycheck_entry import PaycheckEntry
 from app.models.user import User
-from app.services.paycheck_engine import _advance_to_current, generate_pay_dates
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/calendar", tags=["Calendar"])
@@ -95,63 +93,6 @@ def _bill_weekly_dates_in_month(bill: Bill, year: int, month: int) -> list[date]
         dates.append(current)
         current += timedelta(days=7)
     return dates
-
-
-def _add_paycheck_events_for_source(
-    src: IncomeSource,
-    year: int,
-    month: int,
-    logged_pay_dates: set[date],
-    owner_name: str | None,
-) -> list[CalendarEvent]:
-    """Generate scheduled paycheck events for one income source."""
-    events: list[CalendarEvent] = []
-    if not src.next_pay_date or not src.frequency:
-        return events
-
-    month_start = date(year, month, 1)
-    last_day_num = calendar.monthrange(year, month)[1]
-    month_end = date(year, month, last_day_num)
-
-    anchor = src.next_pay_date
-    if hasattr(anchor, "date"):
-        anchor = anchor.date()
-    if anchor < month_start:
-        anchor = _advance_to_current(anchor, src.frequency, month_start)
-        back_dates = generate_pay_dates(anchor, src.frequency, 2)
-        if len(back_dates) >= 2:
-            step = (back_dates[1] - back_dates[0]).days
-            candidate = anchor - timedelta(days=step)
-            if candidate >= month_start:
-                anchor = candidate
-
-    gen_dates = generate_pay_dates(anchor, src.frequency, 6)
-    label_parts = []
-    if src.name:
-        label_parts.append(src.name)
-    if owner_name:
-        label_parts.append(owner_name)
-    title = "Paycheck"
-    if label_parts:
-        title += " - " + " · ".join(label_parts)
-
-    for pd in gen_dates:
-        if pd < month_start:
-            continue
-        if pd > month_end:
-            break
-        if pd in logged_pay_dates:
-            continue
-        events.append(CalendarEvent(
-            id=f"scheduled_paycheck_{src.id}_{pd.isoformat()}",
-            type="paycheck",
-            date=pd,
-            title=title,
-            amount=float(src.amount or 0),
-            category=None,
-            is_paid=None,
-        ))
-    return events
 
 
 @router.get("", response_model=list[CalendarEvent])
@@ -338,18 +279,13 @@ async def get_calendar_events(
             )
         )
         paychecks = paycheck_result.scalars().all()
-        logged_pay_dates_by_user: dict[str, set[date]] = {uid: set() for uid in member_ids}
 
         for pc in paychecks:
-            source_name = ""
-            if pc.income_source_id:
-                src = await db.get(IncomeSource, pc.income_source_id)
-                source_name = src.name if src else ""
+            source_name = pc.source_name or ""
             pd = pc.pay_date
             if hasattr(pd, "date"):
                 pd = pd.date()
             uid = pc.user_id
-            logged_pay_dates_by_user.setdefault(uid, set()).add(pd)
             owner_name = members.get(uid, "")
             label_parts = []
             if source_name:
@@ -368,21 +304,6 @@ async def get_calendar_events(
                 category=None,
                 is_paid=None,
             ))
-
-        # Scheduled paychecks for all household members
-        income_result = await db.execute(
-            select(IncomeSource).where(
-                IncomeSource.user_id.in_(member_ids),
-                IncomeSource.is_active.is_(True),
-            )
-        )
-        income_sources = income_result.scalars().all()
-        for src in income_sources:
-            owner_name = members.get(src.user_id, "")
-            logged = logged_pay_dates_by_user.get(src.user_id, set())
-            events.extend(
-                _add_paycheck_events_for_source(src, year, month, logged, owner_name)
-            )
     else:
         # Personal view or no household: current user only
         paycheck_result = await db.execute(
@@ -393,17 +314,12 @@ async def get_calendar_events(
             )
         )
         paychecks = paycheck_result.scalars().all()
-        logged_pay_dates: set[date] = set()
 
         for pc in paychecks:
-            source_name = ""
-            if pc.income_source_id:
-                src = await db.get(IncomeSource, pc.income_source_id)
-                source_name = src.name if src else ""
+            source_name = pc.source_name or ""
             pd = pc.pay_date
             if hasattr(pd, "date"):
                 pd = pd.date()
-            logged_pay_dates.add(pd)
             events.append(CalendarEvent(
                 id=f"paycheck_{pc.id}",
                 type="paycheck",
@@ -413,19 +329,6 @@ async def get_calendar_events(
                 category=None,
                 is_paid=None,
             ))
-
-        # Scheduled paychecks for current user
-        income_result = await db.execute(
-            select(IncomeSource).where(
-                IncomeSource.user_id == current_user.id,
-                IncomeSource.is_active.is_(True),
-            )
-        )
-        income_sources = income_result.scalars().all()
-        for src in income_sources:
-            events.extend(
-                _add_paycheck_events_for_source(src, year, month, logged_pay_dates, None)
-            )
 
     # Sort by date
     events.sort(key=lambda e: e.date)
