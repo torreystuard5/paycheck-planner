@@ -201,6 +201,9 @@ def assign_bills_to_paycheck(
     items: list[dict] = []
     seen_bill_ids: set = set()
 
+    # Is this the current (active) pay period?
+    is_current_period = window_start <= current_date <= window_end
+
     for bill in bills:
         due_dates = _due_dates_in_window(
             bill.due_day, bill.frequency, window_start, window_end
@@ -228,7 +231,20 @@ def assign_bills_to_paycheck(
                 except (ValueError, AttributeError, TypeError):
                     paid_for_period = False
 
-            is_overdue = (due_dt < current_date) and (not paid_for_period)
+            # For the global is_paid flag (not period-specific), also accept
+            # bills marked paid even if paid_date is outside the window.
+            if not paid_for_period and getattr(bill, "is_paid", False):
+                paid_for_period = True
+
+            # A bill is overdue ONLY if the ENTIRE pay period it belongs to
+            # has already ended AND it was not paid.  Bills in the current
+            # (active) period are never overdue — they're just unpaid.
+            if is_current_period:
+                is_overdue = False
+            else:
+                # This is a past period: overdue if window has ended and
+                # the bill wasn't paid.
+                is_overdue = (window_end < current_date) and (not paid_for_period)
 
             seen_bill_ids.add(bill.id)
             items.append(
@@ -251,12 +267,16 @@ def assign_bills_to_paycheck(
             )
 
     # ── Carry forward overdue bills from previous periods ──
-    # Only for the current pay period (the one containing today)
-    if window_start <= current_date <= window_end:
+    # Only inject into the current pay period.  A bill qualifies as
+    # "carried-forward overdue" when:
+    #   1. It is NOT paid (is_paid == False)
+    #   2. It was NOT already assigned to the current window
+    #   3. Its most recent due date fell BEFORE window_start (i.e.,
+    #      it belonged to a previous, completed pay period)
+    if is_current_period:
         for bill in bills:
             if bill.id in seen_bill_ids:
                 continue
-            # Bill is unpaid and its due date has passed (before this window)
             if getattr(bill, "is_paid", False):
                 continue
             full_amount = Decimal(str(bill.amount or 0))
@@ -276,7 +296,9 @@ def assign_bills_to_paycheck(
                     prev_m = 12
                     prev_y -= 1
                 overdue_date = _actual_due_date(due_day, prev_y, prev_m)
-            if overdue_date >= window_start or overdue_date >= current_date:
+            # Only carry forward if the due date is strictly before the
+            # current window — it must belong to a completed past period.
+            if overdue_date >= window_start:
                 continue
             days = (overdue_date - current_date).days
             items.append(
@@ -315,7 +337,12 @@ def assign_bills_to_paycheck(
         debt_is_paid = debt.id in paid_debt_ids
         for due_dt in due_dates:
             days = (due_dt - current_date).days
-            is_overdue = (due_dt < current_date) and (not debt_is_paid)
+            # Same logic as bills: debts in the current period are never
+            # overdue.  Only past-period unpaid debts are overdue.
+            if is_current_period:
+                is_overdue = False
+            else:
+                is_overdue = (window_end < current_date) and (not debt_is_paid)
 
             items.append(
                 {
