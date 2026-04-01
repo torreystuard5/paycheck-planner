@@ -10,6 +10,7 @@ export default function Login() {
   const { login } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [errorType, setErrorType] = useState('error');
   const [submitting, setSubmitting] = useState(false);
 
   // Contact Support state
@@ -22,12 +23,14 @@ export default function Login() {
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     setError('');
+    setErrorType('error');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setError('');
+    setErrorType('error');
 
     try {
       const result = await login(form.email, form.password);
@@ -41,9 +44,23 @@ export default function Login() {
       }
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      const msg =
-        err.response?.data?.detail || 'Invalid email or password. Please try again.';
-      setError(msg);
+      const status = err.response?.status;
+      if (status === 401 || status === 403) {
+        setErrorType('error');
+        setError(err.response?.data?.detail || 'Invalid email or password. Please try again.');
+      } else if (status === 503 || status === 502) {
+        setErrorType('warning');
+        setError('PayDrift is currently undergoing maintenance. Please try again shortly.');
+      } else if (status >= 500) {
+        setErrorType('error');
+        setError('Something went wrong on our end. Please try again later.');
+      } else if (!err.response) {
+        setErrorType('warning');
+        setError('Unable to reach the server. Please check your connection and try again.');
+      } else {
+        setErrorType('error');
+        setError(err.response?.data?.detail || 'An unexpected error occurred. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -70,7 +87,11 @@ export default function Login() {
       <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign In</h2>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+        <div className={`mb-4 rounded-lg p-3 text-sm ${
+          errorType === 'warning'
+            ? 'bg-amber-50 border border-amber-200 text-amber-700'
+            : 'bg-red-50 border border-red-200 text-red-700'
+        }`}>
           {error}
         </div>
       )}
