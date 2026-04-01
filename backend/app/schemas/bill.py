@@ -23,6 +23,8 @@ class BillCreate(BaseModel):
     assigned_member_id: Optional[UUID] = None
     day_of_week: Optional[int] = Field(default=None, ge=0, le=6)
     start_date: Optional[date] = None
+    is_tax_deductible: Optional[bool] = False
+    tax_category: Optional[str] = Field(default=None, max_length=50)
 
 
 class BillUpdate(BaseModel):
@@ -43,6 +45,8 @@ class BillUpdate(BaseModel):
     assigned_member_id: Optional[UUID] = None
     day_of_week: Optional[int] = Field(default=None, ge=0, le=6)
     start_date: Optional[date] = None
+    is_tax_deductible: Optional[bool] = None
+    tax_category: Optional[str] = None
 
 
 class BillPayRequest(BaseModel):
@@ -65,6 +69,8 @@ class BillResponse(BaseModel):
     paid_date: Optional[datetime] = None
     paid_amount: Optional[Decimal] = None
     is_active: bool = True
+    is_tax_deductible: bool = False
+    tax_category: Optional[str] = None
     payment_mode: Optional[str] = "single"
     assigned_member_id: Optional[UUID] = None
     assigned_member_name: Optional[str] = None

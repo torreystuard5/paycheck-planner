@@ -28,6 +28,8 @@ const FREQUENCIES = [
 ];
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+const TAX_CATEGORIES = ['Medical', 'Charitable', 'Business', 'Education', 'Home Office', 'State/Local Taxes', 'Other'];
+
 const defaultForm = {
   name: '',
   amount: '',
@@ -40,6 +42,8 @@ const defaultForm = {
   assigned_member_id: '',
   day_of_week: '',
   start_date: '',
+  is_tax_deductible: false,
+  tax_category: '',
 };
 
 const fmtCurrency = (val) => {
@@ -195,6 +199,8 @@ export default function Bills() {
       amount: bill.amount || '',
       due_day: bill.due_day || '',
       category: bill.category || 'Other',
+      is_tax_deductible: bill.is_tax_deductible || false,
+      tax_category: bill.tax_category || '',
       frequency: bill.frequency || 'monthly',
       auto_pay: bill.auto_pay ?? false,
       reminder_days: bill.reminder_days ?? 3,
@@ -276,6 +282,8 @@ export default function Bills() {
         amount: form.amount ? parseFloat(form.amount) : null,
         due_day: form.due_day ? parseInt(form.due_day, 10) : null,
         category: form.category || null,
+        is_tax_deductible: form.is_tax_deductible,
+        tax_category: form.is_tax_deductible ? (form.tax_category || null) : null,
         frequency: form.frequency || 'monthly',
         auto_pay: form.auto_pay,
         reminder_days: parseInt(form.reminder_days, 10) || 3,
@@ -1161,6 +1169,19 @@ export default function Bills() {
             <input type="checkbox" id="auto_pay" checked={form.auto_pay} onChange={(e) => setForm({ ...form, auto_pay: e.target.checked })} className="rounded border-gray-300" />
             <label htmlFor="auto_pay" className="text-sm text-gray-700">Auto-pay enabled</label>
           </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="tax_deductible" checked={form.is_tax_deductible} onChange={(e) => setForm({ ...form, is_tax_deductible: e.target.checked })} className="rounded border-gray-300" />
+            <label htmlFor="tax_deductible" className="text-sm text-gray-700">Tax deductible</label>
+          </div>
+          {form.is_tax_deductible && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tax Category</label>
+              <select value={form.tax_category} onChange={(e) => setForm({ ...form, tax_category: e.target.value })} className={inputClass}>
+                <option value="">Select category...</option>
+                {TAX_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">

@@ -25,6 +25,7 @@ from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.paycheck_entry import PaycheckEntry
 from app.models.system_setting import SystemSetting
 from app.models.broadcast import Broadcast
+from app.models.tax_deduction import TaxDeduction
 
 __all__ = [
     "PromoCode",
@@ -55,4 +56,5 @@ __all__ = [
     "PaycheckEntry",
     "SystemSetting",
     "Broadcast",
+    "TaxDeduction",
 ]

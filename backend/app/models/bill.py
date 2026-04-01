@@ -56,6 +56,10 @@ class Bill(Base):
         nullable=True,
     )
 
+    # Tax deduction tracking
+    is_tax_deductible: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    tax_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
     # New fields: biweekly support
     day_of_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
     start_date: Mapped[str | None] = mapped_column(Date, nullable=True)

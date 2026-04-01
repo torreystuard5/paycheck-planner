@@ -18,6 +18,7 @@ import {
   Shield,
   Lock,
   CalendarDays,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import logo from '../../assets/PayDrift-Logo.jpg';
@@ -32,6 +33,7 @@ const links = [
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/household', label: 'Household', icon: Users },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { to: '/tax-prep', label: 'Tax Prep', icon: FileText, proOnly: true },
   { to: '/vault', label: 'Secure Vault', icon: Lock },
   { to: '/refer', label: 'Refer a Friend', icon: Gift },
   { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
