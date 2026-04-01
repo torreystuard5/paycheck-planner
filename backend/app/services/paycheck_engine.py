@@ -266,60 +266,6 @@ def assign_bills_to_paycheck(
                 }
             )
 
-    # ── Carry forward overdue bills from previous periods ──
-    # Only inject into the current pay period.  A bill qualifies as
-    # "carried-forward overdue" when:
-    #   1. It is NOT paid (is_paid == False)
-    #   2. It was NOT already assigned to the current window
-    #   3. Its most recent due date fell BEFORE window_start (i.e.,
-    #      it belonged to a previous, completed pay period)
-    if is_current_period:
-        for bill in bills:
-            if bill.id in seen_bill_ids:
-                continue
-            if getattr(bill, "is_paid", False):
-                continue
-            full_amount = Decimal(str(bill.amount or 0))
-            user_amount = getattr(bill, "user_share_amount", None)
-            if user_amount is None:
-                user_amount = full_amount
-            is_split = getattr(bill, "payment_mode", "single") == "split" and bill.household_id is not None
-            split_count = getattr(bill, "split_member_count", 1) or 1
-            # Compute the most recent due date before window_start
-            due_day = bill.due_day or 1
-            overdue_date = _actual_due_date(due_day, window_start.year, window_start.month)
-            if overdue_date >= window_start:
-                # Try previous month
-                prev_m = window_start.month - 1
-                prev_y = window_start.year
-                if prev_m < 1:
-                    prev_m = 12
-                    prev_y -= 1
-                overdue_date = _actual_due_date(due_day, prev_y, prev_m)
-            # Only carry forward if the due date is strictly before the
-            # current window — it must belong to a completed past period.
-            if overdue_date >= window_start:
-                continue
-            days = (overdue_date - current_date).days
-            items.append(
-                {
-                    "id": bill.id,
-                    "name": bill.name,
-                    "item_type": "bill",
-                    "amount": user_amount,
-                    "full_amount": full_amount if is_split else None,
-                    "due_date": overdue_date,
-                    "days_until_due": days,
-                    "status": "overdue",
-                    "auto_pay": bool(bill.auto_pay),
-                    "is_split": is_split,
-                    "split_count": split_count if is_split else 1,
-                    "is_paid": False,
-                    "is_overdue": True,
-                    "hidden_overdue": bool(getattr(bill, "hidden_overdue", False)),
-                }
-            )
-
     if paid_debt_ids is None:
         paid_debt_ids = set()
 

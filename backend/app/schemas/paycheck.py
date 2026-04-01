@@ -20,6 +20,7 @@ class PaycheckItem(BaseModel):
     split_count: int = 1
     is_paid: bool = False
     is_overdue: bool = False
+    hidden_overdue: bool = False
 
 
 class PaycheckPlan(BaseModel):
