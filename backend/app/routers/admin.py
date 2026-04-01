@@ -23,6 +23,8 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 from app.schemas.admin import (
+    AdminHouseholdListResponse,
+    AdminHouseholdSummary,
     AdminStatsResponse,
     AdminToggleRequest,
     AdminUserDetailResponse,
@@ -193,6 +195,8 @@ async def list_admin_users(
     per_page: int = Query(50, ge=1, le=200),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    filter: str | None = Query(None, pattern="^(all|pro|free|active_30d)$"),
+    search: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -202,7 +206,33 @@ async def list_admin_users(
             detail="Admin access required",
         )
 
-    total = (await db.execute(select(func.count(User.id)))).scalar() or 0
+    now_ts = func.now()
+    thirty_days_ago_ts = now_ts - timedelta(days=30)
+
+    # Build base query with optional filter
+    base_where = []
+    if filter == "pro":
+        base_where.append(User.is_supporter.is_(True))
+    elif filter == "free":
+        base_where.append(User.is_supporter.is_(False))
+    elif filter == "active_30d":
+        base_where.append(
+            func.coalesce(User.last_login_at, User.updated_at) >= thirty_days_ago_ts
+        )
+    # filter == "all" or None → no extra where clause
+
+    if search:
+        term = f"%{search}%"
+        base_where.append(
+            (User.email.ilike(term))
+            | (User.first_name.ilike(term))
+            | (User.last_name.ilike(term))
+        )
+
+    count_q = select(func.count(User.id))
+    for cond in base_where:
+        count_q = count_q.where(cond)
+    total = (await db.execute(count_q)).scalar() or 0
 
     # Apply sorting
     if sort_by not in USER_SORT_FIELDS:
@@ -212,10 +242,12 @@ async def list_admin_users(
     order = sort_col.desc() if sort_order == "desc" else sort_col.asc()
 
     offset = (page - 1) * per_page
+    q = select(User)
+    for cond in base_where:
+        q = q.where(cond)
     rows = (
         await db.execute(
-            select(User)
-            .order_by(order)
+            q.order_by(order)
             .offset(offset)
             .limit(per_page)
         )
@@ -247,6 +279,69 @@ async def list_admin_users(
 
     return AdminUserListResponse(
         users=users_out,
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
+
+
+# ── Households ─────────────────────────────────────────────────────
+
+
+@router.get("/households", response_model=AdminHouseholdListResponse)
+async def list_admin_households(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    base_q = select(Household)
+    count_q = select(func.count(Household.id))
+
+    if search:
+        term = f"%{search}%"
+        base_q = base_q.where(Household.name.ilike(term) | Household.invite_code.ilike(term))
+        count_q = count_q.where(Household.name.ilike(term) | Household.invite_code.ilike(term))
+
+    total = (await db.execute(count_q)).scalar() or 0
+    offset = (page - 1) * per_page
+
+    rows = (
+        await db.execute(
+            base_q.order_by(Household.created_at.desc())
+            .offset(offset)
+            .limit(per_page)
+        )
+    ).scalars().all()
+
+    # Batch-fetch member counts
+    hh_ids = [h.id for h in rows]
+    member_counts = {}
+    if hh_ids:
+        mc_rows = (
+            await db.execute(
+                select(User.household_id, func.count(User.id))
+                .where(User.household_id.in_(hh_ids))
+                .group_by(User.household_id)
+            )
+        ).all()
+        member_counts = {r[0]: r[1] for r in mc_rows}
+
+    items = []
+    for h in rows:
+        s = AdminHouseholdSummary.model_validate(h)
+        s.member_count = member_counts.get(h.id, 0)
+        items.append(s)
+
+    return AdminHouseholdListResponse(
+        households=items,
         total=total,
         page=page,
         per_page=per_page,

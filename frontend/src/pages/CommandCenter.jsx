@@ -55,6 +55,7 @@ import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SortDropdown from '../components/SortDropdown';
+import AdminDrillDown from '../components/AdminDrillDown';
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -197,6 +198,7 @@ function DashboardTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [drillDown, setDrillDown] = useState(null);
 
   const fetchAll = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -235,18 +237,22 @@ function DashboardTab() {
   if (!stats) return <p className="text-gray-500 text-center py-8">No data available.</p>;
 
   const cards = [
-    { label: 'Total Signups', value: stats.total_users, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Pro Subscribers', value: stats.total_pro_subscribers, icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { label: 'Free Users', value: stats.total_free_users, icon: User, color: 'text-gray-600', bg: 'bg-gray-100' },
-    { label: 'Active Last 30 Days', value: stats.total_active_users_30d, icon: Activity, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Households', value: stats.total_households, icon: Home, color: 'text-purple-600', bg: 'bg-purple-50' },
-    { label: 'Support Tickets', value: stats.total_support_tickets, icon: MessageSquare, color: 'text-rose-600', bg: 'bg-rose-50' },
+    { label: 'Total Signups', value: stats.total_users, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', drillKey: 'total_signups' },
+    { label: 'Pro Subscribers', value: stats.total_pro_subscribers, icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50', drillKey: 'pro_subscribers' },
+    { label: 'Free Users', value: stats.total_free_users, icon: User, color: 'text-gray-600', bg: 'bg-gray-100', drillKey: 'free_users' },
+    { label: 'Active Last 30 Days', value: stats.total_active_users_30d, icon: Activity, color: 'text-green-600', bg: 'bg-green-50', drillKey: 'active_30d' },
+    { label: 'Households', value: stats.total_households, icon: Home, color: 'text-purple-600', bg: 'bg-purple-50', drillKey: 'households' },
+    { label: 'Support Tickets', value: stats.total_support_tickets, icon: MessageSquare, color: 'text-rose-600', bg: 'bg-rose-50', drillKey: 'support_tickets' },
   ];
 
   const chartData = (stats.signups_last_7_days || []).map((d) => ({
     date: formatFriendlyDate(d.date),
     signups: d.count,
   }));
+
+  if (drillDown) {
+    return <AdminDrillDown drillKey={drillDown} onBack={() => setDrillDown(null)} />;
+  }
 
   return (
     <div className="space-y-6">
@@ -264,16 +270,20 @@ function DashboardTab() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {cards.map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex items-center gap-4">
-            <div className={`${bg} p-3 rounded-lg`}>
+        {cards.map(({ label, value, icon: Icon, color, bg, drillKey }) => (
+          <button
+            key={label}
+            onClick={() => setDrillDown(drillKey)}
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex items-center gap-4 text-left hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group w-full"
+          >
+            <div className={`${bg} p-3 rounded-lg group-hover:scale-105 transition-transform`}>
               <Icon className={`h-6 w-6 ${color}`} />
             </div>
-            <div>
-              <p className="text-sm text-gray-500">{label}</p>
+            <div className="min-w-0">
+              <p className="text-sm text-gray-500 group-hover:text-blue-600 transition-colors">{label}</p>
               <p className="text-2xl font-bold text-gray-900">{(value ?? 0).toLocaleString()}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 

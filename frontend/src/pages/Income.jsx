@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit, Trash2, Wallet, Calendar, ChevronDown, ChevronUp, DollarSign, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, Wallet, Calendar, ChevronDown, ChevronUp, DollarSign, RefreshCw, Clock, Archive } from 'lucide-react';
 import SortDropdown from '../components/SortDropdown';
 import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
@@ -48,6 +48,10 @@ export default function Income() {
   const [entryForm, setEntryForm] = useState(defaultEntryForm);
   const [savingEntry, setSavingEntry] = useState(false);
   const [deleteEntryTarget, setDeleteEntryTarget] = useState(null);
+  const [allEntries, setAllEntries] = useState([]);
+  const [expandedEntryId, setExpandedEntryId] = useState(null);
+  const [showArchive, setShowArchive] = useState(false);
+  const [firstLoad, setFirstLoad] = useState(true);
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -57,20 +61,30 @@ export default function Income() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const [incomesRes, entriesRes, summaryRes] = await Promise.allSettled([
+      const [incomesRes, entriesRes, summaryRes, allEntriesRes] = await Promise.allSettled([
         api.get(`/api/v1/income?sort_by=${sortBy}&sort_order=${sortOrder}`),
         api.get(`/api/v1/paycheck-entries?month=${currentMonth}&year=${currentYear}`),
         api.get(`/api/v1/paycheck-entries/monthly-summary?month=${currentMonth}&year=${currentYear}`),
+        api.get('/api/v1/paycheck-entries'),
       ]);
       if (incomesRes.status === 'fulfilled') setIncomes(Array.isArray(incomesRes.value.data) ? incomesRes.value.data : []);
       if (entriesRes.status === 'fulfilled') setEntries(Array.isArray(entriesRes.value.data) ? entriesRes.value.data : []);
       if (summaryRes.status === 'fulfilled') setMonthlySummary(summaryRes.value.data);
+      if (allEntriesRes.status === 'fulfilled') {
+        const all = Array.isArray(allEntriesRes.value.data) ? allEntriesRes.value.data : [];
+        setAllEntries(all);
+        // Auto-expand the most recent entry on first load
+        if (firstLoad && all.length > 0) {
+          setExpandedEntryId(all[0].id);
+          setFirstLoad(false);
+        }
+      }
     } catch {
       setError('Failed to load income data.');
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [sortBy, sortOrder, currentMonth, currentYear]);
+  }, [sortBy, sortOrder, currentMonth, currentYear, firstLoad]);
 
   useEffect(() => {
     fetchIncomes(true);
@@ -252,37 +266,103 @@ export default function Income() {
         </div>
       </div>
 
-      {/* Paycheck entries this month */}
-      {entries.length > 0 && (
+      {/* Paycheck History */}
+      {allEntries.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Paychecks This Month</h2>
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="h-5 w-5 text-gray-400" />
+            <h2 className="text-lg font-semibold text-gray-900">Paycheck History</h2>
+            <span className="text-xs font-medium px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+              {allEntries.length} check{allEntries.length !== 1 ? 's' : ''}
+            </span>
+          </div>
           <div className="space-y-2">
-            {entries.map((entry) => {
+            {(showArchive ? allEntries : allEntries.slice(0, 10)).map((entry) => {
               const source = incomes.find((s) => s.id === entry.income_source_id);
+              const isExpEntry = expandedEntryId === entry.id;
               return (
-                <div key={entry.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="bg-green-50 p-2 rounded-lg shrink-0">
-                      <DollarSign className="h-5 w-5 text-green-600" />
+                <div key={entry.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => setExpandedEntryId(isExpEntry ? null : entry.id)}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="bg-green-50 p-2 rounded-lg shrink-0">
+                        <DollarSign className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{source?.name || 'Paycheck'}</p>
+                        <p className="text-xs text-gray-500">{formatFriendlyDate(entry.pay_date)}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{source?.name || 'Paycheck'}</p>
-                      <p className="text-xs text-gray-500">{formatFriendlyDate(entry.pay_date)}{entry.memo ? ` — ${entry.memo}` : ''}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <CurrencyDisplay amount={entry.net_amount} className="text-base font-bold text-gray-900" />
+                      {isExpEntry ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <CurrencyDisplay amount={entry.net_amount} className="text-base font-bold text-gray-900" />
-                    <button onClick={() => openEditEntry(entry)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setDeleteEntryTarget(entry)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  </button>
+                  <div
+                    className="overflow-hidden transition-all duration-300 ease-in-out"
+                    style={{ maxHeight: isExpEntry ? '250px' : '0px', opacity: isExpEntry ? 1 : 0 }}
+                  >
+                    <div className="px-4 pb-4">
+                      <div className="border-t border-gray-200 pt-3 space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Pay Date</span>
+                          <span className="text-gray-700">{formatFriendlyDate(entry.pay_date)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Source</span>
+                          <span className="text-gray-700">{source?.name || '—'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Net (Take-Home)</span>
+                          <CurrencyDisplay amount={entry.net_amount} className="font-medium text-gray-900" />
+                        </div>
+                        {entry.gross_amount && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Gross</span>
+                            <CurrencyDisplay amount={entry.gross_amount} className="font-medium text-gray-700" />
+                          </div>
+                        )}
+                        {entry.memo && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Memo</span>
+                            <span className="text-gray-700">{entry.memo}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-end gap-2 pt-2">
+                          <button onClick={(e) => { e.stopPropagation(); openEditEntry(entry); }} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); setDeleteEntryTarget(entry); }} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
+          {!showArchive && allEntries.length > 10 && (
+            <button
+              onClick={() => setShowArchive(true)}
+              className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <Archive className="h-4 w-4" />
+              View Archive ({allEntries.length - 10} older)
+            </button>
+          )}
+          {showArchive && allEntries.length > 10 && (
+            <button
+              onClick={() => setShowArchive(false)}
+              className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <ChevronUp className="h-4 w-4" />
+              Hide Archive
+            </button>
+          )}
         </div>
       )}
 

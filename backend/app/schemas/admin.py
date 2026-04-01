@@ -96,6 +96,28 @@ class AdminUserUpdate(BaseModel):
     is_active: bool | None = None
 
 
+# --- Household List Schemas ---
+
+
+class AdminHouseholdSummary(BaseModel):
+    id: UUID
+    name: str | None
+    split_method: str
+    invite_code: str
+    created_by: UUID
+    created_at: datetime
+    member_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class AdminHouseholdListResponse(BaseModel):
+    households: list[AdminHouseholdSummary]
+    total: int
+    page: int
+    per_page: int
+
+
 # --- Audit Log Schemas ---
 
 
