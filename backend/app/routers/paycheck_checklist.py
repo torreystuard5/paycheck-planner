@@ -88,10 +88,10 @@ async def _sync_debt_payment(
 ):
     """Create or remove a DebtPayment record to stay in sync."""
     today = date.today()
+    # Check for payment by ANY household member (not just current user)
     existing_result = await db.execute(
         select(DebtPayment).where(
             DebtPayment.debt_id == debt_id,
-            DebtPayment.user_id == user.id,
             DebtPayment.period_month == today.month,
             DebtPayment.period_year == today.year,
         )

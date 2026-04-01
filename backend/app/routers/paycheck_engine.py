@@ -154,12 +154,15 @@ async def _fetch_paycheck_entries(db: AsyncSession, user_id) -> list:
 
 
 async def _get_paid_debt_ids(db: AsyncSession, user_id) -> set:
-    """Return set of debt IDs that have a DebtPayment for the current month."""
+    """Return set of debt IDs that have a DebtPayment for the current month.
+
+    Not filtered by user_id so that household members see each other's
+    debt payments.  The caller already scopes debts to the user/household.
+    """
     from datetime import date as _date
     today = _date.today()
     result = await db.execute(
         select(DebtPayment.debt_id).where(
-            DebtPayment.user_id == user_id,
             DebtPayment.period_month == today.month,
             DebtPayment.period_year == today.year,
         )

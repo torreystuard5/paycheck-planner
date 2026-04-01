@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import extract, select
+from sqlalchemy import extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -106,12 +106,20 @@ async def get_calendar_events(
     events: list[CalendarEvent] = []
 
     # ── Bills ──────────────────────────────────────────────────
-    bill_result = await db.execute(
-        select(Bill).where(
+    if current_user.household_id:
+        bill_query = select(Bill).where(
+            or_(
+                Bill.user_id == current_user.id,
+                Bill.household_id == current_user.household_id,
+            ),
+            Bill.is_active.is_(True),
+        )
+    else:
+        bill_query = select(Bill).where(
             Bill.user_id == current_user.id,
             Bill.is_active.is_(True),
         )
-    )
+    bill_result = await db.execute(bill_query)
     bills = bill_result.scalars().all()
 
     for bill in bills:
@@ -142,23 +150,35 @@ async def get_calendar_events(
                 ))
 
     # ── Debts ──────────────────────────────────────────────────
-    debt_result = await db.execute(
-        select(Debt).where(
+    if current_user.household_id:
+        debt_query = select(Debt).where(
+            or_(
+                Debt.user_id == current_user.id,
+                Debt.household_id == current_user.household_id,
+            ),
+            Debt.is_active.is_(True),
+        )
+    else:
+        debt_query = select(Debt).where(
             Debt.user_id == current_user.id,
             Debt.is_active.is_(True),
         )
-    )
+    debt_result = await db.execute(debt_query)
     debts = debt_result.scalars().all()
 
-    # Fetch debt payments for this month to determine paid status
-    debt_payment_result = await db.execute(
-        select(DebtPayment.debt_id).where(
-            DebtPayment.user_id == current_user.id,
-            DebtPayment.period_month == month,
-            DebtPayment.period_year == year,
+    # Fetch debt payments for this month to determine paid status.
+    # For household debts, ANY member's payment counts as paid.
+    debt_ids = [d.id for d in debts]
+    paid_debt_ids: set = set()
+    if debt_ids:
+        debt_payment_result = await db.execute(
+            select(DebtPayment.debt_id).where(
+                DebtPayment.debt_id.in_(debt_ids),
+                DebtPayment.period_month == month,
+                DebtPayment.period_year == year,
+            )
         )
-    )
-    paid_debt_ids = {row[0] for row in debt_payment_result.all()}
+        paid_debt_ids = {row[0] for row in debt_payment_result.all()}
 
     for debt in debts:
         due_day = debt.due_day

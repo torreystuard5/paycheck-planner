@@ -65,11 +65,12 @@ async def _debt_to_response(
     resp.next_due_date = _compute_debt_next_due_date(debt.due_day)
 
     today = date.today()
+    # Check if ANY household member has paid this debt for the current period.
+    # This ensures paid status syncs across household members.
     result = await db.execute(
         select(DebtPayment)
         .where(
             DebtPayment.debt_id == debt.id,
-            DebtPayment.user_id == user_id,
             DebtPayment.period_month == today.month,
             DebtPayment.period_year == today.year,
         )
@@ -80,7 +81,7 @@ async def _debt_to_response(
 
     last_result = await db.execute(
         select(DebtPayment)
-        .where(DebtPayment.debt_id == debt.id, DebtPayment.user_id == user_id)
+        .where(DebtPayment.debt_id == debt.id)
         .order_by(DebtPayment.payment_date.desc())
         .limit(1)
     )
@@ -198,10 +199,10 @@ async def mark_debt_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     today = date.today()
+    # Check if ANY household member already paid this debt for the period
     existing = await db.execute(
         select(DebtPayment).where(
             DebtPayment.debt_id == debt_id,
-            DebtPayment.user_id == current_user.id,
             DebtPayment.period_month == today.month,
             DebtPayment.period_year == today.year,
         )
@@ -287,10 +288,10 @@ async def unmark_debt_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     today = date.today()
+    # Find the payment for this period regardless of which household member made it
     payment_result = await db.execute(
         select(DebtPayment).where(
             DebtPayment.debt_id == debt_id,
-            DebtPayment.user_id == current_user.id,
             DebtPayment.period_month == today.month,
             DebtPayment.period_year == today.year,
         )
