@@ -21,7 +21,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [income, setIncome] = useState([]);
+  const [incomeSummary, setIncomeSummary] = useState(null);
   const [bills, setBills] = useState([]);
   const [debts, setDebts] = useState([]);
   const [savingsGoals, setSavingsGoals] = useState([]);
@@ -73,14 +73,14 @@ export default function Dashboard() {
     setError(null);
     try {
       const [incomeRes, billsRes, debtsRes, savingsRes, paymentsRes] = await Promise.allSettled([
-        api.get('/api/v1/income'),
+        api.get('/api/v1/paycheck-entries/monthly-summary'),
         api.get('/api/v1/bills'),
         api.get('/api/v1/debts'),
         api.get('/api/v1/savings/goals'),
         api.get('/api/v1/payments?limit=5'),
       ]);
 
-      if (incomeRes.status === 'fulfilled') setIncome(incomeRes.value.data || []);
+      if (incomeRes.status === 'fulfilled') setIncomeSummary(incomeRes.value.data || null);
       if (billsRes.status === 'fulfilled') setBills(billsRes.value.data || []);
       if (debtsRes.status === 'fulfilled') setDebts(debtsRes.value.data || []);
       if (savingsRes.status === 'fulfilled') setSavingsGoals(savingsRes.value.data || []);
@@ -173,7 +173,8 @@ export default function Dashboard() {
 
   if (loading) return <LoadingSpinner />;
 
-  const totalIncome = Array.isArray(income) ? income.reduce((sum, i) => sum + (Number(i.amount) || 0), 0) : 0;
+  const totalIncome = incomeSummary ? Number(incomeSummary.total_net) || 0 : 0;
+  const incomePaycheckCount = incomeSummary ? incomeSummary.paycheck_count || 0 : 0;
   const totalBills = Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false).reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0) : 0;
   const totalDebt = Array.isArray(debts) ? debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0) : 0;
   const debtsPaidThisPeriod = Array.isArray(debts) ? debts.filter(d => d.is_paid_this_period).length : 0;
@@ -223,7 +224,7 @@ export default function Dashboard() {
   };
 
   const summaryCards = [
-    { label: 'Total Income', value: totalIncome, icon: DollarSign, color: 'text-green-500', bg: 'bg-green-50' },
+    { label: 'Total Income', value: totalIncome, icon: DollarSign, color: 'text-green-500', bg: 'bg-green-50', subtitle: incomePaycheckCount > 0 ? `${incomePaycheckCount} paycheck${incomePaycheckCount !== 1 ? 's' : ''} this month` : 'No paychecks logged' },
     { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50', subtitle: getBillSubtitle(), paidSubtitle: billsPaidSubtitle },
     { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50', subtitle: totalDebtCount > 0 ? `${debtsPaidThisPeriod}/${totalDebtCount} paid this month` : null, paidSubtitle: debtPaidSubtitle },
     { label: 'Savings Goals', value: null, count: savingsCount, icon: PiggyBank, color: 'text-purple-500', bg: 'bg-purple-50' },

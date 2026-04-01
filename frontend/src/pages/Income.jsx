@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Edit, Trash2, ChevronDown, ChevronUp, DollarSign, Clock, Archive } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Edit, Trash2, ChevronDown, ChevronUp, DollarSign, Clock, Archive, Calendar } from 'lucide-react';
 import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
 import Modal from '../components/Modal';
@@ -35,8 +35,18 @@ export default function Income() {
   const [firstLoad, setFirstLoad] = useState(true);
 
   const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+
+  // Generate last 12 months for the dropdown
+  const monthOptions = useMemo(() => {
+    const opts = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      opts.push({ month: d.getMonth() + 1, year: d.getFullYear(), label: d.toLocaleString('default', { month: 'long', year: 'numeric' }) });
+    }
+    return opts;
+  }, []);
 
   // Distinct source names for auto-fill
   const [distinctSources, setDistinctSources] = useState([]);
@@ -45,16 +55,14 @@ export default function Income() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const [entriesRes, summaryRes, allEntriesRes, sourcesRes] = await Promise.allSettled([
-        api.get(`/api/v1/paycheck-entries?month=${currentMonth}&year=${currentYear}`),
-        api.get(`/api/v1/paycheck-entries/monthly-summary?month=${currentMonth}&year=${currentYear}`),
-        api.get('/api/v1/paycheck-entries'),
+      const [entriesRes, summaryRes, sourcesRes] = await Promise.allSettled([
+        api.get(`/api/v1/paycheck-entries?month=${selectedMonth}&year=${selectedYear}`),
+        api.get(`/api/v1/paycheck-entries/monthly-summary?month=${selectedMonth}&year=${selectedYear}`),
         api.get('/api/v1/paycheck-entries/distinct-sources'),
       ]);
-      if (entriesRes.status === 'fulfilled') setEntries(Array.isArray(entriesRes.value.data) ? entriesRes.value.data : []);
-      if (summaryRes.status === 'fulfilled') setMonthlySummary(summaryRes.value.data);
-      if (allEntriesRes.status === 'fulfilled') {
-        const all = Array.isArray(allEntriesRes.value.data) ? allEntriesRes.value.data : [];
+      if (entriesRes.status === 'fulfilled') {
+        const all = Array.isArray(entriesRes.value.data) ? entriesRes.value.data : [];
+        setEntries(all);
         setAllEntries(all);
         // Auto-expand the most recent entry on first load
         if (firstLoad && all.length > 0) {
@@ -62,6 +70,7 @@ export default function Income() {
           setFirstLoad(false);
         }
       }
+      if (summaryRes.status === 'fulfilled') setMonthlySummary(summaryRes.value.data);
       if (sourcesRes.status === 'fulfilled') {
         setDistinctSources(Array.isArray(sourcesRes.value.data) ? sourcesRes.value.data : []);
       }
@@ -70,7 +79,7 @@ export default function Income() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [currentMonth, currentYear, firstLoad]);
+  }, [selectedMonth, selectedYear, firstLoad]);
 
   useEffect(() => {
     fetchData(true);
@@ -115,6 +124,12 @@ export default function Income() {
         await api.post('/api/v1/paycheck-entries', payload);
       }
       setShowEntryModal(false);
+      // Auto-select the month of the paycheck just logged/edited
+      if (entryForm.pay_date) {
+        const pd = new Date(entryForm.pay_date + 'T00:00:00');
+        setSelectedMonth(pd.getMonth() + 1);
+        setSelectedYear(pd.getFullYear());
+      }
       fetchData();
     } catch {
       setError('Failed to save paycheck entry.');
@@ -141,7 +156,13 @@ export default function Income() {
 
   if (loading) return <LoadingSpinner />;
 
-  const monthLabel = now.toLocaleString('default', { month: 'long', year: 'numeric' });
+  const monthLabel = new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+
+  const handleMonthChange = (e) => {
+    const [m, y] = e.target.value.split('-').map(Number);
+    setSelectedMonth(m);
+    setSelectedYear(y);
+  };
 
   return (
     <div className="space-y-6">
@@ -173,6 +194,20 @@ export default function Income() {
                 ? `Based on ${paycheckCount} logged paycheck${paycheckCount !== 1 ? 's' : ''}`
                 : 'No paychecks logged this month'}
             </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-gray-400" />
+            <select
+              value={`${selectedMonth}-${selectedYear}`}
+              onChange={handleMonthChange}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+            >
+              {monthOptions.map((opt) => (
+                <option key={`${opt.month}-${opt.year}`} value={`${opt.month}-${opt.year}`}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
