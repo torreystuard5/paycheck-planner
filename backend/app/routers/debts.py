@@ -119,10 +119,10 @@ async def _active_debts_as_dicts(db: AsyncSession, user: User) -> list[dict]:
             "id": d.id,
             "name": d.name,
             "type": d.type,
-            "balance": Decimal(str(d.balance)),
+            "balance": Decimal(str(d.balance or 0)),
             "credit_limit": Decimal(str(d.credit_limit)) if d.credit_limit is not None else None,
-            "apr": Decimal(str(d.apr)),
-            "minimum_payment": Decimal(str(d.minimum_payment)),
+            "apr": Decimal(str(d.apr or 0)),
+            "minimum_payment": Decimal(str(d.minimum_payment or 0)),
         }
         for d in debts
     ]

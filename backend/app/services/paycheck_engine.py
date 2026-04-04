@@ -386,13 +386,17 @@ def build_paycheck_plan(
     # Determine pay schedule — prefer first active income source, fall back to user profile
     if income_sources:
         source = income_sources[0]
-        default_pay_amount = Decimal(str(source.amount))
+        default_pay_amount = Decimal(str(source.amount or 0))
         frequency = source.frequency
         next_pay = source.next_pay_date
     else:
-        default_pay_amount = Decimal(str(user.net_pay_amount))
-        frequency = user.pay_frequency
+        default_pay_amount = Decimal(str(user.net_pay_amount or 0))
+        frequency = user.pay_frequency or "biweekly"
         next_pay = user.next_pay_date
+
+    # If no anchor pay date is available, default to today so the plan still renders
+    if next_pay is None:
+        next_pay = current_date
 
     # Find the current pay period: the most recent pay date <= today.
     # This works identically regardless of whether next_pay is in the past
@@ -410,7 +414,7 @@ def build_paycheck_plan(
             pd = entry.pay_date
             if isinstance(pd, datetime):
                 pd = pd.date()
-            entry_by_date[pd] = Decimal(str(entry.net_amount))
+            entry_by_date[pd] = Decimal(str(entry.net_amount or 0))
 
     # We need num_periods + 1 dates so the last period has a boundary
     pay_dates = generate_pay_dates(next_pay, frequency, num_periods + 1)

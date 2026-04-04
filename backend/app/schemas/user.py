@@ -30,9 +30,9 @@ class UserResponse(BaseModel):
     last_name: str
     currency: str
     date_format: str = "MM/DD/YYYY"
-    pay_frequency: str
-    next_pay_date: date
-    net_pay_amount: Decimal
+    pay_frequency: str | None = "biweekly"
+    next_pay_date: date | None = None
+    net_pay_amount: Decimal | None = Decimal("0")
     household_id: UUID | None
     is_active: bool
     is_admin: bool = False
