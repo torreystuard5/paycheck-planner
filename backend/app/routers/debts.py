@@ -352,24 +352,30 @@ async def create_debt(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    debt = Debt(
-        user_id=current_user.id,
-        household_id=current_user.household_id,
-        name=data.name,
-        type=data.type,
-        balance=data.balance,
-        credit_limit=data.credit_limit,
-        apr=data.apr,
-        minimum_payment=data.minimum_payment,
-        due_day=data.due_day,
-        auto_pay=data.auto_pay,
-        reminder_days=data.reminder_days,
-        is_split=data.is_split if data.is_split is not None else False,
-        split_members=json.dumps(data.split_members) if data.split_members is not None else None,
-    )
-    db.add(debt)
-    await db.flush()
-    await db.refresh(debt)
+    try:
+        debt = Debt(
+            user_id=current_user.id,
+            household_id=current_user.household_id,
+            name=data.name,
+            type=data.type,
+            balance=data.balance,
+            credit_limit=data.credit_limit,
+            apr=data.apr,
+            minimum_payment=data.minimum_payment,
+            due_day=data.due_day,
+            auto_pay=data.auto_pay if data.auto_pay is not None else False,
+            reminder_days=data.reminder_days if data.reminder_days is not None else 3,
+            is_split=data.is_split if data.is_split is not None else False,
+            split_members=json.dumps(data.split_members) if data.split_members is not None else None,
+        )
+        db.add(debt)
+        await db.flush()
+        await db.refresh(debt)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Could not create debt: {exc}",
+        )
 
     if current_user.household_id:
         try:

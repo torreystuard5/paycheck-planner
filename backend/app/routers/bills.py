@@ -212,32 +212,38 @@ async def create_bill(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    bill = Bill(
-        user_id=current_user.id,
-        household_id=current_user.household_id,
-        name=data.name,
-        amount=data.amount,
-        due_day=data.due_day,
-        frequency=data.frequency,
-        category=data.category,
-        auto_pay=data.auto_pay,
-        reminder_days=data.reminder_days,
-        payment_mode=data.payment_mode,
-        assigned_member_id=data.assigned_member_id,
-        day_of_week=data.day_of_week,
-        start_date=data.start_date,
-        is_tax_deductible=data.is_tax_deductible,
-        tax_category=data.tax_category,
-    )
-    db.add(bill)
-    await db.flush()
-    await db.refresh(bill)
-    # Eagerly load assigned_member for response
-    if bill.assigned_member_id:
-        result = await db.execute(
-            select(Bill).where(Bill.id == bill.id).options(selectinload(Bill.assigned_member))
+    try:
+        bill = Bill(
+            user_id=current_user.id,
+            household_id=current_user.household_id,
+            name=data.name,
+            amount=data.amount,
+            due_day=data.due_day,
+            frequency=data.frequency,
+            category=data.category,
+            auto_pay=data.auto_pay if data.auto_pay is not None else False,
+            reminder_days=data.reminder_days if data.reminder_days is not None else 3,
+            payment_mode=data.payment_mode,
+            assigned_member_id=data.assigned_member_id,
+            day_of_week=data.day_of_week,
+            start_date=data.start_date,
+            is_tax_deductible=data.is_tax_deductible,
+            tax_category=data.tax_category,
         )
-        bill = result.scalar_one()
+        db.add(bill)
+        await db.flush()
+        await db.refresh(bill)
+        # Eagerly load assigned_member for response
+        if bill.assigned_member_id:
+            result = await db.execute(
+                select(Bill).where(Bill.id == bill.id).options(selectinload(Bill.assigned_member))
+            )
+            bill = result.scalar_one()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Could not create bill: {exc}",
+        )
 
     await log_bill_action(
         db, bill.id, bill.name, current_user.id, "created",

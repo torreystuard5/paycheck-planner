@@ -202,8 +202,9 @@ export default function Debts() {
       }
       setShowModal(false);
       fetchDebts();
-    } catch {
-      setError('Failed to save debt.');
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setError(detail || 'Failed to save debt.');
     } finally {
       setSaving(false);
     }
@@ -215,8 +216,9 @@ export default function Debts() {
       await api.delete(`/api/v1/debts/${deleteTarget.id}`);
       setDeleteTarget(null);
       fetchDebts();
-    } catch {
-      setError('Failed to delete debt.');
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setError(detail || 'Failed to delete debt.');
     }
   };
 
@@ -248,7 +250,8 @@ export default function Debts() {
       if (err?.response?.status === 409) {
         fetchDebts();
       } else {
-        setError('Failed to mark debt as paid.');
+        const detail = err?.response?.data?.detail;
+        setError(detail || 'Failed to mark debt as paid.');
       }
     } finally {
       setMarkingPaid((prev) => ({ ...prev, [debtId]: false }));
