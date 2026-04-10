@@ -215,21 +215,45 @@ def _due_dates_in_window(
     frequency: str,
     window_start: date,
     window_end: date,
+    *,
+    day_of_week: int | None = None,
+    start_date: date | None = None,
 ) -> list[date]:
     """Return all due dates for an item that fall inside *[window_start, window_end]*.
 
-    For monthly items this is at most one date.  For higher-frequency items we
-    generate candidates for every month the window touches.
+    For monthly items this is at most one date.  For weekly/biweekly items we
+    use *day_of_week* and *start_date* to walk the correct cadence.
     """
-    candidates: list[date] = []
-    # Iterate over every month the window spans
+    # ── Weekly / biweekly: walk by week cadence ──────────────────
+    if frequency in ("weekly", "biweekly") and day_of_week is not None:
+        step_days = 7 if frequency == "weekly" else 14
+
+        # Find the first occurrence of this day-of-week on or after window_start
+        days_ahead = (day_of_week - window_start.weekday()) % 7
+        candidate = window_start + timedelta(days=days_ahead)
+
+        # For biweekly, align to the anchor cadence using start_date
+        if frequency == "biweekly" and start_date is not None:
+            delta = (candidate - start_date).days
+            weeks_off = delta // 7
+            if weeks_off % 2 != 0:
+                candidate += timedelta(days=7)
+
+        candidates: list[date] = []
+        while candidate <= window_end:
+            if candidate >= window_start:
+                candidates.append(candidate)
+            candidate += timedelta(days=step_days)
+        return candidates
+
+    # ── Monthly / other: iterate months ──────────────────────────
+    candidates = []
     y, m = window_start.year, window_start.month
     end_y, end_m = window_end.year, window_end.month
     while (y, m) <= (end_y, end_m):
         d = _actual_due_date(due_day, y, m)
         if window_start <= d <= window_end:
             candidates.append(d)
-        # advance month
         if m == 12:
             y, m = y + 1, 1
         else:
@@ -256,8 +280,11 @@ def assign_bills_to_paycheck(
     is_current_period = window_start <= current_date <= window_end
 
     for bill in bills:
+        freq = bill.frequency or "monthly"
         due_dates = _due_dates_in_window(
-            bill.due_day, bill.frequency, window_start, window_end
+            bill.due_day, freq, window_start, window_end,
+            day_of_week=getattr(bill, "day_of_week", None),
+            start_date=getattr(bill, "start_date", None),
         )
         full_amount = Decimal(str(bill.amount or 0))
         # Use user_share_amount if set (household-aware), otherwise full amount
@@ -266,11 +293,11 @@ def assign_bills_to_paycheck(
             user_amount = full_amount
         is_split = getattr(bill, "payment_mode", "single") == "split" and bill.household_id is not None
         split_count = getattr(bill, "split_member_count", 1) or 1
+        is_recurring = freq in ("weekly", "biweekly")
         for due_dt in due_dates:
             days = (due_dt - current_date).days
 
-            # A bill is only "paid" for this period if paid_date falls
-            # within the same pay-period window.
+            # Determine if the bill is paid *for this specific occurrence*.
             paid_for_period = False
             if getattr(bill, "is_paid", False) and getattr(bill, "paid_date", None):
                 pd = bill.paid_date
@@ -282,9 +309,11 @@ def assign_bills_to_paycheck(
                 except (ValueError, AttributeError, TypeError):
                     paid_for_period = False
 
-            # For the global is_paid flag (not period-specific), also accept
-            # bills marked paid even if paid_date is outside the window.
-            if not paid_for_period and getattr(bill, "is_paid", False):
+            # For non-recurring bills (monthly, etc.), the global is_paid flag
+            # is authoritative because there is at most one occurrence per
+            # month.  For weekly/biweekly bills, paid status MUST be
+            # period-scoped — a payment from a prior period does not count.
+            if not paid_for_period and getattr(bill, "is_paid", False) and not is_recurring:
                 paid_for_period = True
 
             # A bill is overdue ONLY if the ENTIRE pay period it belongs to
