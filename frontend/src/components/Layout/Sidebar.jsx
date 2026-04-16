@@ -60,8 +60,6 @@ const businessLinks = [
 ];
 
 const adminLinks = [
-  { to: '/admin/tickets', label: 'Support Tickets', icon: MessageSquare, adminOnly: true },
-  { to: '/admin/users', label: 'Users', icon: Users, adminOnly: true },
   { to: '/admin/command-center', label: 'Command Center', icon: Shield, adminOnly: true },
 ];
 

@@ -16,7 +16,7 @@ const TIER_COLORS = {
   early_access: 'bg-green-100 text-green-700',
 };
 
-export default function AdminUsers() {
+export default function AdminUsers({ embedded = false }) {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -445,7 +445,7 @@ export default function AdminUsers() {
   const bizFeatures = globalFeatures.filter(f => f.tier === 'business');
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className={embedded ? 'space-y-4' : 'min-h-screen bg-gray-50 p-6'}>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Users className="h-7 w-7 text-blue-600" />
