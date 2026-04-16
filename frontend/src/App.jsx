@@ -33,10 +33,19 @@ import Vault from './pages/Vault';
 import Calendar from './pages/Calendar';
 import TaxPrep from './pages/TaxPrep';
 import NotFound from './pages/NotFound';
+import SelectMode from './pages/SelectMode';
 import TermsOfService from './pages/legal/TermsOfService';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
 import CookiePolicy from './pages/legal/CookiePolicy';
 import Disclaimer from './pages/legal/Disclaimer';
+
+// Business placeholder pages
+import BizSales from './pages/biz/Sales';
+import BizDeductions from './pages/biz/Deductions';
+import BizStaffPay from './pages/biz/StaffPay';
+import BizContingency from './pages/biz/Contingency';
+import BizUpgradeFund from './pages/biz/UpgradeFund';
+import BizNetProfit from './pages/biz/NetProfit';
 
 function TosGate({ children }) {
   const { tosRequired, clearTosRequired } = useAuth();
@@ -75,6 +84,11 @@ export default function App() {
           <Route path="/cookies" element={<CookiePolicy />} />
           <Route path="/disclaimer" element={<Disclaimer />} />
 
+          {/* Mode selection (protected but no MainLayout) */}
+          <Route path="/select-mode" element={
+            <ProtectedRoute><SelectMode /></ProtectedRoute>
+          } />
+
           {/* Protected routes */}
           <Route
             element={
@@ -103,6 +117,14 @@ export default function App() {
             <Route path="admin/stats" element={<AdminStats />} />
             <Route path="admin/users" element={<AdminUsers />} />
             <Route path="admin/command-center" element={<CommandCenter />} />
+
+            {/* Business mode placeholder pages */}
+            <Route path="biz/sales" element={<BizSales />} />
+            <Route path="biz/deductions" element={<BizDeductions />} />
+            <Route path="biz/staff-pay" element={<BizStaffPay />} />
+            <Route path="biz/contingency" element={<BizContingency />} />
+            <Route path="biz/upgrade-fund" element={<BizUpgradeFund />} />
+            <Route path="biz/net-profit" element={<BizNetProfit />} />
           </Route>
 
           {/* 404 */}

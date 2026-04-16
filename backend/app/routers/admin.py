@@ -1443,3 +1443,299 @@ async def resubscribe_user(
     await db.flush()
 
     return {"message": f"{user.email} has been re-subscribed"}
+
+
+# ── Feature A: Toggle Active/Deactivated ───────────────────────
+
+@router.patch("/users/{user_id}/toggle-active")
+async def toggle_user_active(
+    user_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot toggle your own account",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.is_active = not user.is_active
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="toggled_active",
+        target_type="user",
+        target_id=str(user_id),
+        details=json.dumps({"is_active": user.is_active}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+    await db.refresh(user)
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "account_status": user.account_status,
+    }
+
+
+# ── Feature B: Per-User Tier Override ───────────────────────────
+
+from app.models.user_feature_override import UserFeatureOverride  # noqa: E402
+
+
+class OverrideBody(BaseModel):
+    override_tier: str | None = None
+    granted_features: list[str] | None = None
+    reason: str | None = None
+    expires_at: str | None = None
+
+
+VALID_TIERS = {None, "pro", "business", "bundle"}
+VALID_FEATURE_KEYS = {
+    "savings_challenges", "household_overview", "tax_prep", "receipt_ocr",
+    "bill_reminders", "spending_insights", "sales_tracking",
+    "business_deductions", "contingency_fund", "upgrade_fund", "net_profit",
+}
+
+
+@router.get("/users/{user_id}/override")
+async def get_user_override(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    result = await db.execute(
+        select(UserFeatureOverride).where(
+            UserFeatureOverride.user_id == user_id,
+            UserFeatureOverride.is_active == True,  # noqa: E712
+        )
+    )
+    override = result.scalar_one_or_none()
+    if not override:
+        return None
+
+    return {
+        "id": override.id,
+        "user_id": str(override.user_id),
+        "override_tier": override.override_tier,
+        "granted_features": override.granted_features or [],
+        "reason": override.reason,
+        "expires_at": override.expires_at.isoformat() if override.expires_at else None,
+        "granted_by": str(override.granted_by),
+        "is_active": override.is_active,
+        "created_at": override.created_at.isoformat() if override.created_at else None,
+    }
+
+
+@router.put("/users/{user_id}/override")
+async def upsert_user_override(
+    user_id: UUID,
+    body: OverrideBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    if body.override_tier not in VALID_TIERS:
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {body.override_tier}")
+
+    if body.granted_features:
+        invalid = set(body.granted_features) - VALID_FEATURE_KEYS
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"Invalid feature keys: {invalid}")
+
+    # Check user exists
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    if not user_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="User not found")
+
+    expires_at = None
+    if body.expires_at:
+        from datetime import datetime as dt
+        try:
+            expires_at = dt.fromisoformat(body.expires_at)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid expires_at format")
+
+    result = await db.execute(
+        select(UserFeatureOverride).where(UserFeatureOverride.user_id == user_id)
+    )
+    override = result.scalar_one_or_none()
+
+    if override:
+        override.override_tier = body.override_tier
+        override.granted_features = body.granted_features or []
+        override.reason = body.reason
+        override.expires_at = expires_at
+        override.granted_by = current_user.id
+        override.is_active = True
+    else:
+        override = UserFeatureOverride(
+            user_id=user_id,
+            override_tier=body.override_tier,
+            granted_features=body.granted_features or [],
+            reason=body.reason,
+            expires_at=expires_at,
+            granted_by=current_user.id,
+            is_active=True,
+        )
+        db.add(override)
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="upsert_override",
+        target_type="user",
+        target_id=str(user_id),
+        details=json.dumps({"tier": body.override_tier, "features": body.granted_features}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+
+    return {
+        "id": override.id,
+        "user_id": str(override.user_id),
+        "override_tier": override.override_tier,
+        "granted_features": override.granted_features or [],
+        "reason": override.reason,
+        "expires_at": override.expires_at.isoformat() if override.expires_at else None,
+        "granted_by": str(override.granted_by),
+        "is_active": override.is_active,
+    }
+
+
+@router.delete("/users/{user_id}/override")
+async def delete_user_override(
+    user_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    result = await db.execute(
+        select(UserFeatureOverride).where(UserFeatureOverride.user_id == user_id)
+    )
+    override = result.scalar_one_or_none()
+    if not override:
+        raise HTTPException(status_code=404, detail="No override found")
+
+    override.is_active = False
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="remove_override",
+        target_type="user",
+        target_id=str(user_id),
+        details=json.dumps({"deactivated": True}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+
+    return {"message": "Override removed"}
+
+
+# ── Feature C: Global Feature Toggles ──────────────────────────
+
+from app.models.global_feature_override import GlobalFeatureOverride  # noqa: E402
+
+
+@router.get("/global-features")
+async def list_global_features(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    result = await db.execute(
+        select(GlobalFeatureOverride).order_by(GlobalFeatureOverride.tier, GlobalFeatureOverride.feature_key)
+    )
+    features = result.scalars().all()
+    return [
+        {
+            "id": f.id,
+            "feature_key": f.feature_key,
+            "feature_label": f.feature_label,
+            "tier": f.tier,
+            "is_free_for_all": f.is_free_for_all,
+            "updated_by": f.updated_by,
+            "updated_at": f.updated_at.isoformat() if f.updated_at else None,
+        }
+        for f in features
+    ]
+
+
+class GlobalFeatureUpdate(BaseModel):
+    is_free_for_all: bool
+
+
+@router.put("/global-features/{feature_key}")
+async def toggle_global_feature(
+    feature_key: str,
+    body: GlobalFeatureUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    result = await db.execute(
+        select(GlobalFeatureOverride).where(GlobalFeatureOverride.feature_key == feature_key)
+    )
+    feature = result.scalar_one_or_none()
+    if not feature:
+        raise HTTPException(status_code=404, detail="Feature not found")
+
+    feature.is_free_for_all = body.is_free_for_all
+    feature.updated_by = current_user.id
+
+    # Force updated_at since onupdate only fires on flush if other cols changed
+    from datetime import datetime as dt, timezone as tz
+    feature.updated_at = dt.now(tz.utc)
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="toggle_global_feature",
+        target_type="global_feature",
+        target_id=feature_key,
+        details=json.dumps({"is_free_for_all": body.is_free_for_all}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+
+    return {
+        "feature_key": feature.feature_key,
+        "feature_label": feature.feature_label,
+        "tier": feature.tier,
+        "is_free_for_all": feature.is_free_for_all,
+        "updated_by": feature.updated_by,
+        "updated_at": feature.updated_at.isoformat() if feature.updated_at else None,
+    }

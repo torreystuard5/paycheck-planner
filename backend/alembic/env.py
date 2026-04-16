@@ -11,6 +11,7 @@ from app.models import (  # noqa: F401 — ensure all models are registered
     ActivityLog,
     Bill,
     Debt,
+    GlobalFeatureOverride,
     Household,
     IncomeSource,
     Payment,
@@ -20,6 +21,8 @@ from app.models import (  # noqa: F401 — ensure all models are registered
     Supporter,
     SupportTicket,
     User,
+    UserFeatureOverride,
+    UserUIPreference,
 )
 
 config = context.config

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle, ChevronRight, Square, CheckSquare, EyeOff, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle, ChevronRight, ChevronDown, Square, CheckSquare, EyeOff, Eye, ChevronUp, Briefcase } from 'lucide-react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,34 @@ const fmtCurrency = (val) => {
   const v = isNaN(n) ? 0 : n;
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
+
+function CollapsibleSection({ sectionKey, title, icon: Icon, iconColor, collapsed, onToggle, children }) {
+  const isCollapsed = collapsed.includes(sectionKey);
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <button
+        onClick={() => onToggle(sectionKey)}
+        className="w-full flex items-center justify-between p-6 pb-0 text-left"
+      >
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          {Icon && <Icon className={`w-5 h-5 ${iconColor || 'text-gray-500'}`} />}
+          {title}
+        </h2>
+        <ChevronDown
+          className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
+        />
+      </button>
+      <div
+        className="overflow-hidden transition-all duration-200 ease-in-out"
+        style={{ maxHeight: isCollapsed ? '0px' : '2000px', opacity: isCollapsed ? 0 : 1 }}
+      >
+        <div className="p-6 pt-4">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -36,10 +64,35 @@ export default function Dashboard() {
   const [showHiddenOverdue, setShowHiddenOverdue] = useState(false);
   const [hidingOverdue, setHidingOverdue] = useState({});
 
+  // Collapsible sections state
+  const [collapsedSections, setCollapsedSections] = useState([]);
+  const [sectionsLoaded, setSectionsLoaded] = useState(false);
+
+  // Load UI preferences on mount
+  useEffect(() => {
+    const loadPrefs = async () => {
+      try {
+        const { data } = await api.get('/api/v1/users/me/ui-preferences');
+        setCollapsedSections(data.collapsed_sections || []);
+      } catch { /* defaults */ }
+      setSectionsLoaded(true);
+    };
+    loadPrefs();
+  }, []);
+
+  const toggleSection = async (key) => {
+    const updated = collapsedSections.includes(key)
+      ? collapsedSections.filter(k => k !== key)
+      : [...collapsedSections, key];
+    setCollapsedSections(updated);
+    try {
+      await api.patch('/api/v1/users/me/ui-preferences', { collapsed_sections: updated });
+    } catch { /* ignore */ }
+  };
+
   const fetchChecklist = useCallback(async (payPeriodStart, assignedItems) => {
     if (!payPeriodStart) return;
 
-    // Build a set of items the engine considers paid (source of truth)
     const enginePaidKeys = new Set();
     const seedMap = {};
     if (Array.isArray(assignedItems)) {
@@ -58,7 +111,6 @@ export default function Dashboard() {
       const map = { ...seedMap };
       items.forEach((entry) => {
         const key = `${entry.item_type}_${entry.item_id}`;
-        // Engine is_paid wins — never let a stale checklist entry override it
         if (!enginePaidKeys.has(key)) {
           map[key] = entry.is_checked;
         }
@@ -102,16 +154,13 @@ export default function Dashboard() {
       }
       if (creditRes.status === 'fulfilled') setCreditScore(creditRes.value.data);
 
-      // Household data
       try {
         const hhRes = await api.get('/api/v1/households/me');
         setHousehold(hhRes.data);
         try {
           const actRes = await api.get('/api/v1/households/activity?limit=5');
           setRecentActivity(actRes.data.activities || []);
-        } catch {
-          // optional
-        }
+        } catch { /* optional */ }
       } catch {
         setHousehold(null);
         setRecentActivity([]);
@@ -149,7 +198,6 @@ export default function Dashboard() {
         pay_period_start: payPeriodStart,
         is_checked: newState,
       });
-      // Full re-fetch so paycheck plan, checklist, and summary cards all sync
       await fetchDashboardData();
     } catch {
       setChecklist((prev) => ({ ...prev, [key]: currentState }));
@@ -164,14 +212,14 @@ export default function Dashboard() {
     try {
       await api.patch(`/api/v1/bills/${billId}/${action}`);
       await fetchDashboardData();
-    } catch {
-      // ignore
-    } finally {
+    } catch { /* ignore */ } finally {
       setHidingOverdue((prev) => ({ ...prev, [billId]: false }));
     }
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (loading || !sectionsLoaded) return <LoadingSpinner />;
+
+  const isBusinessMode = user?.app_mode === 'business';
 
   const totalIncome = incomeSummary ? Number(incomeSummary.total_net) || 0 : 0;
   const incomePaycheckCount = incomeSummary ? incomeSummary.paycheck_count || 0 : 0;
@@ -186,14 +234,12 @@ export default function Dashboard() {
   const paidCount = paidBills.length;
   const totalBillCount = billsThisMonth.length;
 
-  // Build unified bill subtitle — combined count + dollar amounts
   const getBillSubtitle = () => {
     if (totalBillCount === 0) return null;
     const paidBillsTotal = paidBills.reduce((s, b) => s + (Number(b.user_share ?? b.amount) || 0), 0);
     return `${paidCount}/${totalBillCount} bills paid \u00b7 ${fmtCurrency(paidBillsTotal)} of ${fmtCurrency(totalBills)}`;
   };
 
-  // Compute paid amounts for bills and debts from current paycheck period
   const currentPaycheckItems = (paycheckPlan?.paychecks?.[0]?.assigned_items) || [];
   const billItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'bill');
   const debtItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'debt');
@@ -203,7 +249,6 @@ export default function Dashboard() {
     .filter(i => !!checklist[`${i.item_type}_${i.id || i.item_id}`])
     .reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
-  // Debt paid amounts — use is_paid from the engine (backed by DebtPayment) OR checklist
   const debtTotalInPlan = debtItemsInPlan.reduce((s, i) => s + (Number(i.amount) || 0), 0);
   const debtPaidInPlan = debtItemsInPlan
     .filter(i => i.is_paid || !!checklist[`${i.item_type}_${i.id || i.item_id}`])
@@ -251,6 +296,22 @@ export default function Dashboard() {
           </p>
         )}
       </div>
+
+      {/* Business mode banner */}
+      {isBusinessMode && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 flex items-center gap-3">
+          <div className="bg-purple-100 p-2 rounded-lg">
+            <Briefcase className="w-5 h-5 text-purple-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-purple-900">Business Dashboard — Coming Soon</p>
+            <p className="text-xs text-purple-600">Full business analytics and reporting features are on the way.</p>
+          </div>
+          <Link to="/settings" className="text-xs font-medium text-purple-700 hover:text-purple-800 shrink-0">
+            Switch Mode
+          </Link>
+        </div>
+      )}
 
       <RecentUpdates />
 
@@ -317,11 +378,14 @@ export default function Dashboard() {
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-blue-500" />
-            Current Paycheck Plan
-          </h2>
+        <CollapsibleSection
+          sectionKey="paycheck_plan"
+          title="Current Paycheck Plan"
+          icon={Calendar}
+          iconColor="text-blue-500"
+          collapsed={collapsedSections}
+          onToggle={toggleSection}
+        >
           {paycheckPlan?.current_paycheck_date && (
             <div className="mb-4 space-y-1">
               <div className="flex justify-between items-center">
@@ -347,18 +411,15 @@ export default function Dashboard() {
                 const payPeriodStart = next.pay_period_start || next.paycheck_date;
                 const assignedItems = Array.isArray(next.assigned_items) ? next.assigned_items : [];
 
-                // Separate hidden overdue items from visible items
                 const visibleItems = assignedItems.filter((item) => !(item.is_overdue && item.hidden_overdue && !checklist[`${item.item_type}_${item.id || item.item_id}`]));
                 const hiddenOverdueItems = assignedItems.filter((item) => item.is_overdue && item.hidden_overdue && !checklist[`${item.item_type}_${item.id || item.item_id}`]);
 
-                // Sort: unchecked first, checked last
                 const sortedItems = [...visibleItems].sort((a, b) => {
                   const aKey = `${a.item_type}_${a.id || a.item_id}`;
                   const bKey = `${b.item_type}_${b.id || b.item_id}`;
                   const aChecked = !!checklist[aKey];
                   const bChecked = !!checklist[bKey];
                   if (aChecked !== bChecked) return aChecked ? 1 : -1;
-                  // Within same checked group, sort by due date ascending
                   return new Date(a.due_date) - new Date(b.due_date);
                 });
 
@@ -368,7 +429,6 @@ export default function Dashboard() {
                 const totalItems = visibleItems.length;
                 const progressPct = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0;
 
-                // Paid / Still Owed totals (excludes hidden overdue)
                 const totalAssignedAmount = visibleItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
                 const paidAmount = visibleItems
                   .filter((item) => !!checklist[`${item.item_type}_${item.id || item.item_id}`])
@@ -397,7 +457,6 @@ export default function Dashboard() {
                     </div>
                     {totalItems > 0 && (
                       <div className="mt-4 pt-4 border-t border-gray-100">
-                        {/* Progress indicator */}
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-sm font-medium text-gray-700">Assigned Items</p>
                           <span className="text-xs font-medium text-gray-500">
@@ -522,13 +581,16 @@ export default function Dashboard() {
           ) : (
             <p className="text-gray-500 text-sm">No paycheck plan configured yet.</p>
           )}
-        </div>
+        </CollapsibleSection>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-green-500" />
-            Quick Stats
-          </h2>
+        <CollapsibleSection
+          sectionKey="quick_stats"
+          title="Quick Stats"
+          icon={TrendingUp}
+          iconColor="text-green-500"
+          collapsed={collapsedSections}
+          onToggle={toggleSection}
+        >
           <div className="space-y-4">
             {creditScore && (() => {
               const pct = Number(creditScore.overall_utilization_pct || 0);
@@ -588,11 +650,15 @@ export default function Dashboard() {
               )}
             </div>
           </div>
-        </div>
+        </CollapsibleSection>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Payments</h2>
+      <CollapsibleSection
+        sectionKey="recent_payments"
+        title="Recent Payments"
+        collapsed={collapsedSections}
+        onToggle={toggleSection}
+      >
         {Array.isArray(recentPayments) && recentPayments.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -624,14 +690,17 @@ export default function Dashboard() {
         ) : (
           <p className="text-gray-500 text-sm">No recent payments recorded.</p>
         )}
-      </div>
+      </CollapsibleSection>
 
       {household && recentActivity.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-blue-500" />
-            Recent Household Activity
-          </h2>
+        <CollapsibleSection
+          sectionKey="household_activity"
+          title="Recent Household Activity"
+          icon={Activity}
+          iconColor="text-blue-500"
+          collapsed={collapsedSections}
+          onToggle={toggleSection}
+        >
           <div className="space-y-3">
             {recentActivity.map((item) => (
               <div key={item.id} className="flex items-center gap-3 text-sm">
@@ -650,7 +719,7 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-        </div>
+        </CollapsibleSection>
       )}
     </div>
   );

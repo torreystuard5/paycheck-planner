@@ -61,6 +61,11 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # App mode (personal or business)
+    app_mode: Mapped[str | None] = mapped_column(
+        String, server_default=text("'personal'"), nullable=True
+    )
+
     # What's New tracking
     last_seen_whats_new: Mapped[str | None] = mapped_column(
         DateTime(timezone=True), nullable=True

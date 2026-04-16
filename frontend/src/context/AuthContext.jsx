@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { onTosRequired } from '../services/api';
 
@@ -10,12 +9,22 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [tosRequired, setTosRequired] = useState(null);
+  const [subscription, setSubscription] = useState(null);
 
   useEffect(() => {
     onTosRequired((version) => {
       setTosRequired(version);
     });
   }, []);
+
+  const fetchSubscription = async () => {
+    try {
+      const { data } = await api.get('/api/v1/subscriptions/status');
+      setSubscription(data);
+    } catch {
+      // not critical
+    }
+  };
 
   const clearTosRequired = async () => {
     setTosRequired(null);
@@ -59,6 +68,8 @@ export function AuthProvider({ children }) {
           if (!data.tos_version || data.tos_version < '1.0') {
             setTosRequired('1.0');
           }
+          // Fetch subscription status on app load
+          await fetchSubscription();
         } catch {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
@@ -84,6 +95,7 @@ export function AuthProvider({ children }) {
     const me = await api.get('/api/v1/auth/me');
     setUser(me.data);
     setIsAuthenticated(true);
+    await fetchSubscription();
     return me.data;
   };
 
@@ -94,6 +106,7 @@ export function AuthProvider({ children }) {
     const me = await api.get('/api/v1/auth/me');
     setUser(me.data);
     setIsAuthenticated(true);
+    await fetchSubscription();
     return me.data;
   };
 
@@ -103,6 +116,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('refresh_token');
     setUser(null);
     setIsAuthenticated(false);
+    setSubscription(null);
   };
 
   const refreshToken = async () => {
@@ -115,9 +129,23 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refresh_token', data.refresh_token);
   };
 
+  const updateUser = (updated) => setUser(updated);
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, isAuthenticated, login, register, logout, refreshToken, tosRequired, clearTosRequired }}
+      value={{
+        user,
+        loading,
+        isAuthenticated,
+        login,
+        register,
+        logout,
+        refreshToken,
+        tosRequired,
+        clearTosRequired,
+        subscription,
+        updateUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

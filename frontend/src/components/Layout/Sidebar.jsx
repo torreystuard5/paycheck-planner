@@ -19,12 +19,18 @@ import {
   Lock,
   CalendarDays,
   FileText,
+  TrendingUp,
+  Briefcase,
+  PieChart,
+  Banknote,
+  ShieldCheck,
+  ArrowUpCircle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { APP_VERSION } from '../../config';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
-const links = [
+const personalLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/bills', label: 'Bills', icon: Receipt },
   { to: '/debts', label: 'Debts', icon: CreditCard },
@@ -40,6 +46,20 @@ const links = [
   { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
+];
+
+const businessLinks = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/biz/sales', label: 'Sales', icon: TrendingUp },
+  { to: '/biz/deductions', label: 'Deductions', icon: Briefcase },
+  { to: '/biz/staff-pay', label: 'Staff Pay', icon: Banknote },
+  { to: '/biz/contingency', label: 'Contingency Fund', icon: ShieldCheck },
+  { to: '/biz/upgrade-fund', label: 'Upgrade Fund', icon: ArrowUpCircle },
+  { to: '/biz/net-profit', label: 'Net Profit', icon: PieChart },
+  { to: '/settings', label: 'Settings', icon: Settings },
+];
+
+const adminLinks = [
   { to: '/admin/tickets', label: 'Support Tickets', icon: MessageSquare, adminOnly: true },
   { to: '/admin/users', label: 'Users', icon: Users, adminOnly: true },
   { to: '/admin/command-center', label: 'Command Center', icon: Shield, adminOnly: true },
@@ -48,12 +68,9 @@ const links = [
 export default function Sidebar({ open, onClose }) {
   const { user, logout } = useAuth();
 
-  const linkClass = ({ isActive }) =>
-    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-      isActive
-        ? 'bg-blue-50 text-blue-700'
-        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-    }`;
+  const appMode = user?.app_mode || 'personal';
+  const baseLinks = appMode === 'business' ? businessLinks : personalLinks;
+  const links = user?.is_admin ? [...baseLinks, ...adminLinks] : baseLinks;
 
   const content = (
     <div className="flex flex-col h-full">
@@ -63,7 +80,9 @@ export default function Sidebar({ open, onClose }) {
           <img src={logo} alt="PayDrift logo" className="h-8 w-auto lg:h-10" />
           <div className="flex flex-col">
             <span className="text-lg font-bold text-gray-900">PayDrift</span>
-            <span className="text-[10px] text-gray-400 leading-tight">Budget · Bills · Savings</span>
+            <span className="text-[10px] text-gray-400 leading-tight">
+              {appMode === 'business' ? 'Business Mode' : 'Budget · Bills · Savings'}
+            </span>
           </div>
         </Link>
         <button
@@ -77,25 +96,28 @@ export default function Sidebar({ open, onClose }) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {links.filter(l => (!l.adminOnly || user?.is_admin) && (!l.proOnly || user?.is_supporter || user?.subscription_tier === 'lifetime')).map(({ to, label, icon: Icon, warm }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : warm
-                    ? 'text-rose-500 hover:bg-rose-50 hover:text-rose-600'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`
-            }
-            onClick={onClose}
-          >
-            <Icon className="h-5 w-5 shrink-0" />
-            {label}
-          </NavLink>
-        ))}
+        {links.map(({ to, label, icon: Icon, warm, adminOnly }) => {
+          if (adminOnly && !user?.is_admin) return null;
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-blue-50 text-blue-700'
+                    : warm
+                      ? 'text-rose-500 hover:bg-rose-50 hover:text-rose-600'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`
+              }
+              onClick={onClose}
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              {label}
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* User footer */}

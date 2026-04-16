@@ -118,7 +118,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is deactivated",
+            detail="Your account has been deactivated. Contact support.",
         )
 
     # Check account status

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, User, Bell, DollarSign, Download, Loader2, Heart, Star, Calendar, HelpCircle, CheckCircle, Plus, Edit, Trash2, Clock } from 'lucide-react';
+import { Save, User, Bell, DollarSign, Download, Loader2, Heart, Star, Calendar, HelpCircle, CheckCircle, Plus, Edit, Trash2, Clock, Briefcase, UserIcon } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -293,6 +293,53 @@ export default function Settings() {
       {success && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">Settings saved successfully.</div>
       )}
+
+      {/* Mode Selection */}
+      <div className="max-w-2xl">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Briefcase className="w-5 h-5 text-purple-500" />
+            App Mode
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">Switch between Personal and Business mode to change your sidebar and dashboard.</p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'personal' });
+                  window.location.reload();
+                } catch {}
+              }}
+              className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                user?.app_mode === 'personal' || !user?.app_mode
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              Personal
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'business' });
+                  window.location.reload();
+                } catch {}
+              }}
+              className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                user?.app_mode === 'business'
+                  ? 'border-purple-500 bg-purple-50 text-purple-700'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <Briefcase className="w-4 h-4" />
+              Business
+            </button>
+          </div>
+        </div>
+      </div>
 
       <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
