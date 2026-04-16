@@ -16,6 +16,7 @@ import SetNewPassword from './pages/auth/SetNewPassword';
 import Dashboard from './pages/Dashboard';
 import Bills from './pages/Bills';
 import Debts from './pages/Debts';
+import BillsAndDebts from './pages/BillsAndDebts';
 import Savings from './pages/Savings';
 import Payments from './pages/Payments';
 import Reports from './pages/Reports';
@@ -93,8 +94,9 @@ export default function App() {
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="bills" element={<Bills />} />
-            <Route path="debts" element={<Debts />} />
+            <Route path="bills-debts" element={<BillsAndDebts />} />
+            <Route path="bills" element={<Navigate to="/bills-debts?tab=bills" replace />} />
+            <Route path="debts" element={<Navigate to="/bills-debts?tab=debts" replace />} />
             <Route path="savings" element={<Savings />} />
             <Route path="payments" element={<Payments />} />
             <Route path="reports" element={<Reports />} />

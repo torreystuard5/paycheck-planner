@@ -57,7 +57,7 @@ const freqLabel = (freq) => {
   return f ? f.label : (freq || 'Monthly');
 };
 
-export default function Bills() {
+export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
   const { user } = useAuth();
   const toast = useToast();
   const [bills, setBills] = useState([]);
@@ -111,6 +111,14 @@ export default function Bills() {
     fetchBills(true);
     fetchPaycheckDates();
   }, [statusFilter, sortBy, sortOrder]);
+
+  // Auto-open add modal when triggered from parent
+  useEffect(() => {
+    if (autoOpenAdd) {
+      openAdd();
+      onClearAutoOpen?.();
+    }
+  }, [autoOpenAdd]);
 
   const fetchPaycheckDates = async () => {
     try {

@@ -3,7 +3,7 @@ import { NavLink, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Receipt,
-  CreditCard,
+
   PiggyBank,
   DollarSign,
   BarChart3,
@@ -35,8 +35,7 @@ import logo from '../../assets/PayDrift-Logo.jpg';
 
 const personalLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/bills', label: 'Bills', icon: Receipt },
-  { to: '/debts', label: 'Debts', icon: CreditCard },
+  { to: '/bills-debts', label: 'Bills & Debts', icon: Receipt },
   { to: '/savings', label: 'Savings', icon: PiggyBank },
   { to: '/income', label: 'Income', icon: Wallet },
   { to: '/payments', label: 'Payments', icon: DollarSign },

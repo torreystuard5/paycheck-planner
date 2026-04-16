@@ -263,8 +263,8 @@ export default function Dashboard() {
 
   const cardLinks = {
     'Total Income': '/income',
-    'Total Bills': '/bills',
-    'Total Debt': '/debts',
+    'Total Bills': '/bills-debts?tab=bills',
+    'Total Debt': '/bills-debts?tab=debts',
     'Savings Goals': '/savings',
   };
 

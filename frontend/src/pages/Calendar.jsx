@@ -150,7 +150,7 @@ function EventDetail({ evt, onClose, onTogglePaid }) {
         </div>
         <div className="px-5 py-3 border-t border-gray-100">
           <Link
-            to={evt.type === 'paycheck' ? '/payments' : evt.type === 'debt' ? '/debts' : '/bills'}
+            to={evt.type === 'paycheck' ? '/payments' : evt.type === 'debt' ? '/bills-debts?tab=debts' : '/bills-debts?tab=bills'}
             className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
           >
             <ExternalLink className="h-4 w-4" />

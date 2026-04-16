@@ -8,6 +8,7 @@ import { getCategoryColor } from '../utils/categoryColors';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../services/api';
 import { formatApiError } from '../utils/formatApiError';
+import { formatLabel } from '../utils/formatLabel';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -39,7 +40,7 @@ const fmtCurrency = (val) => {
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
-export default function Debts() {
+export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('Overview');
   const [debts, setDebts] = useState([]);
@@ -75,6 +76,14 @@ export default function Debts() {
   useEffect(() => {
     fetchDebts(true);
   }, [sortBy, sortOrder]);
+
+  // Auto-open add modal when triggered from parent
+  useEffect(() => {
+    if (autoOpenAdd) {
+      openAdd();
+      onClearAutoOpen?.();
+    }
+  }, [autoOpenAdd]);
 
   useEffect(() => {
     if (user?.household_id) {
@@ -399,7 +408,7 @@ export default function Debts() {
               </span>
             )}
             <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${catColor}`}>
-              {debt.type?.replace(/_/g, ' ') || 'Debt'}
+              {formatLabel(debt.type) || 'Debt'}
             </span>
             {debt.auto_pay && (
               <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
@@ -857,7 +866,7 @@ export default function Debts() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={inputClass}>
-                {DEBT_TYPES.map((t) => <option key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</option>)}
+                {DEBT_TYPES.map((t) => <option key={t} value={t}>{formatLabel(t)}</option>)}
               </select>
             </div>
           </div>
