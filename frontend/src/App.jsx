@@ -33,7 +33,6 @@ import Vault from './pages/Vault';
 import Calendar from './pages/Calendar';
 import TaxPrep from './pages/TaxPrep';
 import NotFound from './pages/NotFound';
-import SelectMode from './pages/SelectMode';
 import TermsOfService from './pages/legal/TermsOfService';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
 import CookiePolicy from './pages/legal/CookiePolicy';
@@ -83,11 +82,6 @@ export default function App() {
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/cookies" element={<CookiePolicy />} />
           <Route path="/disclaimer" element={<Disclaimer />} />
-
-          {/* Mode selection (protected but no MainLayout) */}
-          <Route path="/select-mode" element={
-            <ProtectedRoute><SelectMode /></ProtectedRoute>
-          } />
 
           {/* Protected routes */}
           <Route

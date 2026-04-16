@@ -1,4 +1,5 @@
-import { NavLink, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Receipt,
@@ -25,9 +26,11 @@ import {
   Banknote,
   ShieldCheck,
   ArrowUpCircle,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { APP_VERSION } from '../../config';
+import api from '../../services/api';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
 const personalLinks = [
@@ -57,6 +60,7 @@ const businessLinks = [
   { to: '/biz/upgrade-fund', label: 'Upgrade Fund', icon: ArrowUpCircle },
   { to: '/biz/net-profit', label: 'Net Profit', icon: PieChart },
   { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/support', label: 'Support', icon: HelpCircle },
 ];
 
 const adminLinks = [
@@ -64,11 +68,27 @@ const adminLinks = [
 ];
 
 export default function Sidebar({ open, onClose }) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
+  const navigate = useNavigate();
+  const [switching, setSwitching] = useState(false);
 
   const appMode = user?.app_mode || 'personal';
   const baseLinks = appMode === 'business' ? businessLinks : personalLinks;
   const links = user?.is_admin ? [...baseLinks, ...adminLinks] : baseLinks;
+
+  const handleModeSwitch = async (mode) => {
+    if (mode === appMode || switching) return;
+    setSwitching(true);
+    try {
+      const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: mode });
+      updateUser(data);
+      navigate('/dashboard');
+    } catch {
+      // silent fail
+    } finally {
+      setSwitching(false);
+    }
+  };
 
   const content = (
     <div className="flex flex-col h-full">
@@ -90,6 +110,40 @@ export default function Sidebar({ open, onClose }) {
         >
           <X className="h-5 w-5" />
         </button>
+      </div>
+
+      {/* Mode Toggle */}
+      <div className="px-3 pt-3 pb-1">
+        <div className="flex bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => handleModeSwitch('personal')}
+            disabled={switching}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-medium transition-colors min-h-[44px] ${
+              appMode === 'personal'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            } ${switching ? 'opacity-60' : ''}`}
+          >
+            {switching && appMode !== 'personal' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : null}
+            Personal
+          </button>
+          <button
+            onClick={() => handleModeSwitch('business')}
+            disabled={switching}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-medium transition-colors min-h-[44px] ${
+              appMode === 'business'
+                ? 'bg-white text-purple-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            } ${switching ? 'opacity-60' : ''}`}
+          >
+            {switching && appMode !== 'business' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : null}
+            Business
+          </button>
+        </div>
       </div>
 
       {/* Navigation */}

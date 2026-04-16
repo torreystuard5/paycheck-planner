@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Save, User, Bell, DollarSign, Download, Loader2, Heart, Star, Calendar, HelpCircle, CheckCircle, Plus, Edit, Trash2, Clock, Briefcase, UserIcon } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -46,7 +47,8 @@ function getOrdinal(n) {
 }
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -308,7 +310,8 @@ export default function Settings() {
               onClick={async () => {
                 try {
                   const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'personal' });
-                  window.location.reload();
+                  updateUser(data);
+                  navigate('/dashboard');
                 } catch {}
               }}
               className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
@@ -325,7 +328,8 @@ export default function Settings() {
               onClick={async () => {
                 try {
                   const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'business' });
-                  window.location.reload();
+                  updateUser(data);
+                  navigate('/dashboard');
                 } catch {}
               }}
               className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${

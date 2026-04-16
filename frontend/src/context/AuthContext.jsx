@@ -63,7 +63,7 @@ export function AuthProvider({ children }) {
       if (token) {
         try {
           const { data } = await api.get('/api/v1/auth/me');
-          setUser(data);
+          setUser({ ...data, app_mode: data.app_mode || 'personal' });
           setIsAuthenticated(true);
           if (!data.tos_version || data.tos_version < '1.0') {
             setTosRequired('1.0');
@@ -93,7 +93,7 @@ export function AuthProvider({ children }) {
     }
 
     const me = await api.get('/api/v1/auth/me');
-    setUser(me.data);
+    setUser({ ...me.data, app_mode: me.data.app_mode || 'personal' });
     setIsAuthenticated(true);
     await fetchSubscription();
     return me.data;
@@ -104,7 +104,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
     const me = await api.get('/api/v1/auth/me');
-    setUser(me.data);
+    setUser({ ...me.data, app_mode: me.data.app_mode || 'personal' });
     setIsAuthenticated(true);
     await fetchSubscription();
     return me.data;
@@ -129,7 +129,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refresh_token', data.refresh_token);
   };
 
-  const updateUser = (updated) => setUser(updated);
+  const updateUser = (updated) => setUser(updated ? { ...updated, app_mode: updated.app_mode || 'personal' } : updated);
 
   return (
     <AuthContext.Provider
