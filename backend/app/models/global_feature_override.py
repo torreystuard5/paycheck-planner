@@ -1,4 +1,7 @@
+import uuid
+
 from sqlalchemy import Boolean, DateTime, Integer, String, text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -15,7 +18,9 @@ class GlobalFeatureOverride(Base):
     is_free_for_all: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false")
     )
-    updated_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     updated_at: Mapped[str | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
     )
