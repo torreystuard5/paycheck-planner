@@ -1,8 +1,8 @@
-from datetime import datetime
-from typing import Optional
+from datetime import date, datetime
+from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HouseholdCreate(BaseModel):
@@ -20,6 +20,8 @@ class HouseholdMember(BaseModel):
     email: str
     pay_frequency: Optional[str] = None
     net_pay_amount: Optional[float] = None
+    household_member_role: str = "adult"
+    household_child_permissions: dict[str, Any] | None = None
 
     class Config:
         from_attributes = True
@@ -54,3 +56,49 @@ class ActivityFeed(BaseModel):
 
 class SplitMethodUpdate(BaseModel):
     split_method: Optional[str] = None
+
+
+class HouseholdChoreCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str | None = None
+    assigned_to: UUID | None = None
+    due_date: date | None = None
+    recurring: str | None = Field(None, pattern="^(daily|weekly|monthly)$")
+
+
+class HouseholdChoreUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    assigned_to: UUID | None = None
+    due_date: date | None = None
+    recurring: str | None = Field(None, pattern="^(daily|weekly|monthly)$")
+    status: str | None = Field(None, pattern="^(pending|completed)$")
+
+
+class HouseholdChoreOut(BaseModel):
+    id: UUID
+    title: str
+    description: str | None = None
+    assigned_to: UUID | None = None
+    due_date: date | None = None
+    status: str
+    recurring: str | None = None
+    created_by: UUID | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class HouseholdChoreListResponse(BaseModel):
+    items: list[HouseholdChoreOut]
+
+
+class MemberRoleUpdate(BaseModel):
+    member_role: str = Field(..., pattern="^(adult|child)$")
+
+
+class ChildPermissionsUpdate(BaseModel):
+    can_view_bills: bool | None = None
+    can_view_amounts: bool | None = None
+    can_view_invite_code: bool | None = None

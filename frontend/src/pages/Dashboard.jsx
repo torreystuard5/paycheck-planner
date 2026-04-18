@@ -649,32 +649,35 @@ export default function Dashboard() {
         onToggle={toggleSection}
       >
         {Array.isArray(recentPayments) && recentPayments.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 text-gray-600 font-medium">Date</th>
-                  <th className="text-left py-2 text-gray-600 font-medium">Type</th>
-                  <th className="text-right py-2 text-gray-600 font-medium">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentPayments.map((payment) => (
-                  <tr key={payment.id} className="border-b border-gray-100">
-                    <td className="py-3 text-gray-900">
-                      {payment.paid_date ? formatDate(payment.paid_date, user?.date_format) : '--'}
-                    </td>
-                    <td className="py-3 text-gray-700">
-                      {payment.bill_id ? 'Bill' : payment.debt_id ? 'Debt' : 'Payment'}
-                      {payment.is_extra && <span className="ml-1 text-xs text-purple-600">(extra)</span>}
-                    </td>
-                    <td className="py-3 text-right">
-                      <CurrencyDisplay amount={payment.amount} className="font-medium text-gray-900" />
-                    </td>
+          <div className="relative rounded-lg border border-gray-100 bg-white">
+            <div className="max-h-[min(22rem,52vh)] sm:max-h-72 overflow-y-auto overflow-x-auto overscroll-contain">
+              <table className="w-full text-sm min-w-[280px]">
+                <thead className="sticky top-0 z-[1] bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)]">
+                  <tr>
+                    <th className="text-left py-2.5 px-1 sm:px-0 text-gray-600 font-medium">Date</th>
+                    <th className="text-left py-2.5 px-1 sm:px-0 text-gray-600 font-medium">Type</th>
+                    <th className="text-right py-2.5 px-1 sm:px-0 text-gray-600 font-medium">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {recentPayments.map((payment) => (
+                    <tr key={payment.id} className="border-b border-gray-100 last:border-0">
+                      <td className="py-3 text-gray-900">
+                        {payment.paid_date ? formatDate(payment.paid_date, user?.date_format) : '--'}
+                      </td>
+                      <td className="py-3 text-gray-700">
+                        {payment.bill_id ? 'Bill' : payment.debt_id ? 'Debt' : 'Payment'}
+                        {payment.is_extra && <span className="ml-1 text-xs text-purple-600">(extra)</span>}
+                      </td>
+                      <td className="py-3 text-right">
+                        <CurrencyDisplay amount={payment.amount} className="font-medium text-gray-900" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white to-transparent rounded-b-lg" aria-hidden />
           </div>
         ) : (
           <p className="text-gray-500 text-sm">No recent payments recorded.</p>

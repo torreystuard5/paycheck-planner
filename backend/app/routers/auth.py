@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models.referral import ReferralReward
 from app.models.user import User
 from app.schemas.user import TokenResponse, UserCreate, UserDateFormatUpdate, UserLogin, UserResponse, UserUpdate
+from app.services.tier_access import sync_app_mode_to_subscription
 from app.utils.security import (
     create_access_token,
     create_refresh_token,
@@ -136,6 +137,8 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     # Successful login — update tracking fields
     user.last_login_at = datetime.now(timezone.utc)
     user.failed_login_count = 0
+    if sync_app_mode_to_subscription(user):
+        db.add(user)
     await db.flush()
 
     token_data = {"sub": str(user.id)}
@@ -172,6 +175,10 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
             detail="User not found or inactive",
         )
 
+    if sync_app_mode_to_subscription(user):
+        db.add(user)
+        await db.flush()
+
     token_data = {"sub": str(user.id)}
     return TokenResponse(
         access_token=create_access_token(token_data),
@@ -185,7 +192,14 @@ async def logout():
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if sync_app_mode_to_subscription(current_user):
+        db.add(current_user)
+        await db.flush()
+        await db.refresh(current_user)
     return current_user
 
 

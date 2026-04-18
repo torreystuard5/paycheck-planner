@@ -7,6 +7,11 @@ from app.database import get_db
 from app.models.user import User
 from app.models.user_ui_preference import UserUIPreference
 from app.schemas.user import UserResponse
+from app.services.tier_access import (
+    has_business_dashboard_access,
+    has_personal_home_access,
+    normalize_plan_tier,
+)
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/users", tags=["User Preferences"])
@@ -28,6 +33,17 @@ async def update_app_mode(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="app_mode must be 'personal' or 'business'",
+        )
+    tier = normalize_plan_tier(current_user.subscription_tier)
+    if body.app_mode == "business" and not has_business_dashboard_access(tier):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your plan does not include Business mode",
+        )
+    if body.app_mode == "personal" and not has_personal_home_access(tier):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your plan does not include Personal mode",
         )
     current_user.app_mode = body.app_mode
     db.add(current_user)

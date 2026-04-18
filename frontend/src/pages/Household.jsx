@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Copy, LogOut, Activity, Clock, Settings, CheckCircle, DollarSign } from 'lucide-react';
+import { Users, UserPlus, Copy, LogOut, Activity, Clock, Settings, CheckCircle, DollarSign, ClipboardList, Trash2 } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Modal from '../components/Modal';
 import usePolling from '../hooks/usePolling';
 import { formatFriendlyDate } from '../utils/formatDate';
 
@@ -14,8 +15,14 @@ const fmtCurrency = (val) => {
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
+const DEFAULT_CHILD_PERMS = {
+  can_view_bills: true,
+  can_view_amounts: false,
+  can_view_invite_code: false,
+};
+
 export default function Household() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [household, setHousehold] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -29,6 +36,13 @@ export default function Household() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [householdBills, setHouseholdBills] = useState([]);
   const [billBreakdowns, setBillBreakdowns] = useState({});
+  const [chores, setChores] = useState([]);
+  const [choreTitle, setChoreTitle] = useState('');
+  const [choreDue, setChoreDue] = useState('');
+  const [choreAssign, setChoreAssign] = useState('');
+  const [choreRecurring, setChoreRecurring] = useState('');
+  const [permModalMember, setPermModalMember] = useState(null);
+  const [permDraft, setPermDraft] = useState({ ...DEFAULT_CHILD_PERMS });
 
   const fetchHousehold = useCallback(async () => {
     try {
@@ -49,6 +63,15 @@ export default function Household() {
       setLastUpdated(new Date());
     } catch {
       // activity feed is optional
+    }
+  }, []);
+
+  const fetchChores = useCallback(async () => {
+    try {
+      const res = await api.get('/api/v1/households/chores');
+      setChores(res.data.items || []);
+    } catch {
+      setChores([]);
     }
   }, []);
 
@@ -81,7 +104,8 @@ export default function Household() {
     await fetchHousehold();
     await fetchActivity();
     await fetchHouseholdBills();
-  }, [fetchHousehold, fetchActivity, fetchHouseholdBills]);
+    await fetchChores();
+  }, [fetchHousehold, fetchActivity, fetchHouseholdBills, fetchChores]);
 
   useEffect(() => {
     const init = async () => {
@@ -136,6 +160,7 @@ export default function Household() {
       setActivities([]);
       setHouseholdBills([]);
       setBillBreakdowns({});
+      setChores([]);
       setSuccess('Left household.');
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to leave household.');
@@ -161,6 +186,91 @@ export default function Household() {
       setHousehold(res.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to update split method.');
+    }
+  };
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/v1/auth/me');
+      updateUser({ ...data, app_mode: data.app_mode || 'personal' });
+    } catch {
+      // ignore
+    }
+  }, [updateUser]);
+
+  const handleRoleChange = async (memberId, role) => {
+    setError(null);
+    try {
+      await api.patch(`/api/v1/households/members/${memberId}/role`, { member_role: role });
+      setSuccess('Member role updated.');
+      const res = await api.get('/api/v1/households/me');
+      setHousehold(res.data);
+      if (memberId === user?.id) await refreshUser();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update role.');
+    }
+  };
+
+  const openPermModal = (member) => {
+    setPermDraft({ ...DEFAULT_CHILD_PERMS, ...(member.household_child_permissions || {}) });
+    setPermModalMember(member);
+  };
+
+  const savePermModal = async () => {
+    if (!permModalMember) return;
+    setError(null);
+    try {
+      await api.patch(`/api/v1/households/members/${permModalMember.id}/permissions`, permDraft);
+      setSuccess('Permissions saved.');
+      setPermModalMember(null);
+      const res = await api.get('/api/v1/households/me');
+      setHousehold(res.data);
+      if (permModalMember.id === user?.id) await refreshUser();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to save permissions.');
+    }
+  };
+
+  const handleCreateChore = async (e) => {
+    e.preventDefault();
+    if (!choreTitle.trim()) return;
+    setError(null);
+    try {
+      const body = {
+        title: choreTitle.trim(),
+        due_date: choreDue || null,
+        recurring: choreRecurring || null,
+      };
+      if (choreAssign) body.assigned_to = choreAssign;
+      await api.post('/api/v1/households/chores', body);
+      setChoreTitle('');
+      setChoreDue('');
+      setChoreAssign('');
+      setChoreRecurring('');
+      setSuccess('Chore added.');
+      await fetchChores();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to add chore.');
+    }
+  };
+
+  const handleCompleteChore = async (id) => {
+    setError(null);
+    try {
+      await api.patch(`/api/v1/households/chores/${id}`, { status: 'completed' });
+      await fetchChores();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update chore.');
+    }
+  };
+
+  const handleDeleteChore = async (id) => {
+    setError(null);
+    try {
+      await api.delete(`/api/v1/households/chores/${id}`);
+      await fetchChores();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to delete chore.');
     }
   };
 
@@ -252,6 +362,11 @@ export default function Household() {
 
   // In household — show full household UI
   const isCreator = household.created_by === user?.id;
+  const isAdult = (user?.household_member_role || 'adult') === 'adult';
+  const childPerms = { ...DEFAULT_CHILD_PERMS, ...(user?.household_child_permissions || {}) };
+  const showInvite = isAdult || childPerms.can_view_invite_code;
+  const showSharedBills = isAdult || childPerms.can_view_bills;
+  const showMoney = isAdult || childPerms.can_view_amounts;
 
   return (
     <div className="space-y-6">
@@ -288,42 +403,78 @@ export default function Household() {
           </div>
           <div className="space-y-3">
             {(household.members || []).map((member) => (
-              <div key={member.id} className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full ${getInitialColor(member.first_name)} flex items-center justify-center text-white text-sm font-medium`}>
-                  {(member.first_name || '?')[0].toUpperCase()}
+              <div key={member.id} className="flex flex-col gap-2 border-b border-gray-50 last:border-0 pb-3 last:pb-0">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full ${getInitialColor(member.first_name)} flex items-center justify-center text-white text-sm font-medium`}>
+                    {(member.first_name || '?')[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {member.first_name} {member.last_name}
+                      {(member.household_member_role || 'adult') === 'child' && (
+                        <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Child</span>
+                      )}
+                      {(member.household_member_role || 'adult') === 'adult' && (
+                        <span className="ml-2 text-[10px] uppercase tracking-wide text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Adult</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {member.first_name} {member.last_name}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">{member.email}</p>
-                </div>
+                {isAdult && member.id !== household.created_by && (
+                  <div className="flex flex-wrap items-center gap-2 pl-11">
+                    <label className="text-xs text-gray-500">Role</label>
+                    <select
+                      value={member.household_member_role || 'adult'}
+                      onChange={(e) => handleRoleChange(member.id, e.target.value)}
+                      className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white"
+                    >
+                      <option value="adult">Adult</option>
+                      <option value="child">Child</option>
+                    </select>
+                    {(member.household_member_role || 'adult') === 'child' && (
+                      <button
+                        type="button"
+                        onClick={() => openPermModal(member)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Permissions
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
 
         {/* Invite Code */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <UserPlus className="w-5 h-5 text-green-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Invite Code</h2>
+        {showInvite ? (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <UserPlus className="w-5 h-5 text-green-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Invite Code</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">Share this code to invite someone.</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-gray-100 px-4 py-2.5 rounded-lg text-lg font-mono font-bold text-gray-900 text-center tracking-widest">
+                {household.invite_code}
+              </code>
+              <button
+                onClick={handleCopyCode}
+                className="p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                title="Copy code"
+              >
+                {copied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
+              </button>
+            </div>
+            {copied && <p className="text-xs text-green-600 mt-2">Copied to clipboard!</p>}
           </div>
-          <p className="text-sm text-gray-600 mb-3">Share this code to invite someone.</p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 bg-gray-100 px-4 py-2.5 rounded-lg text-lg font-mono font-bold text-gray-900 text-center tracking-widest">
-              {household.invite_code}
-            </code>
-            <button
-              onClick={handleCopyCode}
-              className="p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-              title="Copy code"
-            >
-              {copied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
-            </button>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col justify-center">
+            <p className="text-sm text-gray-500">Invite code is hidden for your account. Ask a parent or household admin if you need it.</p>
           </div>
-          {copied && <p className="text-xs text-green-600 mt-2">Copied to clipboard!</p>}
-        </div>
+        )}
 
         {/* Split Method */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -335,21 +486,23 @@ export default function Household() {
           <select
             value={household.split_method || 'equal'}
             onChange={handleSplitMethodChange}
-            disabled={!isCreator}
-            className={`${inputClass} ${!isCreator ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+            disabled={!isCreator || !isAdult}
+            className={`${inputClass} ${(!isCreator || !isAdult) ? 'bg-gray-50 cursor-not-allowed' : ''}`}
           >
             <option value="equal">Equal Split</option>
             <option value="proportional">Proportional To Income</option>
             <option value="custom">Custom</option>
           </select>
-          {!isCreator && (
-            <p className="text-xs text-gray-400 mt-2">Only the household creator can change this.</p>
+          {(!isCreator || !isAdult) && (
+            <p className="text-xs text-gray-400 mt-2">
+              {!isAdult ? 'Only adults can change split settings.' : 'Only the household creator can change this.'}
+            </p>
           )}
         </div>
       </div>
 
       {/* Household Bills Breakdown */}
-      {householdBills.length > 0 && (
+      {showSharedBills && householdBills.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center gap-2 mb-4">
             <DollarSign className="w-5 h-5 text-blue-600" />
@@ -365,15 +518,17 @@ export default function Household() {
                       <h3 className="text-sm font-semibold text-gray-900">{bill.name}</h3>
                       <p className="text-xs text-gray-500">{bill.category || 'Uncategorized'} &middot; Due {bill.next_due_date ? formatFriendlyDate(bill.next_due_date) : (bill.due_day ? `day ${bill.due_day}` : '--')}</p>
                     </div>
-                    <span className="text-sm font-bold text-gray-900">{fmtCurrency(bill.amount)}</span>
+                    <span className="text-sm font-bold text-gray-900">
+                      {showMoney ? fmtCurrency(bill.amount) : '—'}
+                    </span>
                   </div>
 
                   {bd ? (
                     <>
                       {/* Summary */}
                       <div className="flex gap-4 mb-3 text-xs">
-                        <span className="text-green-600">Paid: {fmtCurrency(bd.total_paid)}</span>
-                        <span className="text-amber-600">Remaining: {fmtCurrency(bd.total_remaining)}</span>
+                        <span className="text-green-600">Paid: {showMoney ? fmtCurrency(bd.total_paid) : '—'}</span>
+                        <span className="text-amber-600">Remaining: {showMoney ? fmtCurrency(bd.total_remaining) : '—'}</span>
                       </div>
                       {/* Per-member */}
                       <div className="space-y-1.5">
@@ -384,8 +539,8 @@ export default function Household() {
                             <div key={member.member_id} className="flex items-center justify-between text-sm">
                               <span className="text-gray-700">{member.member_name}</span>
                               <div className="flex items-center gap-3 text-xs">
-                                <span className="text-gray-500">Share: {fmtCurrency(member.share)}</span>
-                                <span className="text-gray-500">Paid: {fmtCurrency(member.paid)}</span>
+                                <span className="text-gray-500">Share: {showMoney ? fmtCurrency(member.share) : '—'}</span>
+                                <span className="text-gray-500">Paid: {showMoney ? fmtCurrency(member.paid) : '—'}</span>
                                 {isPaid ? (
                                   <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-0.5 rounded-full font-medium">
                                     <CheckCircle className="w-3 h-3" />
@@ -393,7 +548,7 @@ export default function Household() {
                                   </span>
                                 ) : (
                                   <span className="text-amber-600 font-medium">
-                                    {fmtCurrency(balance)} due
+                                    {showMoney ? `${fmtCurrency(balance)} due` : 'Due'}
                                   </span>
                                 )}
                               </div>
@@ -411,6 +566,98 @@ export default function Household() {
           </div>
         </div>
       )}
+
+      {/* Chores */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <ClipboardList className="w-5 h-5 text-teal-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Household chores</h2>
+        </div>
+        {isAdult && (
+          <form onSubmit={handleCreateChore} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 mb-6 pb-6 border-b border-gray-100">
+            <input
+              className={`${inputClass} lg:col-span-4`}
+              placeholder="Chore title"
+              value={choreTitle}
+              onChange={(e) => setChoreTitle(e.target.value)}
+            />
+            <input
+              type="date"
+              className={`${inputClass} lg:col-span-2`}
+              value={choreDue}
+              onChange={(e) => setChoreDue(e.target.value)}
+            />
+            <select
+              className={`${inputClass} lg:col-span-3`}
+              value={choreAssign}
+              onChange={(e) => setChoreAssign(e.target.value)}
+            >
+              <option value="">Anyone</option>
+              {(household.members || []).map((m) => (
+                <option key={m.id} value={m.id}>{m.first_name}</option>
+              ))}
+            </select>
+            <select
+              className={`${inputClass} lg:col-span-2`}
+              value={choreRecurring}
+              onChange={(e) => setChoreRecurring(e.target.value)}
+            >
+              <option value="">One-time</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <button
+              type="submit"
+              className="lg:col-span-1 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
+            >
+              Add
+            </button>
+          </form>
+        )}
+        {chores.length === 0 ? (
+          <p className="text-sm text-gray-500">No chores yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {chores.map((c) => (
+              <li
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-2 text-sm"
+              >
+                <div>
+                  <p className="font-medium text-gray-900">{c.title}</p>
+                  <p className="text-xs text-gray-500">
+                    {c.due_date ? `Due ${c.due_date}` : 'No due date'}
+                    {c.recurring ? ` · Repeats ${c.recurring}` : ''}
+                    {c.status === 'completed' ? ' · Done' : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {c.status === 'pending' && (isAdult || c.assigned_to === user?.id) && (
+                    <button
+                      type="button"
+                      onClick={() => handleCompleteChore(c.id)}
+                      className="text-xs font-medium text-teal-700 hover:text-teal-900"
+                    >
+                      Mark done
+                    </button>
+                  )}
+                  {isAdult && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteChore(c.id)}
+                      className="p-1 text-gray-400 hover:text-red-600"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {/* Activity Feed */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -454,6 +701,45 @@ export default function Household() {
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={!!permModalMember}
+        onClose={() => setPermModalMember(null)}
+        title={permModalMember ? `Permissions — ${permModalMember.first_name}` : 'Permissions'}
+      >
+        {permModalMember && (
+          <div className="space-y-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!permDraft.can_view_bills}
+                onChange={(e) => setPermDraft((d) => ({ ...d, can_view_bills: e.target.checked }))}
+              />
+              <span>Can view shared bills</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!permDraft.can_view_amounts}
+                onChange={(e) => setPermDraft((d) => ({ ...d, can_view_amounts: e.target.checked }))}
+              />
+              <span>Can view dollar amounts</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!permDraft.can_view_invite_code}
+                onChange={(e) => setPermDraft((d) => ({ ...d, can_view_invite_code: e.target.checked }))}
+              />
+              <span>Can view invite code</span>
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setPermModalMember(null)} className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 rounded-lg text-sm">Cancel</button>
+              <button type="button" onClick={savePermModal} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Save</button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <ConfirmDialog
         isOpen={showLeaveConfirm}

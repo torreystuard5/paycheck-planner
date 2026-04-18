@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -29,6 +29,12 @@ class User(Base):
         UUID(as_uuid=True),
         ForeignKey("households.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    household_member_role: Mapped[str] = mapped_column(
+        String(20), server_default=text("'adult'"), nullable=False
+    )
+    household_child_permissions: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     is_admin: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))

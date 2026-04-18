@@ -9,6 +9,11 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { getFormatPreview, formatFriendlyDate } from '../utils/formatDate';
 import DateInput from '../components/DateInput';
 import { APP_VERSION } from '../config';
+import {
+  canSwitchAppMode,
+  hasBusinessDashboardAccess,
+  hasPersonalHomeAccess,
+} from '../utils/tierAccess';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const SCHEDULE_FREQUENCIES = ['weekly', 'biweekly', 'semi_monthly', 'monthly'];
@@ -308,6 +313,9 @@ export default function Settings() {
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
+  const planTier = user?.subscription_tier || 'early_access';
+  const showAppModeSwitcher = canSwitchAppMode(planTier);
+
   if (loading) return <LoadingSpinner />;
 
   return (
@@ -331,45 +339,55 @@ export default function Settings() {
             <Briefcase className="w-5 h-5 text-purple-500" />
             App Mode
           </h2>
-          <p className="text-sm text-gray-600 mb-4">Switch between Personal and Business mode to change your sidebar and dashboard.</p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'personal' });
-                  updateUser(data);
-                  navigate('/dashboard');
-                } catch {}
-              }}
-              className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
-                user?.app_mode === 'personal' || !user?.app_mode
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-              }`}
-            >
-              <User className="w-4 h-4" />
-              Personal
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'business' });
-                  updateUser(data);
-                  navigate('/business/dashboard');
-                } catch {}
-              }}
-              className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
-                user?.app_mode === 'business'
-                  ? 'border-purple-500 bg-purple-50 text-purple-700'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-              }`}
-            >
-              <Briefcase className="w-4 h-4" />
-              Business
-            </button>
-          </div>
+          {showAppModeSwitcher ? (
+            <>
+              <p className="text-sm text-gray-600 mb-4">Switch between Personal and Business mode to change your sidebar and dashboard.</p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'personal' });
+                      updateUser(data);
+                      navigate('/dashboard');
+                    } catch {}
+                  }}
+                  className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                    user?.app_mode === 'personal' || !user?.app_mode
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <User className="w-4 h-4" />
+                  Personal
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'business' });
+                      updateUser(data);
+                      navigate('/business/dashboard');
+                    } catch {}
+                  }}
+                  className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                    user?.app_mode === 'business'
+                      ? 'border-purple-500 bg-purple-50 text-purple-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <Briefcase className="w-4 h-4" />
+                  Business
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-600">
+              {hasBusinessDashboardAccess(planTier) && !hasPersonalHomeAccess(planTier)
+                ? 'Your plan uses Business mode only. Upgrade to Bundle for both Personal and Business.'
+                : 'Your plan uses Personal mode. Business mode is available on Business or Bundle plans.'}
+            </p>
+          )}
         </div>
       </div>
 

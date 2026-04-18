@@ -93,11 +93,18 @@ async def get_current_user(
 async def require_business_mode(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """Require authenticated user with app_mode=business (PayDrift Business Edition)."""
+    """Business Edition: business app_mode plus Business or Bundle subscription."""
+    from app.services.tier_access import has_business_dashboard_access, normalize_plan_tier
+
     mode = (current_user.app_mode or "personal").lower()
     if mode != "business":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Business mode required",
+        )
+    if not has_business_dashboard_access(normalize_plan_tier(current_user.subscription_tier)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Business subscription required",
         )
     return current_user

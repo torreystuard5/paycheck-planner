@@ -96,6 +96,13 @@ class AdminUserUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class AdminSubscriptionTierUpdate(BaseModel):
+    subscription_tier: str = Field(
+        ...,
+        pattern="^(early_access|pro|business|bundle|lifetime)$",
+    )
+
+
 # --- Household List Schemas ---
 
 
@@ -128,6 +135,7 @@ class AuditLogOut(BaseModel):
     action: str
     target_type: str | None = None
     target_id: str | None = None
+    target: str | None = None
     details: str | None = None
     ip_address: str | None = None
     created_at: datetime

@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
+import { useToast } from '../components/Toast';
 
 const TIER_COLORS = {
   free: 'bg-gray-100 text-gray-700',
@@ -18,6 +19,7 @@ const TIER_COLORS = {
 
 export default function AdminUsers({ embedded = false }) {
   const { user: currentUser } = useAuth();
+  const toast = useToast();
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -43,12 +45,13 @@ export default function AdminUsers({ embedded = false }) {
   const [detailError, setDetailError] = useState('');
   const [detailSuccess, setDetailSuccess] = useState('');
   const [showEmailConfirm, setShowEmailConfirm] = useState(false);
+  const [editTier, setEditTier] = useState('early_access');
+  const [savingTier, setSavingTier] = useState(false);
 
   // Override modal state
   const [overrideUser, setOverrideUser] = useState(null);
   const [overrideLoading, setOverrideLoading] = useState(false);
   const [overrideData, setOverrideData] = useState(null);
-  const [overrideTier, setOverrideTier] = useState('');
   const [overrideFeatures, setOverrideFeatures] = useState([]);
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideExpires, setOverrideExpires] = useState('');
@@ -91,16 +94,25 @@ export default function AdminUsers({ embedded = false }) {
   };
 
   const fetchUserOverrides = async (userIds) => {
-    const overrides = {};
+    const updates = {};
     await Promise.allSettled(
       userIds.map(async (id) => {
         try {
           const { data } = await api.get(`/api/v1/admin/users/${id}/override`);
-          if (data) overrides[id] = data;
-        } catch { /* skip */ }
+          updates[id] = data || null;
+        } catch {
+          updates[id] = null;
+        }
       })
     );
-    setUserOverrides(overrides);
+    setUserOverrides((prev) => {
+      const next = { ...prev };
+      for (const id of userIds) {
+        if (updates[id]) next[id] = updates[id];
+        else delete next[id];
+      }
+      return next;
+    });
   };
 
   const openDetail = async (userId) => {
@@ -113,6 +125,7 @@ export default function AdminUsers({ embedded = false }) {
     try {
       const { data } = await api.get(`/api/v1/admin/users/${userId}`);
       setDetailUser(data);
+      setEditTier(data.subscription_tier || 'early_access');
       setEditStatus(data.account_status || 'active');
       setEditStatusReason(data.account_status_reason || '');
       setEditNotes(data.admin_notes || '');
@@ -208,12 +221,10 @@ export default function AdminUsers({ embedded = false }) {
       const ov = overrideRes.data;
       if (ov) {
         setOverrideData(ov);
-        setOverrideTier(ov.override_tier || '');
         setOverrideFeatures(ov.granted_features || []);
         setOverrideReason(ov.reason || '');
         setOverrideExpires(ov.expires_at ? ov.expires_at.slice(0, 10) : '');
       } else {
-        setOverrideTier('');
         setOverrideFeatures([]);
         setOverrideReason('');
         setOverrideExpires('');
@@ -235,7 +246,7 @@ export default function AdminUsers({ embedded = false }) {
     setOverrideError('');
     try {
       await api.put(`/api/v1/admin/users/${overrideUser}/override`, {
-        override_tier: overrideTier || null,
+        override_tier: null,
         granted_features: overrideFeatures,
         reason: overrideReason || null,
         expires_at: overrideExpires ? `${overrideExpires}T23:59:59` : null,
@@ -333,6 +344,31 @@ export default function AdminUsers({ embedded = false }) {
     }
   };
 
+  const handleSaveTier = async () => {
+    if (!detailUser || editTier === detailUser.subscription_tier) return;
+    setSavingTier(true);
+    setDetailError('');
+    setDetailSuccess('');
+    try {
+      const { data } = await api.patch(`/api/v1/admin/users/${detailUser.id}/subscription-tier`, {
+        subscription_tier: editTier,
+      });
+      setDetailUser(data);
+      const label = (editTier || '').replace(/_/g, ' ');
+      toast(`Tier changed to ${label}. Feature overrides have been reset.`, 'success');
+      setDetailSuccess('Plan tier updated.');
+      setTimeout(() => setDetailSuccess(''), 4000);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === detailUser.id ? { ...u, subscription_tier: editTier } : u))
+      );
+      await fetchUserOverrides([detailUser.id]);
+    } catch (err) {
+      setDetailError(err.response?.data?.detail || 'Failed to update plan tier.');
+    } finally {
+      setSavingTier(false);
+    }
+  };
+
   const handleSaveEmail = async () => {
     setSavingEmail(true);
     setDetailError('');
@@ -413,10 +449,11 @@ export default function AdminUsers({ embedded = false }) {
     );
   };
 
-  const getEffectiveTier = (u) => {
+  const getPlanTierBadge = (u) => u.subscription_tier || 'early_access';
+
+  const hasFeatureOverrideBadge = (u) => {
     const ov = userOverrides[u.id];
-    if (ov?.override_tier) return ov.override_tier;
-    return u.subscription_tier || 'free';
+    return Array.isArray(ov?.granted_features) && ov.granted_features.length > 0;
   };
 
   const readOnlyFields = detailUser
@@ -428,7 +465,6 @@ export default function AdminUsers({ embedded = false }) {
         { label: 'Active', value: detailUser.is_active ? 'Yes' : 'No' },
         { label: 'Admin', value: detailUser.is_admin ? 'Yes' : 'No' },
         { label: 'Supporter', value: detailUser.is_supporter ? 'Yes' : 'No' },
-        { label: 'Subscription Tier', value: detailUser.subscription_tier },
         { label: 'Months Banked', value: detailUser.supporter_months_banked },
         { label: 'Referral Code', value: detailUser.referral_code || '—' },
         { label: 'Referred By', value: detailUser.referred_by_user_id || '—' },
@@ -490,8 +526,8 @@ export default function AdminUsers({ embedded = false }) {
                 </thead>
                 <tbody>
                   {users.map((u) => {
-                    const tier = getEffectiveTier(u);
-                    const hasOverride = !!userOverrides[u.id];
+                    const tier = getPlanTierBadge(u);
+                    const hasOverride = hasFeatureOverrideBadge(u);
                     const isSelf = u.id === currentUser?.id;
                     return (
                       <tr
@@ -657,6 +693,34 @@ export default function AdminUsers({ embedded = false }) {
               )}
             </div>
 
+            {/* Plan tier (clears per-user overrides on change) */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-900">Plan tier</h3>
+              <p className="text-xs text-gray-500">
+                Changing tier clears feature overrides for this user. Use Override afterward if you need scoped flags.
+              </p>
+              <select
+                value={editTier}
+                onChange={(e) => setEditTier(e.target.value)}
+                className={inputClass}
+              >
+                <option value="early_access">Home (early_access)</option>
+                <option value="pro">Home Pro</option>
+                <option value="business">Business</option>
+                <option value="bundle">Bundle</option>
+                <option value="lifetime">Lifetime (maps to Pro access)</option>
+              </select>
+              <button
+                type="button"
+                onClick={handleSaveTier}
+                disabled={savingTier || editTier === (detailUser.subscription_tier || 'early_access')}
+                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {savingTier ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Save plan tier
+              </button>
+            </div>
+
             {/* Account Status */}
             <div className="border border-gray-200 rounded-lg p-4 space-y-3">
               <h3 className="text-sm font-semibold text-gray-900">Account Status</h3>
@@ -755,7 +819,7 @@ export default function AdminUsers({ embedded = false }) {
       <Modal
         isOpen={!!overrideUser}
         onClose={closeOverride}
-        title="Tier Override"
+        title="Feature override"
       >
         {overrideLoading ? (
           <LoadingSpinner />
@@ -765,15 +829,9 @@ export default function AdminUsers({ embedded = false }) {
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{overrideError}</div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Override Tier</label>
-              <select value={overrideTier} onChange={(e) => setOverrideTier(e.target.value)} className={inputClass}>
-                <option value="">None (use default)</option>
-                <option value="pro">Pro</option>
-                <option value="business">Business</option>
-                <option value="bundle">Bundle</option>
-              </select>
-            </div>
+            <p className="text-xs text-gray-500">
+              Plan tier is set in user details. Only feature keys allowed for that user&apos;s tier can be saved here.
+            </p>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Granted Features</label>

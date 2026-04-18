@@ -29,6 +29,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { canSwitchAppMode } from '../../utils/tierAccess';
 import { APP_VERSION } from '../../config';
 import api from '../../services/api';
 import logo from '../../assets/PayDrift-Logo.jpg';
@@ -75,6 +76,7 @@ export default function Sidebar({ open, onClose }) {
   const appMode = user?.app_mode || 'personal';
   const baseLinks = appMode === 'business' ? businessLinks : personalLinks;
   const links = user?.is_admin ? [...baseLinks, ...adminLinks] : baseLinks;
+  const showModeToggle = canSwitchAppMode(user?.subscription_tier);
 
   const handleModeSwitch = async (mode) => {
     if (mode === appMode || switching) return;
@@ -112,39 +114,41 @@ export default function Sidebar({ open, onClose }) {
         </button>
       </div>
 
-      {/* Mode Toggle */}
-      <div className="px-3 pt-3 pb-1">
-        <div className="flex bg-gray-100 rounded-lg p-1">
-          <button
-            onClick={() => handleModeSwitch('personal')}
-            disabled={switching}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-medium transition-colors min-h-[44px] ${
-              appMode === 'personal'
-                ? 'bg-white text-blue-700 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            } ${switching ? 'opacity-60' : ''}`}
-          >
-            {switching && appMode !== 'personal' ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : null}
-            Personal
-          </button>
-          <button
-            onClick={() => handleModeSwitch('business')}
-            disabled={switching}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-medium transition-colors min-h-[44px] ${
-              appMode === 'business'
-                ? 'bg-white text-purple-700 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            } ${switching ? 'opacity-60' : ''}`}
-          >
-            {switching && appMode !== 'business' ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : null}
-            Business
-          </button>
+      {/* Mode Toggle — Bundle plans only */}
+      {showModeToggle && (
+        <div className="px-3 pt-3 pb-1">
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => handleModeSwitch('personal')}
+              disabled={switching}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-medium transition-colors min-h-[44px] ${
+                appMode === 'personal'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              } ${switching ? 'opacity-60' : ''}`}
+            >
+              {switching && appMode !== 'personal' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : null}
+              Personal
+            </button>
+            <button
+              onClick={() => handleModeSwitch('business')}
+              disabled={switching}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-medium transition-colors min-h-[44px] ${
+                appMode === 'business'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              } ${switching ? 'opacity-60' : ''}`}
+            >
+              {switching && appMode !== 'business' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : null}
+              Business
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

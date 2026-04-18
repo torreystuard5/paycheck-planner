@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -34,6 +35,8 @@ class UserResponse(BaseModel):
     next_pay_date: date | None = None
     net_pay_amount: Decimal | None = Decimal("0")
     household_id: UUID | None
+    household_member_role: str = "adult"
+    household_child_permissions: dict[str, Any] | None = None
     is_active: bool
     is_admin: bool = False
     is_supporter: bool = False

@@ -4,44 +4,63 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.global_feature_override import GlobalFeatureOverride
+from app.models.user import User
 from app.models.user_feature_override import UserFeatureOverride
+from app.services.tier_access import (
+    BUSINESS_SCOPE_FEATURE_KEYS,
+    PRO_SCOPE_FEATURE_KEYS,
+    can_switch_app_mode,
+    feature_allowed_by_global_tier_flag,
+    filter_feature_keys_for_plan,
+    has_business_dashboard_access,
+    has_personal_home_access,
+    has_pro_surface_access,
+    normalize_plan_tier,
+)
 
 
 async def get_effective_tier(user_id, db: AsyncSession) -> dict:
-    """SINGLE SOURCE OF TRUTH for user tier/features.
+    """Tier + feature flags for the authenticated user.
 
-    Resolution order:
-    1. Check global_feature_overrides — collect features where is_free_for_all=True
-    2. Check user_feature_overrides — if active + non-expired:
-       a. override_tier → effective tier
-       b. granted_features → add to list
-    3. User's actual subscription (for now everyone is "free")
-    4. Merge: effective_tier + union of all granted features
+    ``effective_tier`` is always the user's **subscription** tier (never replaced by
+    override rows). Per-user overrides only contribute **granted_features** keys
+    that are valid for that subscription.
     """
-    effective_tier = "free"
-    granted_features = set()
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+    plan = normalize_plan_tier(getattr(user, "subscription_tier", None) if user else None)
+
+    granted_features: set[str] = set()
+
+    # 1) Global toggles — respect tier (All Users does not bypass product tier).
+    g_result = await db.execute(
+        select(GlobalFeatureOverride).where(GlobalFeatureOverride.is_free_for_all == True)  # noqa: E712
+    )
+    for gfo in g_result.scalars().all():
+        if gfo.feature_key in PRO_SCOPE_FEATURE_KEYS and not has_pro_surface_access(plan):
+            continue
+        if gfo.feature_key in BUSINESS_SCOPE_FEATURE_KEYS and not has_business_dashboard_access(
+            plan
+        ):
+            continue
+        if not feature_allowed_by_global_tier_flag(gfo.feature_key, gfo.tier):
+            continue
+        granted_features.add(gfo.feature_key)
+
+    # 2) Per-user override — active, non-expired, tier-scoped feature keys only.
     is_overridden = False
     override_reason = None
     override_expires = None
 
-    # 1. Global free features
-    result = await db.execute(
-        select(GlobalFeatureOverride).where(GlobalFeatureOverride.is_free_for_all == True)  # noqa: E712
-    )
-    for gfo in result.scalars().all():
-        granted_features.add(gfo.feature_key)
-
-    # 2. User-specific override
-    result = await db.execute(
+    o_result = await db.execute(
         select(UserFeatureOverride).where(
             UserFeatureOverride.user_id == user_id,
             UserFeatureOverride.is_active == True,  # noqa: E712
         )
     )
-    override = result.scalar_one_or_none()
+    override = o_result.scalar_one_or_none()
 
     if override:
-        # Check expiration
         expired = False
         if override.expires_at:
             exp = override.expires_at
@@ -51,21 +70,26 @@ async def get_effective_tier(user_id, db: AsyncSession) -> dict:
                 expired = True
 
         if not expired:
-            is_overridden = True
-            override_reason = override.reason
-            override_expires = override.expires_at.isoformat() if override.expires_at else None
+            allowed = set(filter_feature_keys_for_plan(override.granted_features or [], plan))
+            if allowed:
+                is_overridden = True
+                override_reason = override.reason
+                override_expires = (
+                    override.expires_at.isoformat() if override.expires_at else None
+                )
+                granted_features |= allowed
 
-            if override.override_tier:
-                effective_tier = override.override_tier
-
-            if override.granted_features:
-                for f in override.granted_features:
-                    granted_features.add(f)
+    gf_sorted = sorted(granted_features)
 
     return {
-        "effective_tier": effective_tier,
-        "granted_features": sorted(granted_features),
+        "effective_tier": plan,
+        "subscription_tier": plan,
+        "granted_features": gf_sorted,
         "is_overridden": is_overridden,
         "override_reason": override_reason,
         "override_expires": override_expires,
+        "has_personal_access": has_personal_home_access(plan),
+        "has_business_access": has_business_dashboard_access(plan),
+        "has_pro_features": has_pro_surface_access(plan),
+        "can_switch_modes": can_switch_app_mode(plan),
     }

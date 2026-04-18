@@ -27,6 +27,8 @@ async def create_household(name: str, user: User, db: AsyncSession) -> Household
     await db.flush()
 
     user.household_id = household.id
+    user.household_member_role = "adult"
+    user.household_child_permissions = None
     await db.flush()
     await db.refresh(household)
 
@@ -56,6 +58,8 @@ async def join_household(invite_code: str, user: User, db: AsyncSession) -> Hous
         raise ValueError("User already in a household")
 
     user.household_id = household.id
+    user.household_member_role = "adult"
+    user.household_child_permissions = None
     await db.flush()
 
     await log_activity(
@@ -89,6 +93,8 @@ async def leave_household(user: User, db: AsyncSession) -> None:
     )
 
     user.household_id = None
+    user.household_member_role = "adult"
+    user.household_child_permissions = None
     await db.flush()
 
     # Check if household is now empty

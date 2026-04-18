@@ -40,6 +40,7 @@ import CookiePolicy from './pages/legal/CookiePolicy';
 import Disclaimer from './pages/legal/Disclaimer';
 
 import BusinessModeRoute from './components/BusinessModeRoute';
+import PersonalModeRoute from './components/PersonalModeRoute';
 import BusinessDashboard from './pages/business/BusinessDashboard';
 import SalesPage from './pages/business/SalesPage';
 import CustomersPage from './pages/business/CustomersPage';
@@ -93,27 +94,29 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="bills-debts" element={<BillsAndDebts />} />
-            <Route path="bills" element={<Navigate to="/bills-debts?tab=bills" replace />} />
-            <Route path="debts" element={<Navigate to="/bills-debts?tab=debts" replace />} />
-            <Route path="savings" element={<Savings />} />
-            <Route path="payments" element={<Payments />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="support" element={<Support />} />
-            <Route path="supporter" element={<Supporter />} />
-            <Route path="household" element={<Household />} />
-            <Route path="income" element={<Income />} />
-            <Route path="refer" element={<Refer />} />
-            <Route path="vault" element={<Vault />} />
-            <Route path="calendar" element={<Calendar />} />
-            <Route path="tax-prep" element={<TaxPrep />} />
-            <Route path="admin/tickets" element={<AdminTickets />} />
-            <Route path="admin/stats" element={<AdminStats />} />
-            <Route path="admin/users" element={<AdminUsers />} />
-            <Route path="admin/command-center" element={<CommandCenter />} />
+            <Route element={<PersonalModeRoute />}>
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="bills-debts" element={<BillsAndDebts />} />
+              <Route path="bills" element={<Navigate to="/bills-debts?tab=bills" replace />} />
+              <Route path="debts" element={<Navigate to="/bills-debts?tab=debts" replace />} />
+              <Route path="savings" element={<Savings />} />
+              <Route path="payments" element={<Payments />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="support" element={<Support />} />
+              <Route path="supporter" element={<Supporter />} />
+              <Route path="household" element={<Household />} />
+              <Route path="income" element={<Income />} />
+              <Route path="refer" element={<Refer />} />
+              <Route path="vault" element={<Vault />} />
+              <Route path="calendar" element={<Calendar />} />
+              <Route path="tax-prep" element={<TaxPrep />} />
+              <Route path="admin/tickets" element={<AdminTickets />} />
+              <Route path="admin/stats" element={<AdminStats />} />
+              <Route path="admin/users" element={<AdminUsers />} />
+              <Route path="admin/command-center" element={<CommandCenter />} />
+            </Route>
 
             {/* Business Edition (requires app_mode=business) */}
             <Route element={<BusinessModeRoute />}>

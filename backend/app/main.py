@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from uuid import UUID
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,7 @@ from app.config import settings
 from app.database import async_session
 from app.models.system_setting import SystemSetting
 from app.models.user import User
+from app.services.tier_access import has_personal_home_access, normalize_plan_tier
 from app.routers import admin, announcements, auth, billing, bills, business, calendar, debts, households, import_export, income, notes, passwords, paycheck_checklist, paycheck_engine, paycheck_entries, paycheck_schedules, payments, referrals, reminders, savings, subscriptions, support, supporter, tax, unsubscribe, updates, user_preferences
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,36 @@ app.add_middleware(
 )
 
 # Paths exempt from the TOS version check
+# Business-only plans cannot call personal finance APIs (direct URL / tooling).
+_PERSONAL_API_PREFIXES = (
+    "/api/v1/income",
+    "/api/v1/bills",
+    "/api/v1/debts",
+    "/api/v1/savings",
+    "/api/v1/payments",
+    "/api/v1/paycheck-plan",
+    "/api/v1/paycheck-checklist",
+    "/api/v1/paycheck-entries",
+    "/api/v1/paycheck-schedules",
+    "/api/v1/households",
+    "/api/v1/reminders",
+    "/api/v1/import",
+    "/api/v1/export",
+    "/api/v1/notes",
+    "/api/v1/passwords",
+    "/api/v1/calendar",
+    "/api/v1/tax",
+    "/api/v1/referrals",
+)
+
+
+def _blocks_personal_finance_api(path: str) -> bool:
+    for prefix in _PERSONAL_API_PREFIXES:
+        if path == prefix or path.startswith(prefix + "/"):
+            return True
+    return False
+
+
 TOS_EXEMPT_PATHS = {
     "/api/v1/auth/accept-tos",
     "/api/v1/auth/me",
@@ -127,6 +159,50 @@ async def tos_check_middleware(request: Request, call_next):
         )
 
     return await call_next(request)
+
+
+@app.middleware("http")
+async def business_only_personal_api_block(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    path = request.url.path
+    if not _blocks_personal_finance_api(path):
+        return await call_next(request)
+
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return await call_next(request)
+
+    token = auth_header.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        return await call_next(request)
+
+    if payload.get("type") != "access":
+        return await call_next(request)
+
+    user_id = payload.get("sub")
+    if not user_id:
+        return await call_next(request)
+
+    try:
+        async with async_session() as session:
+            result = await session.execute(
+                select(User.subscription_tier).where(User.id == UUID(str(user_id)))
+            )
+            raw_tier = result.scalar_one_or_none()
+    except Exception:
+        logger.exception("business_only_personal_api_block: tier lookup failed")
+        return await call_next(request)
+
+    if has_personal_home_access(normalize_plan_tier(raw_tier)):
+        return await call_next(request)
+
+    return JSONResponse(
+        status_code=403,
+        content={"detail": "Personal finance features are not included in your current plan."},
+    )
 
 
 async def _is_maintenance_mode() -> bool:

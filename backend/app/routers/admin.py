@@ -16,6 +16,7 @@ from app.models.announcement import Announcement
 from app.models.app_update import AppUpdate
 from app.models.broadcast import Broadcast
 from app.models.coming_soon import ComingSoon
+from app.models.global_feature_override import GlobalFeatureOverride
 from app.models.household import Household
 from app.models.support_ticket import SupportTicket
 from app.models.system_setting import SystemSetting
@@ -26,6 +27,7 @@ from app.schemas.admin import (
     AdminHouseholdListResponse,
     AdminHouseholdSummary,
     AdminStatsResponse,
+    AdminSubscriptionTierUpdate,
     AdminToggleRequest,
     AdminUserDetailResponse,
     AdminUserEmailUpdate,
@@ -50,6 +52,11 @@ from app.schemas.updates import (
     ComingSoonCreate,
     ComingSoonOut,
     ComingSoonUpdate,
+)
+from app.services.tier_access import (
+    allowed_override_feature_keys_for_tier,
+    deactivate_user_feature_overrides,
+    sync_app_mode_to_subscription,
 )
 from app.utils.security import get_current_user
 
@@ -161,29 +168,6 @@ async def get_admin_stats(
         total_support_tickets=total_tickets,
         signups_last_7_days=signups_last_7_days,
     )
-
-
-# ── Command Center access log ─────────────────────────────────────
-
-
-@router.post("/log-access")
-async def log_command_center_access(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
-    log_admin_action(
-        db,
-        admin_id=current_user.id,
-        action="accessed_command_center",
-        ip_address=_get_client_ip(request),
-    )
-    return {"detail": "ok"}
 
 
 # ── Users ──────────────────────────────────────────────────────────
@@ -368,6 +352,52 @@ async def get_admin_user_detail(
             detail="User not found",
         )
 
+    return AdminUserDetailResponse.model_validate(user)
+
+
+@router.patch(
+    "/users/{user_id}/subscription-tier",
+    response_model=AdminUserDetailResponse,
+)
+async def update_user_subscription_tier(
+    user_id: UUID,
+    body: AdminSubscriptionTierUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Change plan tier and clear per-user feature overrides (fresh overrides only)."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    old_tier = user.subscription_tier
+    user.subscription_tier = body.subscription_tier
+    await deactivate_user_feature_overrides(db, user_id)
+    sync_app_mode_to_subscription(user)
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="updated_subscription_tier",
+        target_type="user",
+        target_id=str(user_id),
+        details=json.dumps({"old_tier": old_tier, "new_tier": body.subscription_tier}),
+        ip_address=_get_client_ip(request),
+    )
+
+    await db.flush()
+    await db.refresh(user)
     return AdminUserDetailResponse.model_validate(user)
 
 
@@ -629,6 +659,160 @@ async def admin_reset_password(
 # ── Audit Log ──────────────────────────────────────────────────────
 
 
+def _audit_details_dict(details: str | None) -> dict:
+    if not details:
+        return {}
+    try:
+        return json.loads(details)
+    except json.JSONDecodeError:
+        return {}
+
+
+async def _audit_log_target_labels(
+    db: AsyncSession, rows: list[AdminAuditLog]
+) -> dict[int, str | None]:
+    """Human-readable target line per audit log row id."""
+    user_ids: set[UUID] = set()
+    ticket_ids: set[UUID] = set()
+    announcement_ids: set[int] = set()
+    app_update_ids: set[int] = set()
+    coming_soon_ids: set[int] = set()
+    feature_keys: set[str] = set()
+
+    for r in rows:
+        tt, tid = r.target_type, r.target_id
+        if not tt:
+            continue
+        if tt == "user" and tid:
+            try:
+                user_ids.add(UUID(tid))
+            except ValueError:
+                pass
+        elif tt == "support_ticket" and tid:
+            try:
+                ticket_ids.add(UUID(tid))
+            except ValueError:
+                pass
+        elif tt == "announcement" and tid and tid.isdigit():
+            announcement_ids.add(int(tid))
+        elif tt == "app_update" and tid and tid.isdigit():
+            app_update_ids.add(int(tid))
+        elif tt == "coming_soon" and tid and tid.isdigit():
+            coming_soon_ids.add(int(tid))
+        elif tt == "global_feature" and tid:
+            feature_keys.add(tid)
+
+    user_map: dict[UUID, str] = {}
+    if user_ids:
+        res = await db.execute(select(User.id, User.email).where(User.id.in_(user_ids)))
+        user_map = {row[0]: row[1] for row in res.all()}
+
+    ticket_map: dict[UUID, str] = {}
+    if ticket_ids:
+        res = await db.execute(
+            select(SupportTicket.id, SupportTicket.subject).where(
+                SupportTicket.id.in_(ticket_ids)
+            )
+        )
+        ticket_map = {row[0]: row[1] for row in res.all()}
+
+    ann_map: dict[int, str] = {}
+    if announcement_ids:
+        res = await db.execute(
+            select(Announcement.id, Announcement.title).where(
+                Announcement.id.in_(announcement_ids)
+            )
+        )
+        ann_map = {row[0]: row[1] for row in res.all()}
+
+    upd_map: dict[int, str] = {}
+    if app_update_ids:
+        res = await db.execute(
+            select(AppUpdate.id, AppUpdate.description).where(AppUpdate.id.in_(app_update_ids))
+        )
+        upd_map = {row[0]: (row[1] or "")[:80] for row in res.all()}
+
+    cs_map: dict[int, str] = {}
+    if coming_soon_ids:
+        res = await db.execute(
+            select(ComingSoon.id, ComingSoon.feature_name).where(ComingSoon.id.in_(coming_soon_ids))
+        )
+        cs_map = {row[0]: row[1] for row in res.all()}
+
+    feat_map: dict[str, str] = {}
+    if feature_keys:
+        res = await db.execute(
+            select(GlobalFeatureOverride.feature_key, GlobalFeatureOverride.feature_label).where(
+                GlobalFeatureOverride.feature_key.in_(feature_keys)
+            )
+        )
+        feat_map = {row[0]: row[1] for row in res.all()}
+
+    out: dict[int, str | None] = {}
+    for r in rows:
+        tt, tid = r.target_type, r.target_id
+        d = _audit_details_dict(r.details)
+        label: str | None = None
+
+        if tt == "user" and tid:
+            try:
+                uid = UUID(tid)
+                label = user_map.get(uid) or tid
+            except ValueError:
+                label = tid
+        elif tt == "support_ticket" and tid:
+            try:
+                tid_u = UUID(tid)
+                subj = ticket_map.get(tid_u)
+                short = str(tid_u)[:8]
+                label = f"{subj or 'Ticket'} (#{short})" if subj else f"Ticket (#{short})"
+            except ValueError:
+                label = tid
+        elif tt == "announcement":
+            if tid and tid.isdigit():
+                i = int(tid)
+                t = ann_map.get(i)
+                if t:
+                    label = f"Announcement: {t}"
+            if not label and d.get("title"):
+                label = f"Announcement: {d['title']}"
+            if not label:
+                label = "Announcement"
+        elif tt == "app_update":
+            if tid and tid.isdigit():
+                desc = upd_map.get(int(tid))
+                if desc:
+                    label = f"App update: {desc}"
+            if not label and d.get("description"):
+                label = f"App update: {str(d['description'])[:80]}"
+            if not label:
+                label = "App update"
+        elif tt == "coming_soon":
+            if tid and tid.isdigit():
+                fn = cs_map.get(int(tid))
+                if fn:
+                    label = f"Coming soon: {fn}"
+            if not label and d.get("feature_name"):
+                label = f"Coming soon: {d['feature_name']}"
+            if not label:
+                label = "Coming soon item"
+        elif tt == "broadcast":
+            subj = d.get("subject")
+            label = f"Broadcast: {subj}" if subj else "Broadcast"
+        elif tt == "system":
+            key = d.get("key")
+            label = f"System setting: {key}" if key else "System settings"
+        elif tt == "global_feature" and tid:
+            label = feat_map.get(tid) or f"Feature: {tid}"
+        elif tid:
+            label = f"{tt}: {tid}"
+        elif d:
+            label = json.dumps(d, default=str)[:120]
+
+        out[r.id] = label
+    return out
+
+
 @router.get("/audit-log", response_model=AuditLogListResponse)
 async def get_audit_log(
     page: int = Query(1, ge=1),
@@ -644,8 +828,10 @@ async def get_audit_log(
             detail="Admin access required",
         )
 
-    query = select(AdminAuditLog)
-    count_query = select(func.count(AdminAuditLog.id))
+    query = select(AdminAuditLog).where(AdminAuditLog.action != "accessed_command_center")
+    count_query = select(func.count(AdminAuditLog.id)).where(
+        AdminAuditLog.action != "accessed_command_center"
+    )
 
     if action:
         query = query.where(AdminAuditLog.action == action)
@@ -676,6 +862,8 @@ async def get_audit_log(
         ).all()
         admin_email_map = {r[0]: r[1] for r in admin_rows}
 
+    target_labels = await _audit_log_target_labels(db, list(rows))
+
     items = [
         AuditLogOut(
             id=r.id,
@@ -684,6 +872,7 @@ async def get_audit_log(
             action=r.action,
             target_type=r.target_type,
             target_id=r.target_id,
+            target=target_labels.get(r.id),
             details=r.details,
             ip_address=r.ip_address,
             created_at=r.created_at,
@@ -1508,7 +1697,6 @@ class OverrideBody(BaseModel):
     expires_at: str | None = None
 
 
-VALID_TIERS = {None, "pro", "business", "bundle"}
 VALID_FEATURE_KEYS = {
     "savings_challenges", "household_overview", "tax_prep", "receipt_ocr",
     "bill_reminders", "spending_insights", "sales_tracking",
@@ -1559,9 +1747,6 @@ async def upsert_user_override(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    if body.override_tier not in VALID_TIERS:
-        raise HTTPException(status_code=400, detail=f"Invalid tier: {body.override_tier}")
-
     if body.granted_features:
         invalid = set(body.granted_features) - VALID_FEATURE_KEYS
         if invalid:
@@ -1569,8 +1754,21 @@ async def upsert_user_override(
 
     # Check user exists
     user_result = await db.execute(select(User).where(User.id == user_id))
-    if not user_result.scalar_one_or_none():
+    user = user_result.scalar_one_or_none()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if body.granted_features:
+        allowed_for_plan = allowed_override_feature_keys_for_tier(user.subscription_tier)
+        disallowed = set(body.granted_features) - allowed_for_plan
+        if disallowed:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "These features are not available for the user's subscription tier: "
+                    f"{sorted(disallowed)}"
+                ),
+            )
 
     expires_at = None
     if body.expires_at:
@@ -1586,7 +1784,7 @@ async def upsert_user_override(
     override = result.scalar_one_or_none()
 
     if override:
-        override.override_tier = body.override_tier
+        override.override_tier = None
         override.granted_features = body.granted_features or []
         override.reason = body.reason
         override.expires_at = expires_at
@@ -1595,7 +1793,7 @@ async def upsert_user_override(
     else:
         override = UserFeatureOverride(
             user_id=user_id,
-            override_tier=body.override_tier,
+            override_tier=None,
             granted_features=body.granted_features or [],
             reason=body.reason,
             expires_at=expires_at,
@@ -1661,8 +1859,6 @@ async def delete_user_override(
 
 
 # ── Feature C: Global Feature Toggles ──────────────────────────
-
-from app.models.global_feature_override import GlobalFeatureOverride  # noqa: E402
 
 
 @router.get("/global-features")

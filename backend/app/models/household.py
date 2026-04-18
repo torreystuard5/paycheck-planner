@@ -32,3 +32,8 @@ class Household(Base):
     members = relationship("User", back_populates="household", foreign_keys="[User.household_id]")
     bills = relationship("Bill", back_populates="household")
     debts = relationship("Debt", back_populates="household")
+    chores = relationship(
+        "HouseholdChore",
+        back_populates="household",
+        cascade="all, delete-orphan",
+    )
