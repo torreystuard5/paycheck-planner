@@ -1,0 +1,9 @@
+# Force browsers to always check for new index.html (SPA shell)
+/
+  Cache-Control: no-cache, no-store, must-revalidate
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# Static assets are fingerprinted by Vite, safe to cache forever
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
