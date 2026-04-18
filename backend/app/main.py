@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 from fastapi import FastAPI, Request
@@ -11,7 +12,7 @@ from app.config import settings
 from app.database import async_session
 from app.models.system_setting import SystemSetting
 from app.models.user import User
-from app.routers import admin, announcements, auth, billing, bills, calendar, debts, households, import_export, income, notes, passwords, paycheck_checklist, paycheck_engine, paycheck_entries, paycheck_schedules, payments, referrals, reminders, savings, subscriptions, support, supporter, tax, unsubscribe, updates, user_preferences
+from app.routers import admin, announcements, auth, billing, bills, business, calendar, debts, households, import_export, income, notes, passwords, paycheck_checklist, paycheck_engine, paycheck_entries, paycheck_schedules, payments, referrals, reminders, savings, subscriptions, support, supporter, tax, unsubscribe, updates, user_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +23,22 @@ app = FastAPI(
     redirect_slashes=False,
 )
 
-# Build CORS origins list from FRONTEND_URL (supports comma-separated values)
-_raw = settings.FRONTEND_URL.strip()
-if _raw:
-    origins = [o.strip() for o in _raw.split(",") if o.strip()]
-else:
+# CORS: FRONTEND_URL (comma-separated) + FRONTEND_ORIGIN (dev default) + production app host
+_PRODUCTION_APP_ORIGIN = "https://paydrift.net"
+_raw = (settings.FRONTEND_URL or "").strip()
+_env_origin = (os.getenv("FRONTEND_ORIGIN") or "").strip() or None
+_dev_default = _env_origin or "http://localhost:5173"
+
+if _raw == "*":
     origins = ["*"]
+elif _raw:
+    origins = [o.strip() for o in _raw.split(",") if o.strip()]
+    for _extra in (_PRODUCTION_APP_ORIGIN, _dev_default):
+        if _extra not in origins:
+            origins.append(_extra)
+    origins = list(dict.fromkeys(origins))
+else:
+    origins = list(dict.fromkeys([_dev_default, _PRODUCTION_APP_ORIGIN]))
 
 app.add_middleware(
     CORSMiddleware,
@@ -206,6 +217,7 @@ app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(tax.router, prefix="/api/v1")
 app.include_router(subscriptions.router, prefix="/api/v1")
 app.include_router(user_preferences.router, prefix="/api/v1")
+app.include_router(business.router, prefix="/api/v1")
 
 
 @app.on_event("startup")

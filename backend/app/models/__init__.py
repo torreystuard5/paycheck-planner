@@ -29,6 +29,14 @@ from app.models.tax_deduction import TaxDeduction
 from app.models.user_feature_override import UserFeatureOverride
 from app.models.global_feature_override import GlobalFeatureOverride
 from app.models.user_ui_preference import UserUIPreference
+from app.models.business import (
+    BusinessDeduction,
+    BusinessFund,
+    BusinessFundTransaction,
+    BusinessSale,
+    BusinessStaff,
+    BusinessStaffPayRun,
+)
 
 __all__ = [
     "PromoCode",
@@ -63,4 +71,10 @@ __all__ = [
     "UserFeatureOverride",
     "GlobalFeatureOverride",
     "UserUIPreference",
+    "BusinessSale",
+    "BusinessDeduction",
+    "BusinessStaff",
+    "BusinessStaffPayRun",
+    "BusinessFund",
+    "BusinessFundTransaction",
 ]

@@ -329,7 +329,7 @@ export default function Settings() {
                 try {
                   const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'business' });
                   updateUser(data);
-                  navigate('/dashboard');
+                  navigate('/business/dashboard');
                 } catch {}
               }}
               className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${

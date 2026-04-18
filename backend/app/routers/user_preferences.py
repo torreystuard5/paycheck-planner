@@ -29,7 +29,6 @@ async def update_app_mode(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="app_mode must be 'personal' or 'business'",
         )
-    # TODO: check business subscription when Stripe is live
     current_user.app_mode = body.app_mode
     db.add(current_user)
     await db.flush()

@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-let baseURL = import.meta.env.VITE_API_URL || '';
+/** Production API when VITE_API_URL is unset (e.g. misconfigured local build). */
+const FALLBACK_API_BASE = 'https://paydrift-api.onrender.com';
+
+let baseURL = (import.meta.env.VITE_API_URL || '').trim() || FALLBACK_API_BASE;
 // Prevent mixed-content errors: upgrade http to https in production
 if (baseURL.startsWith('http://') && typeof window !== 'undefined' && window.location.protocol === 'https:') {
   baseURL = baseURL.replace('http://', 'https://');

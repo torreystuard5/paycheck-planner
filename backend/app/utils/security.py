@@ -88,3 +88,16 @@ async def get_current_user(
         )
 
     return user
+
+
+async def require_business_mode(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Require authenticated user with app_mode=business (PayDrift Business Edition)."""
+    mode = (current_user.app_mode or "personal").lower()
+    if mode != "business":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Business mode required",
+        )
+    return current_user

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle, ChevronRight, ChevronDown, Square, CheckSquare, EyeOff, Eye, ChevronUp, Briefcase } from 'lucide-react';
+import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, Gift, CheckCircle, ChevronRight, ChevronDown, Square, CheckSquare, EyeOff, Eye, ChevronUp } from 'lucide-react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -47,6 +47,12 @@ function CollapsibleSection({ sectionKey, title, icon: Icon, iconColor, collapse
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user?.app_mode === 'business') {
+      navigate('/business/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [incomeSummary, setIncomeSummary] = useState(null);
@@ -122,6 +128,7 @@ export default function Dashboard() {
   }, []);
 
   const fetchDashboardData = useCallback(async () => {
+    if (user?.app_mode === 'business') return;
     setError(null);
     try {
       const [incomeRes, billsRes, debtsRes, savingsRes, paymentsRes] = await Promise.allSettled([
@@ -170,7 +177,7 @@ export default function Dashboard() {
     } catch (err) {
       setError('Failed to load dashboard data.');
     }
-  }, [fetchChecklist]);
+  }, [fetchChecklist, user?.app_mode]);
 
   useEffect(() => {
     const init = async () => {
@@ -181,7 +188,7 @@ export default function Dashboard() {
     init();
   }, [fetchDashboardData]);
 
-  usePolling(fetchDashboardData, 30000, !!household);
+  usePolling(fetchDashboardData, 30000, !!household && user?.app_mode !== 'business');
 
   const toggleChecklistItem = async (item, payPeriodStart) => {
     const key = `${item.item_type}_${item.id || item.item_id}`;
@@ -218,8 +225,6 @@ export default function Dashboard() {
   };
 
   if (loading || !sectionsLoaded) return <LoadingSpinner />;
-
-  const isBusinessMode = user?.app_mode === 'business';
 
   const totalIncome = incomeSummary ? Number(incomeSummary.total_net) || 0 : 0;
   const incomePaycheckCount = incomeSummary ? incomeSummary.paycheck_count || 0 : 0;
@@ -296,22 +301,6 @@ export default function Dashboard() {
           </p>
         )}
       </div>
-
-      {/* Business mode banner */}
-      {isBusinessMode && (
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="bg-purple-100 p-2 rounded-lg">
-            <Briefcase className="w-5 h-5 text-purple-600" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-purple-900">Business Dashboard — Coming Soon</p>
-            <p className="text-xs text-purple-600">Full business analytics and reporting features are on the way.</p>
-          </div>
-          <Link to="/settings" className="text-xs font-medium text-purple-700 hover:text-purple-800 shrink-0">
-            Switch Mode
-          </Link>
-        </div>
-      )}
 
       <RecentUpdates />
 

@@ -51,13 +51,13 @@ const personalLinks = [
 ];
 
 const businessLinks = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/biz/sales', label: 'Sales', icon: TrendingUp },
-  { to: '/biz/deductions', label: 'Deductions', icon: Briefcase },
-  { to: '/biz/staff-pay', label: 'Staff Pay', icon: Banknote },
-  { to: '/biz/contingency', label: 'Contingency Fund', icon: ShieldCheck },
-  { to: '/biz/upgrade-fund', label: 'Upgrade Fund', icon: ArrowUpCircle },
-  { to: '/biz/net-profit', label: 'Net Profit', icon: PieChart },
+  { to: '/business/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/business/sales', label: 'Sales', icon: TrendingUp },
+  { to: '/business/deductions', label: 'Deductions', icon: Briefcase },
+  { to: '/business/staff-pay', label: 'Staff Pay', icon: Banknote },
+  { to: '/business/contingency-fund', label: 'Contingency Fund', icon: ShieldCheck },
+  { to: '/business/upgrade-fund', label: 'Upgrade Fund', icon: ArrowUpCircle },
+  { to: '/business/net-profit', label: 'Net Profit', icon: PieChart },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
 ];
@@ -81,7 +81,7 @@ export default function Sidebar({ open, onClose }) {
     try {
       const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: mode });
       updateUser(data);
-      navigate('/dashboard');
+      navigate(mode === 'business' ? '/business/dashboard' : '/dashboard');
     } catch {
       // silent fail
     } finally {

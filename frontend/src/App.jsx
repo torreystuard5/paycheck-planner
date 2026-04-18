@@ -39,13 +39,13 @@ import PrivacyPolicy from './pages/legal/PrivacyPolicy';
 import CookiePolicy from './pages/legal/CookiePolicy';
 import Disclaimer from './pages/legal/Disclaimer';
 
-// Business placeholder pages
-import BizSales from './pages/biz/Sales';
-import BizDeductions from './pages/biz/Deductions';
-import BizStaffPay from './pages/biz/StaffPay';
-import BizContingency from './pages/biz/Contingency';
-import BizUpgradeFund from './pages/biz/UpgradeFund';
-import BizNetProfit from './pages/biz/NetProfit';
+import BusinessModeRoute from './components/BusinessModeRoute';
+import BusinessDashboard from './pages/business/BusinessDashboard';
+import SalesPage from './pages/business/SalesPage';
+import DeductionsPage from './pages/business/DeductionsPage';
+import StaffPayPage from './pages/business/StaffPayPage';
+import FundPage from './pages/business/FundPage';
+import NetProfitPage from './pages/business/NetProfitPage';
 
 function TosGate({ children }) {
   const { tosRequired, clearTosRequired } = useAuth();
@@ -114,13 +114,23 @@ export default function App() {
             <Route path="admin/users" element={<AdminUsers />} />
             <Route path="admin/command-center" element={<CommandCenter />} />
 
-            {/* Business mode placeholder pages */}
-            <Route path="biz/sales" element={<BizSales />} />
-            <Route path="biz/deductions" element={<BizDeductions />} />
-            <Route path="biz/staff-pay" element={<BizStaffPay />} />
-            <Route path="biz/contingency" element={<BizContingency />} />
-            <Route path="biz/upgrade-fund" element={<BizUpgradeFund />} />
-            <Route path="biz/net-profit" element={<BizNetProfit />} />
+            {/* Business Edition (requires app_mode=business) */}
+            <Route element={<BusinessModeRoute />}>
+              <Route path="business/dashboard" element={<BusinessDashboard />} />
+              <Route path="business/sales" element={<SalesPage />} />
+              <Route path="business/deductions" element={<DeductionsPage />} />
+              <Route path="business/staff-pay" element={<StaffPayPage />} />
+              <Route path="business/contingency-fund" element={<FundPage />} />
+              <Route path="business/upgrade-fund" element={<FundPage />} />
+              <Route path="business/net-profit" element={<NetProfitPage />} />
+            </Route>
+
+            <Route path="biz/sales" element={<Navigate to="/business/sales" replace />} />
+            <Route path="biz/deductions" element={<Navigate to="/business/deductions" replace />} />
+            <Route path="biz/staff-pay" element={<Navigate to="/business/staff-pay" replace />} />
+            <Route path="biz/contingency" element={<Navigate to="/business/contingency-fund" replace />} />
+            <Route path="biz/upgrade-fund" element={<Navigate to="/business/upgrade-fund" replace />} />
+            <Route path="biz/net-profit" element={<Navigate to="/business/net-profit" replace />} />
           </Route>
 
           {/* 404 */}

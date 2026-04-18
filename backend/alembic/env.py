@@ -23,6 +23,12 @@ from app.models import (  # noqa: F401 — ensure all models are registered
     User,
     UserFeatureOverride,
     UserUIPreference,
+    BusinessFund,
+    BusinessFundTransaction,
+    BusinessSale,
+    BusinessStaff,
+    BusinessStaffPayRun,
+    BusinessDeduction,
 )
 
 config = context.config

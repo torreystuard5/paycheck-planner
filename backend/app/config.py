@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     SUPPORT_EMAIL: str = "spsoftwaresolutionsllc@gmail.com"
+    # Comma-separated origins for CORS. See main.py for merge with paydrift.net.
     FRONTEND_URL: str = "http://localhost:5173"
+    # Optional extra dev origin (also read in main.py via os.environ for CORS).
+    FRONTEND_ORIGIN: str | None = None
     INITIAL_ADMIN_EMAIL: str | None = None
     NOTES_ENCRYPTION_KEY: str | None = None
     CURRENT_TOS_VERSION: str = "1.0"
