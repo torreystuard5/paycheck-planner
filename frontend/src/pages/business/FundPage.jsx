@@ -9,6 +9,7 @@ import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useToast } from '../../components/Toast';
+import { formatLabel } from '../../utils/formatLabel';
 
 export default function FundPage() {
   const location = useLocation();
@@ -66,14 +67,11 @@ export default function FundPage() {
       toast('Deposit must be a positive amount.', 'error');
       return;
     }
-    if (txForm.kind === 'withdrawal' && amt >= 0) {
-      toast('Enter a positive dollar amount for withdrawal (it is saved as a negative).', 'error');
+    if (txForm.kind === 'withdrawal' && amt <= 0) {
+      toast('Withdrawal must be a positive amount.', 'error');
       return;
     }
-    let amount = amt;
-    if (txForm.kind === 'deposit') amount = Math.abs(amt);
-    else if (txForm.kind === 'withdrawal') amount = -Math.abs(amt);
-    else amount = amt; // adjustment: signed value as entered
+    const amount = txForm.kind === 'adjustment' ? amt : Math.abs(amt);
     setSaving(true);
     try {
       await api.post(`/api/v1/business/funds/${fund.id}/transactions`, {
@@ -202,8 +200,10 @@ export default function FundPage() {
                 {txs.map((t) => (
                   <tr key={t.id} className="border-t border-gray-100">
                     <td className="px-3 py-2 whitespace-nowrap">{formatFriendlyDate(t.date)}</td>
-                    <td className="px-3 py-2 capitalize">{t.kind}</td>
-                    <td className="px-3 py-2 font-medium"><CurrencyDisplay amount={t.amount} /></td>
+                    <td className="px-3 py-2">{formatLabel(t.kind)}</td>
+                    <td className={`px-3 py-2 font-medium ${Number(t.amount) < 0 ? 'text-red-600' : Number(t.amount) > 0 ? 'text-green-700' : ''}`}>
+                      <CurrencyDisplay amount={t.amount} />
+                    </td>
                     <td className="px-3 py-2">
                       <button type="button" onClick={() => setDelTx(t)} className="p-1 text-gray-500 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                     </td>
@@ -224,15 +224,14 @@ export default function FundPage() {
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Kind</label>
             <select value={txForm.kind} onChange={(e) => setTxForm({ ...txForm, kind: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
-              <option value="deposit">Deposit (positive amount)</option>
-              <option value="withdrawal">Withdrawal (enter positive; saved as negative)</option>
+              <option value="deposit">Deposit</option>
+              <option value="withdrawal">Withdrawal</option>
               <option value="adjustment">Adjustment</option>
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Amount</label>
             <input type="number" step="0.01" required value={txForm.amount} onChange={(e) => setTxForm({ ...txForm, amount: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
-            <p className="text-xs text-gray-500 mt-1">Withdrawals: enter dollars to pull out (stored negative).</p>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Note</label>

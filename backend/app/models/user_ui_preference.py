@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import DateTime, Integer, JSON, ForeignKey, text
+from sqlalchemy import DateTime, Integer, JSON, ForeignKey, Numeric, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -20,6 +20,9 @@ class UserUIPreference(Base):
     )
     collapsed_sections: Mapped[list] = mapped_column(
         JSON, server_default=text("'[]'::json"), nullable=False
+    )
+    business_mileage_rate_per_mile: Mapped[float | None] = mapped_column(
+        Numeric(8, 4), nullable=True
     )
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

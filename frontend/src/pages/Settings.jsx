@@ -74,6 +74,8 @@ export default function Settings() {
     bill_reminders: true,
     payment_confirmations: true,
   });
+  const [mileageRate, setMileageRate] = useState('0.70');
+  const [mileageSaving, setMileageSaving] = useState(false);
 
   // Paycheck schedule state
   const [schedules, setSchedules] = useState([]);
@@ -88,6 +90,18 @@ export default function Settings() {
     fetchSupporterStatus();
     fetchSchedules();
   }, []);
+
+  useEffect(() => {
+    if (user?.app_mode !== 'business') return;
+    (async () => {
+      try {
+        const { data } = await api.get('/api/v1/business/settings');
+        setMileageRate(String(data.mileage_rate_per_mile ?? 0.7));
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [user?.app_mode, user?.id]);
 
   useEffect(() => {
     if (profile.email && !supportForm.email) {
@@ -185,6 +199,20 @@ export default function Settings() {
       setError('Failed to save settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveMileage = async () => {
+    setMileageSaving(true);
+    setError(null);
+    try {
+      await api.patch('/api/v1/business/settings', { mileage_rate_per_mile: parseFloat(mileageRate) });
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch {
+      setError('Could not save mileage rate.');
+    } finally {
+      setMileageSaving(false);
     }
   };
 
@@ -344,6 +372,35 @@ export default function Settings() {
           </div>
         </div>
       </div>
+
+      {user?.app_mode === 'business' && (
+        <div className="max-w-2xl">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Business expense defaults</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Mileage reimbursement rate per mile (used on the Deductions page for mileage entries). The IRS 2026 optional standard business rate is $0.70/mile.
+            </p>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="min-w-[10rem]">
+                <label htmlFor="mileage-rate" className="block text-xs text-gray-500 mb-1">Dollars per mile</label>
+                <input
+                  id="mileage-rate"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max="50"
+                  value={mileageRate}
+                  onChange={(e) => setMileageRate(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <button type="button" onClick={saveMileage} disabled={mileageSaving} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50">
+                {mileageSaving ? 'Saving…' : 'Save mileage rate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

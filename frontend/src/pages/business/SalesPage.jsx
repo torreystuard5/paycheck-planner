@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import api from '../../services/api';
@@ -12,12 +12,18 @@ import EmptyState from '../../components/EmptyState';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useToast } from '../../components/Toast';
 
+const DEFAULT_CATEGORIES = ['Products', 'Services', 'Labor & Supplies', 'Consulting', 'Subscriptions', 'Wholesale', 'Retail', 'Other'];
+const CUSTOM_CAT = '__custom__';
+const PAYMENT_METHODS = ['Cash', 'Check', 'Visa', 'Mastercard', 'American Express', 'Discover', 'Debit Card', 'Bank Transfer (ACH)', 'PayPal', 'Venmo', 'Zelle', 'Apple Pay', 'Google Pay', 'Other'];
+
 const emptyForm = {
   date: new Date().toISOString().slice(0, 10),
   amount: '',
   source: '',
+  customer_id: null,
   category: '',
-  payment_method: '',
+  categorySelect: 'Products',
+  payment_method: 'Cash',
   notes: '',
   is_taxable: true,
 };
@@ -30,25 +36,45 @@ export default function SalesPage() {
   const [error, setError] = useState(null);
   const [range, setRange] = useState('month');
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [catFromApi, setCatFromApi] = useState([]);
   const [modal, setModal] = useState(false);
+  const [quickAdd, setQuickAdd] = useState(false);
+  const [quickName, setQuickName] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [del, setDel] = useState(null);
+  const [custHits, setCustHits] = useState([]);
+  const [custOpen, setCustOpen] = useState(false);
+  const custTimer = useRef(null);
+
+  const mergedCategories = [...DEFAULT_CATEGORIES];
+  const seen = new Set(DEFAULT_CATEGORIES.map((c) => c.toLowerCase()));
+  catFromApi.forEach((c) => {
+    const t = (c || '').trim();
+    if (t && !seen.has(t.toLowerCase())) {
+      seen.add(t.toLowerCase());
+      mergedCategories.push(t);
+    }
+  });
+
+  const filterCategoryOptions = ['', ...[...new Set(mergedCategories)]];
 
   const load = async () => {
     setError(null);
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      if (category) params.set('category', category);
-      const [listRes, sumRes] = await Promise.all([
+      if (filterCategory) params.set('category', filterCategory);
+      const [listRes, sumRes, catRes] = await Promise.all([
         api.get(`/api/v1/business/sales?${params.toString()}`),
         api.get(`/api/v1/business/sales/summary?range=${range}`),
+        api.get('/api/v1/business/sales/category-options'),
       ]);
       setRows(Array.isArray(listRes.data) ? listRes.data : []);
       setSummary(sumRes.data);
+      setCatFromApi(catRes.data?.values || []);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -61,23 +87,50 @@ export default function SalesPage() {
     load();
   }, [range]);
 
+  const searchCustomers = (t) => {
+    if (custTimer.current) clearTimeout(custTimer.current);
+    if (!t || t.length < 1) {
+      setCustHits([]);
+      return;
+    }
+    custTimer.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/api/v1/business/customers?q=${encodeURIComponent(t)}`);
+        setCustHits(Array.isArray(data) ? data : []);
+      } catch {
+        setCustHits([]);
+      }
+    }, 200);
+  };
+
   const openAdd = () => {
     setEditing(null);
     setForm(emptyForm);
+    setCustHits([]);
+    setCustOpen(false);
     setModal(true);
   };
 
   const openEdit = (r) => {
     setEditing(r);
+    const cat = r.category || 'Other';
+    const preset = DEFAULT_CATEGORIES.find((p) => p.toLowerCase() === cat.toLowerCase()) || mergedCategories.find((p) => p.toLowerCase() === cat.toLowerCase());
+    const catSel = preset || CUSTOM_CAT;
     setForm({
       date: r.date?.slice(0, 10) || '',
       amount: String(r.amount ?? ''),
       source: r.source || '',
-      category: r.category || '',
-      payment_method: r.payment_method || '',
+      customer_id: r.customer_id || null,
+      category: catSel === CUSTOM_CAT ? cat : cat,
+      categorySelect: catSel,
+      payment_method: r.payment_method && PAYMENT_METHODS.some((p) => p.toLowerCase() === r.payment_method.toLowerCase())
+        ? PAYMENT_METHODS.find((p) => p.toLowerCase() === r.payment_method.toLowerCase())
+        : (r.payment_method || 'Other'),
       notes: r.notes || '',
       is_taxable: r.is_taxable !== false,
     });
+    setCustHits([]);
+    setCustOpen(false);
     setModal(true);
   };
 
@@ -87,13 +140,15 @@ export default function SalesPage() {
       toast('Date and amount are required.', 'error');
       return;
     }
+    const catVal = form.categorySelect === CUSTOM_CAT ? (form.category || '').trim() || null : form.categorySelect;
     setSaving(true);
     try {
       const payload = {
         date: form.date,
         amount: parseFloat(form.amount),
-        source: form.source || null,
-        category: form.category || null,
+        source: form.source?.trim() || null,
+        customer_id: form.customer_id || null,
+        category: catVal,
         payment_method: form.payment_method || null,
         notes: form.notes || null,
         is_taxable: form.is_taxable,
@@ -107,6 +162,27 @@ export default function SalesPage() {
       }
       setModal(false);
       await load();
+    } catch (err) {
+      toast(formatApiError(err), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const quickAddCustomer = async (e) => {
+    e.preventDefault();
+    if (!quickName.trim()) {
+      toast('Name required.', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data } = await api.post('/api/v1/business/customers', { name: quickName.trim() });
+      setForm((f) => ({ ...f, customer_id: data.id, source: data.name }));
+      setQuickAdd(false);
+      setQuickName('');
+      setCustOpen(false);
+      toast('Customer created.');
     } catch (err) {
       toast(formatApiError(err), 'error');
     } finally {
@@ -134,7 +210,7 @@ export default function SalesPage() {
   if (loading && !rows.length) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-5xl min-w-0">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sales</h1>
@@ -158,7 +234,12 @@ export default function SalesPage() {
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Category</label>
-          <input value={category} onChange={(e) => setCategory(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-36" placeholder="Filter" />
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[10rem]">
+            <option value="">All Categories</option>
+            {filterCategoryOptions.filter(Boolean).map((c) => (
+              <option key={c} value={c}>{formatLabel(c)}</option>
+            ))}
+          </select>
         </div>
         <div className="flex-1 min-w-[140px]">
           <label className="block text-xs text-gray-500 mb-1">Search</label>
@@ -189,7 +270,7 @@ export default function SalesPage() {
       </div>
 
       {chartData.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm h-64">
+        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm h-64 min-h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
@@ -204,7 +285,7 @@ export default function SalesPage() {
       {rows.length === 0 ? (
         <EmptyState title="No sales yet" message="Add your first sale to see it here." actionLabel="Add sale" onAction={openAdd} />
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm max-w-[100vw] sm:max-w-none">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 text-left text-gray-600">
@@ -221,7 +302,7 @@ export default function SalesPage() {
                   <tr key={r.id} className="border-t border-gray-100">
                     <td className="px-3 py-2 whitespace-nowrap">{formatFriendlyDate(r.date)}</td>
                     <td className="px-3 py-2 font-medium"><CurrencyDisplay amount={r.amount} /></td>
-                    <td className="px-3 py-2 hidden sm:table-cell text-gray-600 truncate max-w-[120px]">{r.source || '—'}</td>
+                    <td className="px-3 py-2 hidden sm:table-cell text-gray-600 truncate max-w-[120px]">{r.customer_name || r.source || '—'}</td>
                     <td className="px-3 py-2">{formatLabel(r.category) || '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
@@ -238,7 +319,7 @@ export default function SalesPage() {
       )}
 
       <Modal isOpen={modal} onClose={() => setModal(false)} title={editing ? 'Edit sale' : 'Add sale'}>
-        <form onSubmit={submit} className="space-y-3">
+        <form onSubmit={submit} className="space-y-3 max-h-[80vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
@@ -249,18 +330,68 @@ export default function SalesPage() {
               <input type="number" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>
-          <div>
+          <div className="relative">
             <label className="block text-xs font-medium text-gray-700 mb-1">Source / customer</label>
-            <input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
+            <input
+              autoComplete="off"
+              value={form.source}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm({ ...form, source: v, customer_id: null });
+                searchCustomers(v);
+                setCustOpen(true);
+              }}
+              onFocus={() => setCustOpen(true)}
+              onBlur={() => setTimeout(() => setCustOpen(false), 200)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+            {custOpen && (custHits.length > 0 || form.source) && (
+              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto text-sm">
+                {custHits.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setForm({ ...form, customer_id: c.id, source: c.name });
+                      setCustOpen(false);
+                    }}
+                  >
+                    {formatLabel(c.name)}{c.company ? ` · ${formatLabel(c.company)}` : ''}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-indigo-600 hover:bg-indigo-50 font-medium"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { setQuickAdd(true); setQuickName(form.source || ''); }}
+                >
+                  + Add new customer
+                </button>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-              <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
+              <select value={form.categorySelect} onChange={(e) => setForm({ ...form, categorySelect: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
+                {mergedCategories.map((c) => (
+                  <option key={c} value={c}>{formatLabel(c)}</option>
+                ))}
+                <option value={CUSTOM_CAT}>Custom…</option>
+              </select>
+              {form.categorySelect === CUSTOM_CAT && (
+                <input className="w-full border rounded-lg px-3 py-2 text-sm mt-2" placeholder="Custom category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Payment method</label>
-              <input value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
+              <select value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
+                {PAYMENT_METHODS.map((p) => (
+                  <option key={p} value={p}>{formatLabel(p)}</option>
+                ))}
+              </select>
             </div>
           </div>
           <div>
@@ -274,6 +405,19 @@ export default function SalesPage() {
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setModal(false)} disabled={saving} className="px-4 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={quickAdd} onClose={() => setQuickAdd(false)} title="New customer">
+        <form onSubmit={quickAddCustomer} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
+            <input required value={quickName} onChange={(e) => setQuickName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setQuickAdd(false)} className="px-4 py-2 text-sm rounded-lg hover:bg-gray-100">Cancel</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">{saving ? 'Saving…' : 'Create'}</button>
           </div>
         </form>
       </Modal>

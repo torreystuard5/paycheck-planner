@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Run migrations
+# Runs Alembic upgrade to head (see migrate.py) before starting the API.
 python migrate.py
 
 # Start app

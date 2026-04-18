@@ -42,6 +42,7 @@ import Disclaimer from './pages/legal/Disclaimer';
 import BusinessModeRoute from './components/BusinessModeRoute';
 import BusinessDashboard from './pages/business/BusinessDashboard';
 import SalesPage from './pages/business/SalesPage';
+import CustomersPage from './pages/business/CustomersPage';
 import DeductionsPage from './pages/business/DeductionsPage';
 import StaffPayPage from './pages/business/StaffPayPage';
 import FundPage from './pages/business/FundPage';
@@ -118,6 +119,7 @@ export default function App() {
             <Route element={<BusinessModeRoute />}>
               <Route path="business/dashboard" element={<BusinessDashboard />} />
               <Route path="business/sales" element={<SalesPage />} />
+              <Route path="business/customers" element={<CustomersPage />} />
               <Route path="business/deductions" element={<DeductionsPage />} />
               <Route path="business/staff-pay" element={<StaffPayPage />} />
               <Route path="business/contingency-fund" element={<FundPage />} />

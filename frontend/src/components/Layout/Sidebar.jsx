@@ -53,6 +53,7 @@ const personalLinks = [
 const businessLinks = [
   { to: '/business/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/business/sales', label: 'Sales', icon: TrendingUp },
+  { to: '/business/customers', label: 'Customers', icon: Users },
   { to: '/business/deductions', label: 'Deductions', icon: Briefcase },
   { to: '/business/staff-pay', label: 'Staff Pay', icon: Banknote },
   { to: '/business/contingency-fund', label: 'Contingency Fund', icon: ShieldCheck },

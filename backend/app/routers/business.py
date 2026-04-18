@@ -9,11 +9,12 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.business import (
+    BusinessCustomer,
     BusinessDeduction,
     BusinessFund,
     BusinessFundTransaction,
@@ -21,8 +22,14 @@ from app.models.business import (
     BusinessStaff,
     BusinessStaffPayRun,
 )
+from app.models.user_ui_preference import UserUIPreference
 from app.models.user import User
 from app.schemas.business import (
+    BusinessSettingsResponse,
+    BusinessSettingsUpdate,
+    CustomerCreate,
+    CustomerResponse,
+    CustomerUpdate,
     DashboardResponse,
     DeductionCreate,
     DeductionResponse,
@@ -46,6 +53,7 @@ from app.schemas.business import (
     StaffPaySummary,
     StaffResponse,
     StaffUpdate,
+    StringListResponse,
 )
 from app.utils.security import require_business_mode
 
@@ -130,6 +138,20 @@ async def ensure_default_business_funds(db: AsyncSession, user_id: UUID) -> None
     await db.flush()
 
 
+async def _customer_name_map(
+    db: AsyncSession, user_id: UUID, customer_ids: set[UUID]
+) -> dict[UUID, str]:
+    if not customer_ids:
+        return {}
+    r = await db.execute(
+        select(BusinessCustomer.id, BusinessCustomer.name).where(
+            BusinessCustomer.user_id == user_id,
+            BusinessCustomer.id.in_(customer_ids),
+        )
+    )
+    return {row[0]: row[1] for row in r.all()}
+
+
 # ── Sales summary (before /sales/{id}) ─────────────────────────────
 
 
@@ -167,6 +189,26 @@ async def sales_summary(
     )
 
 
+@router.get("/sales/category-options", response_model=StringListResponse)
+async def sales_category_options(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    r = await db.execute(
+        select(BusinessSale.category)
+        .where(
+            BusinessSale.user_id == user.id,
+            BusinessSale.is_active.is_(True),
+            BusinessSale.category.isnot(None),
+            BusinessSale.category != "",
+        )
+        .distinct()
+        .limit(200)
+    )
+    vals = sorted({row[0].strip() for row in r.all() if row[0]})
+    return StringListResponse(values=vals)
+
+
 @router.get("/sales", response_model=list[SaleResponse])
 async def list_sales(
     start_date: Optional[date] = None,
@@ -188,16 +230,33 @@ async def list_sales(
         q = q.where(BusinessSale.category == category)
     if search:
         like = f"%{search}%"
+        cust_match = exists(
+            select(1)
+            .select_from(BusinessCustomer)
+            .where(
+                BusinessCustomer.id == BusinessSale.customer_id,
+                BusinessCustomer.user_id == user.id,
+                or_(
+                    BusinessCustomer.name.ilike(like),
+                    BusinessCustomer.company.ilike(like),
+                    BusinessCustomer.email.ilike(like),
+                ),
+            )
+        )
         q = q.where(
             or_(
                 BusinessSale.source.ilike(like),
                 BusinessSale.notes.ilike(like),
                 BusinessSale.category.ilike(like),
+                cust_match,
             )
         )
     q = q.order_by(BusinessSale.sale_date.desc(), BusinessSale.created_at.desc()).limit(LIST_LIMIT)
     r = await db.execute(q)
-    return [SaleResponse.from_orm_sale(s) for s in r.scalars().all()]
+    rows = list(r.scalars().all())
+    cids = {s.customer_id for s in rows if getattr(s, "customer_id", None)}
+    cmap = await _customer_name_map(db, user.id, cids)
+    return [SaleResponse.from_orm_sale(s, cmap.get(s.customer_id)) for s in rows]
 
 
 @router.post("/sales", response_model=SaleResponse, status_code=status.HTTP_201_CREATED)
@@ -206,11 +265,28 @@ async def create_sale(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_business_mode),
 ):
+    src = data.source
+    cust_name: Optional[str] = None
+    if data.customer_id:
+        cr = await db.execute(
+            select(BusinessCustomer).where(
+                BusinessCustomer.id == data.customer_id,
+                BusinessCustomer.user_id == user.id,
+                BusinessCustomer.is_active.is_(True),
+            )
+        )
+        cust = cr.scalar_one_or_none()
+        if not cust:
+            raise HTTPException(status_code=400, detail="Customer not found")
+        cust_name = cust.name
+        if not src:
+            src = cust.name
     s = BusinessSale(
         user_id=user.id,
+        customer_id=data.customer_id,
         sale_date=data.date,
         amount=data.amount,
-        source=data.source,
+        source=src,
         category=data.category,
         payment_method=data.payment_method,
         notes=data.notes,
@@ -219,7 +295,7 @@ async def create_sale(
     db.add(s)
     await db.flush()
     await db.refresh(s)
-    return SaleResponse.from_orm_sale(s)
+    return SaleResponse.from_orm_sale(s, cust_name)
 
 
 @router.get("/sales/{sale_id}", response_model=SaleResponse)
@@ -238,7 +314,8 @@ async def get_sale(
     s = r.scalar_one_or_none()
     if not s:
         raise HTTPException(status_code=404, detail="Sale not found")
-    return SaleResponse.from_orm_sale(s)
+    cmap = await _customer_name_map(db, user.id, {s.customer_id} if s.customer_id else set())
+    return SaleResponse.from_orm_sale(s, cmap.get(s.customer_id))
 
 
 @router.patch("/sales/{sale_id}", response_model=SaleResponse)
@@ -261,11 +338,25 @@ async def update_sale(
     body = data.model_dump(exclude_unset=True)
     if "date" in body:
         s.sale_date = body.pop("date")
+    if "customer_id" in body:
+        new_cid = body.pop("customer_id")
+        if new_cid:
+            cr = await db.execute(
+                select(BusinessCustomer).where(
+                    BusinessCustomer.id == new_cid,
+                    BusinessCustomer.user_id == user.id,
+                    BusinessCustomer.is_active.is_(True),
+                )
+            )
+            if not cr.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Customer not found")
+        s.customer_id = new_cid
     for k, v in body.items():
         setattr(s, k, v)
     await db.flush()
     await db.refresh(s)
-    return SaleResponse.from_orm_sale(s)
+    cmap = await _customer_name_map(db, user.id, {s.customer_id} if s.customer_id else set())
+    return SaleResponse.from_orm_sale(s, cmap.get(s.customer_id))
 
 
 @router.delete("/sales/{sale_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -285,6 +376,173 @@ async def delete_sale(
     if not s:
         raise HTTPException(status_code=404, detail="Sale not found")
     s.is_active = False
+    await db.flush()
+
+
+# ── Business settings (mileage, etc.) ───────────────────────────────
+
+
+@router.get("/settings", response_model=BusinessSettingsResponse)
+async def get_business_settings(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    r = await db.execute(
+        select(UserUIPreference).where(UserUIPreference.user_id == user.id)
+    )
+    pref = r.scalar_one_or_none()
+    rate = Decimal("0.7000")
+    if pref and pref.business_mileage_rate_per_mile is not None:
+        rate = Decimal(str(pref.business_mileage_rate_per_mile))
+    return BusinessSettingsResponse(mileage_rate_per_mile=rate)
+
+
+@router.patch("/settings", response_model=BusinessSettingsResponse)
+async def patch_business_settings(
+    data: BusinessSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    r = await db.execute(
+        select(UserUIPreference).where(UserUIPreference.user_id == user.id)
+    )
+    pref = r.scalar_one_or_none()
+    if not pref:
+        pref = UserUIPreference(user_id=user.id, collapsed_sections=[])
+        db.add(pref)
+    if data.mileage_rate_per_mile is not None:
+        pref.business_mileage_rate_per_mile = data.mileage_rate_per_mile
+    await db.flush()
+    await db.refresh(pref)
+    rate = Decimal("0.7000")
+    if pref.business_mileage_rate_per_mile is not None:
+        rate = Decimal(str(pref.business_mileage_rate_per_mile))
+    return BusinessSettingsResponse(mileage_rate_per_mile=rate)
+
+
+# ── Customers ──────────────────────────────────────────────────────
+
+
+@router.get("/customers", response_model=list[CustomerResponse])
+async def list_customers(
+    q: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    query = select(BusinessCustomer).where(
+        BusinessCustomer.user_id == user.id,
+        BusinessCustomer.is_active.is_(True),
+    )
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.where(
+            or_(
+                BusinessCustomer.name.ilike(like),
+                BusinessCustomer.email.ilike(like),
+                BusinessCustomer.company.ilike(like),
+            )
+        )
+    query = query.order_by(BusinessCustomer.name).limit(LIST_LIMIT)
+    r = await db.execute(query)
+    return list(r.scalars().all())
+
+
+@router.post("/customers", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
+async def create_customer(
+    data: CustomerCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    c = BusinessCustomer(
+        user_id=user.id,
+        name=data.name.strip(),
+        email=(data.email or "").strip() or None,
+        phone=(data.phone or "").strip() or None,
+        address=(data.address or "").strip() or None,
+        company=(data.company or "").strip() or None,
+        notes=(data.notes or "").strip() or None,
+    )
+    db.add(c)
+    await db.flush()
+    await db.refresh(c)
+    return c
+
+
+@router.get("/customers/{customer_id}", response_model=CustomerResponse)
+async def get_customer(
+    customer_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    r = await db.execute(
+        select(BusinessCustomer).where(
+            BusinessCustomer.id == customer_id,
+            BusinessCustomer.user_id == user.id,
+            BusinessCustomer.is_active.is_(True),
+        )
+    )
+    c = r.scalar_one_or_none()
+    if not c:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return c
+
+
+@router.patch("/customers/{customer_id}", response_model=CustomerResponse)
+async def update_customer(
+    customer_id: UUID,
+    data: CustomerUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    r = await db.execute(
+        select(BusinessCustomer).where(
+            BusinessCustomer.id == customer_id,
+            BusinessCustomer.user_id == user.id,
+            BusinessCustomer.is_active.is_(True),
+        )
+    )
+    c = r.scalar_one_or_none()
+    if not c:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        if v is not None and isinstance(v, str):
+            v = v.strip()
+        setattr(c, k, v)
+    await db.flush()
+    await db.refresh(c)
+    return c
+
+
+@router.delete("/customers/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_customer(
+    customer_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    r = await db.execute(
+        select(BusinessCustomer).where(
+            BusinessCustomer.id == customer_id,
+            BusinessCustomer.user_id == user.id,
+            BusinessCustomer.is_active.is_(True),
+        )
+    )
+    c = r.scalar_one_or_none()
+    if not c:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    pr = await db.execute(
+        select(func.count())
+        .select_from(BusinessSale)
+        .where(
+            BusinessSale.customer_id == customer_id,
+            BusinessSale.user_id == user.id,
+            BusinessSale.is_active.is_(True),
+        )
+    )
+    n = int(pr.scalar_one() or 0)
+    if n > 0:
+        c.is_active = False
+    else:
+        await db.delete(c)
     await db.flush()
 
 
@@ -351,6 +609,44 @@ async def list_deductions(
     q = q.order_by(BusinessDeduction.deduction_date.desc()).limit(LIST_LIMIT)
     r = await db.execute(q)
     return [DeductionResponse.from_orm_row(d) for d in r.scalars().all()]
+
+
+@router.get("/deductions/vendor-options", response_model=StringListResponse)
+async def deduction_vendor_options(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    r = await db.execute(
+        select(BusinessDeduction.vendor)
+        .where(
+            BusinessDeduction.user_id == user.id,
+            BusinessDeduction.is_active.is_(True),
+            BusinessDeduction.vendor.isnot(None),
+            BusinessDeduction.vendor != "",
+        )
+        .distinct()
+        .limit(500)
+    )
+    vals = sorted({row[0].strip() for row in r.all() if row[0]})
+    return StringListResponse(values=vals)
+
+
+@router.get("/deductions/category-options", response_model=StringListResponse)
+async def deduction_category_options(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    r = await db.execute(
+        select(BusinessDeduction.category)
+        .where(
+            BusinessDeduction.user_id == user.id,
+            BusinessDeduction.is_active.is_(True),
+        )
+        .distinct()
+        .limit(200)
+    )
+    vals = sorted({row[0].strip() for row in r.all() if row[0]})
+    return StringListResponse(values=vals)
 
 
 @router.post("/deductions", response_model=DeductionResponse, status_code=status.HTTP_201_CREATED)
@@ -445,6 +741,26 @@ async def delete_deduction(
 # ── Staff ───────────────────────────────────────────────────────────
 
 
+@router.get("/staff/role-options", response_model=StringListResponse)
+async def staff_role_options(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_business_mode),
+):
+    r = await db.execute(
+        select(BusinessStaff.role)
+        .where(
+            BusinessStaff.user_id == user.id,
+            BusinessStaff.is_active.is_(True),
+            BusinessStaff.role.isnot(None),
+            BusinessStaff.role != "",
+        )
+        .distinct()
+        .limit(200)
+    )
+    vals = sorted({row[0].strip() for row in r.all() if row[0]})
+    return StringListResponse(values=vals)
+
+
 @router.get("/staff", response_model=list[StaffResponse])
 async def list_staff(
     db: AsyncSession = Depends(get_db),
@@ -471,6 +787,9 @@ async def create_staff(
         role=data.role,
         pay_type=data.pay_type,
         pay_rate=data.pay_rate,
+        pay_frequency=data.pay_frequency,
+        anchor_date=data.anchor_date,
+        tax_rate=data.tax_rate,
     )
     db.add(st)
     await db.flush()
@@ -859,11 +1178,18 @@ async def create_fund_transaction(
     )
     if not fr.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Fund not found")
+    amt = data.amount
+    if data.kind == "deposit":
+        store_amt = abs(amt)
+    elif data.kind == "withdrawal":
+        store_amt = -abs(amt)
+    else:
+        store_amt = amt
     t = BusinessFundTransaction(
         user_id=user.id,
         fund_id=fund_id,
         tx_date=data.date,
-        amount=data.amount,
+        amount=store_amt,
         kind=data.kind,
         note=data.note,
     )
@@ -1077,6 +1403,9 @@ async def business_dashboard(
         .order_by(BusinessSale.sale_date.desc())
         .limit(5)
     )
+    dash_sales = list(rs.scalars().all())
+    dcids = {s.customer_id for s in dash_sales if getattr(s, "customer_id", None)}
+    dcmap = await _customer_name_map(db, user.id, dcids)
     rd = await db.execute(
         select(BusinessDeduction)
         .where(BusinessDeduction.user_id == user.id, BusinessDeduction.is_active.is_(True))
@@ -1097,7 +1426,9 @@ async def business_dashboard(
         mtd_net_profit=mnet,
         contingency_fund=cf,
         upgrade_fund=uf,
-        recent_sales=[SaleResponse.from_orm_sale(s) for s in rs.scalars().all()],
+        recent_sales=[
+            SaleResponse.from_orm_sale(s, dcmap.get(s.customer_id)) for s in dash_sales
+        ],
         recent_deductions=[DeductionResponse.from_orm_row(d) for d in rd.scalars().all()],
         recent_pay_runs=list(rp.scalars().all()),
     )
