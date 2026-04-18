@@ -1,19 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
   Loader2,
   Save,
   AlertTriangle,
   Crown,
   Settings2,
-  KeyRound,
   Eye,
   EyeOff,
   Copy,
+  Lock,
 } from 'lucide-react';
 import api from '../services/api';
 import { formatApiError } from '../utils/formatApiError';
@@ -72,11 +71,13 @@ export default function AdminUsers({ embedded = false }) {
   const [extendTrialDays, setExtendTrialDays] = useState(7);
   const [extendTrialSaving, setExtendTrialSaving] = useState(false);
 
-  const [resetPwdUser, setResetPwdUser] = useState(null);
-  const [resetPwdValue, setResetPwdValue] = useState('');
-  const [resetPwdShow, setResetPwdShow] = useState(false);
-  const [resetPwdSubmitting, setResetPwdSubmitting] = useState(false);
-  const [resetPwdErr, setResetPwdErr] = useState('');
+  const [detailNewPassword, setDetailNewPassword] = useState('');
+  const [detailPwdShow, setDetailPwdShow] = useState(false);
+  const [detailPwdCopied, setDetailPwdCopied] = useState(false);
+  const [detailPwdErr, setDetailPwdErr] = useState('');
+  const [detailPwdSaving, setDetailPwdSaving] = useState(false);
+  const [detailPwdConfirmOpen, setDetailPwdConfirmOpen] = useState(false);
+  const detailPwdCopyTimerRef = useRef(null);
 
   // Override modal state
   const [overrideUser, setOverrideUser] = useState(null);
@@ -145,6 +146,19 @@ export default function AdminUsers({ embedded = false }) {
     });
   };
 
+  const resetDetailPasswordForm = () => {
+    setDetailNewPassword('');
+    setDetailPwdShow(false);
+    setDetailPwdCopied(false);
+    setDetailPwdErr('');
+    setDetailPwdSaving(false);
+    setDetailPwdConfirmOpen(false);
+    if (detailPwdCopyTimerRef.current) {
+      clearTimeout(detailPwdCopyTimerRef.current);
+      detailPwdCopyTimerRef.current = null;
+    }
+  };
+
   const openDetail = async (userId) => {
     setSelectedUser(userId);
     setDetailLoading(true);
@@ -152,6 +166,7 @@ export default function AdminUsers({ embedded = false }) {
     setDetailError('');
     setDetailSuccess('');
     setShowEmailConfirm(false);
+    resetDetailPasswordForm();
     try {
       const { data } = await api.get(`/api/v1/admin/users/${userId}`);
       setDetailUser(data);
@@ -171,6 +186,7 @@ export default function AdminUsers({ embedded = false }) {
     setSelectedUser(null);
     setDetailUser(null);
     setShowEmailConfirm(false);
+    resetDetailPasswordForm();
   };
 
   const toggleAdmin = async (e, userId, currentIsAdmin) => {
@@ -416,49 +432,60 @@ export default function AdminUsers({ embedded = false }) {
     }
   };
 
-  const openResetPasswordModal = (e, u) => {
-    e.stopPropagation();
-    setResetPwdUser({ id: u.id, email: u.email });
-    setResetPwdValue('');
-    setResetPwdShow(false);
-    setResetPwdErr('');
+  const handleDetailGeneratePassword = () => {
+    setDetailNewPassword(generatePassword(12));
+    setDetailPwdShow(true);
+    setDetailPwdErr('');
+    setDetailPwdConfirmOpen(false);
   };
 
-  const closeResetPasswordModal = () => {
-    setResetPwdUser(null);
-    setResetPwdValue('');
-    setResetPwdErr('');
+  const handleDetailCopyPassword = async () => {
+    if (!detailNewPassword) return;
+    try {
+      await navigator.clipboard.writeText(detailNewPassword);
+      if (detailPwdCopyTimerRef.current) clearTimeout(detailPwdCopyTimerRef.current);
+      setDetailPwdCopied(true);
+      detailPwdCopyTimerRef.current = setTimeout(() => {
+        setDetailPwdCopied(false);
+        detailPwdCopyTimerRef.current = null;
+      }, 2000);
+    } catch {
+      setDetailPwdErr('Could not copy to clipboard.');
+    }
   };
 
-  const handleResetPasswordSubmit = async () => {
-    if (!resetPwdUser) return;
-    if (resetPwdValue.length < 8) {
-      setResetPwdErr('Password must be at least 8 characters.');
+  const handleDetailResetPasswordRequest = () => {
+    if (!detailUser) return;
+    setDetailPwdErr('');
+    if (detailNewPassword.length < 8) {
+      setDetailPwdErr('Password must be at least 8 characters.');
+      setDetailPwdConfirmOpen(false);
       return;
     }
-    setResetPwdSubmitting(true);
-    setResetPwdErr('');
-    try {
-      await api.post('/api/v1/admin/reset-password', {
-        user_id: resetPwdUser.id,
-        new_password: resetPwdValue,
-      });
-      toast(`Password reset for ${resetPwdUser.email}`, 'success');
-      closeResetPasswordModal();
-    } catch (err) {
-      setResetPwdErr(formatApiError(err));
-    } finally {
-      setResetPwdSubmitting(false);
-    }
+    setDetailPwdConfirmOpen(true);
   };
 
-  const copyResetPassword = async () => {
-    if (!resetPwdValue) return;
+  const handleDetailResetPasswordCancelConfirm = () => {
+    setDetailPwdConfirmOpen(false);
+  };
+
+  const handleDetailResetPasswordConfirm = async () => {
+    if (!detailUser || detailNewPassword.length < 8) return;
+    setDetailPwdSaving(true);
+    setDetailPwdErr('');
     try {
-      await navigator.clipboard.writeText(resetPwdValue);
-      toast('Copied to clipboard', 'success');
-    } catch {
-      toast('Could not copy to clipboard', 'error');
+      await api.post('/api/v1/admin/reset-password', {
+        user_id: detailUser.id,
+        new_password: detailNewPassword,
+      });
+      toast(`Password reset for ${detailUser.email}`, 'success');
+      resetDetailPasswordForm();
+      const { data } = await api.get(`/api/v1/admin/users/${detailUser.id}`);
+      setDetailUser(data);
+    } catch (err) {
+      setDetailPwdErr(formatApiError(err));
+    } finally {
+      setDetailPwdSaving(false);
     }
   };
 
@@ -621,7 +648,6 @@ export default function AdminUsers({ embedded = false }) {
                     <th className="px-4 py-3 font-medium text-gray-600">Active</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Admin</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Override</th>
-                    <th className="px-4 py-3 font-medium text-gray-600 w-36">Password</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -698,16 +724,6 @@ export default function AdminUsers({ embedded = false }) {
                             Override
                           </button>
                         </td>
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={(e) => openResetPasswordModal(e, u)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-violet-700 bg-violet-50 rounded-lg hover:bg-violet-100 transition-colors"
-                          >
-                            <KeyRound className="w-3.5 h-3.5 shrink-0" />
-                            Reset
-                          </button>
-                        </td>
                       </tr>
                     );
                   })}
@@ -742,86 +758,6 @@ export default function AdminUsers({ embedded = false }) {
           )}
         </>
       )}
-
-      <Modal
-        isOpen={!!resetPwdUser}
-        onClose={() => {
-          if (!resetPwdSubmitting) closeResetPasswordModal();
-        }}
-        title="Reset password"
-      >
-        {resetPwdUser && (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Reset password for <span className="font-medium text-gray-900">{resetPwdUser.email}</span>
-            </p>
-            {resetPwdErr && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{resetPwdErr}</div>
-            )}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">New password (min 8 characters)</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type={resetPwdShow ? 'text' : 'password'}
-                    value={resetPwdValue}
-                    onChange={(e) => setResetPwdValue(e.target.value)}
-                    className={`${inputClass} pr-10`}
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setResetPwdShow((s) => !s)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
-                    aria-label={resetPwdShow ? 'Hide password' : 'Show password'}
-                  >
-                    {resetPwdShow ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={copyResetPassword}
-                  disabled={!resetPwdValue}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 shrink-0"
-                  title="Copy password"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const next = generatePassword(12);
-                setResetPwdValue(next);
-                setResetPwdShow(true);
-              }}
-              className="text-sm font-medium text-violet-600 hover:text-violet-700"
-            >
-              Generate random (12 characters)
-            </button>
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={closeResetPasswordModal}
-                disabled={resetPwdSubmitting}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleResetPasswordSubmit}
-                disabled={resetPwdSubmitting}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50"
-              >
-                {resetPwdSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                Confirm reset
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
 
       {/* User detail modal */}
       <Modal
@@ -1020,6 +956,92 @@ export default function AdminUsers({ embedded = false }) {
                 <div className="flex justify-between py-1.5">
                   <span className="text-sm text-gray-500">Status Reason</span>
                   <span className="text-sm text-gray-900 text-right max-w-[60%]">{detailUser.account_status_reason}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Reset Password */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-900">Reset Password</h3>
+              <p className="text-xs text-gray-500">
+                Set a new password directly. The user will use it to sign in; no email is sent.
+              </p>
+              {detailPwdErr && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{detailPwdErr}</div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type={detailPwdShow ? 'text' : 'password'}
+                  value={detailNewPassword}
+                  onChange={(e) => {
+                    setDetailNewPassword(e.target.value);
+                    setDetailPwdErr('');
+                    setDetailPwdConfirmOpen(false);
+                  }}
+                  className={inputClass}
+                  placeholder="Enter new password"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={handleDetailGeneratePassword}
+                  className="px-3 py-2 shrink-0 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                >
+                  Generate
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDetailPwdShow((s) => !s)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  {detailPwdShow ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {detailPwdShow ? 'Hide' : 'Show'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDetailCopyPassword}
+                  disabled={!detailNewPassword}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40"
+                >
+                  <Copy className="w-4 h-4" />
+                  {detailPwdCopied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleDetailResetPasswordRequest}
+                disabled={detailPwdSaving}
+                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Reset Password
+              </button>
+              {detailPwdConfirmOpen && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                  <p className="text-sm text-amber-800">
+                    Reset password for <strong>{detailUser.email}</strong>? They will need to use the new password to log in.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDetailResetPasswordConfirm}
+                      disabled={detailPwdSaving}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {detailPwdSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDetailResetPasswordCancelConfirm}
+                      disabled={detailPwdSaving}
+                      className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
