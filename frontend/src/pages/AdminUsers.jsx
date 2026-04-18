@@ -1,13 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, ChevronLeft, ChevronRight, ShieldCheck, Loader2, Save, AlertTriangle, Crown, Settings2, ToggleLeft, ToggleRight } from 'lucide-react';
+import {
+  Users,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  Loader2,
+  Save,
+  AlertTriangle,
+  Crown,
+  Settings2,
+  ToggleLeft,
+  ToggleRight,
+  Eye,
+  EyeOff,
+  Copy,
+  Lock,
+} from 'lucide-react';
 import api from '../services/api';
+import { formatApiError } from '../utils/formatApiError';
 import { formatFriendlyDate } from '../utils/formatDate';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+
+function generatePassword(length = 12) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+  return Array.from(crypto.getRandomValues(new Uint8Array(length)))
+    .map((b) => chars[b % chars.length])
+    .join('');
+}
 
 const TIER_COLORS = {
   free: 'bg-gray-100 text-gray-700',
@@ -47,6 +71,13 @@ export default function AdminUsers({ embedded = false }) {
   const [showEmailConfirm, setShowEmailConfirm] = useState(false);
   const [editTier, setEditTier] = useState('early_access');
   const [savingTier, setSavingTier] = useState(false);
+
+  const [detailNewPassword, setDetailNewPassword] = useState('');
+  const [detailPwdShow, setDetailPwdShow] = useState(false);
+  const [detailPwdCopied, setDetailPwdCopied] = useState(false);
+  const [detailPwdErr, setDetailPwdErr] = useState('');
+  const [detailPwdSaving, setDetailPwdSaving] = useState(false);
+  const detailPwdCopyTimerRef = useRef(null);
 
   // Override modal state
   const [overrideUser, setOverrideUser] = useState(null);
@@ -115,6 +146,18 @@ export default function AdminUsers({ embedded = false }) {
     });
   };
 
+  const resetDetailPasswordForm = () => {
+    setDetailNewPassword('');
+    setDetailPwdShow(false);
+    setDetailPwdCopied(false);
+    setDetailPwdErr('');
+    setDetailPwdSaving(false);
+    if (detailPwdCopyTimerRef.current) {
+      clearTimeout(detailPwdCopyTimerRef.current);
+      detailPwdCopyTimerRef.current = null;
+    }
+  };
+
   const openDetail = async (userId) => {
     setSelectedUser(userId);
     setDetailLoading(true);
@@ -122,6 +165,7 @@ export default function AdminUsers({ embedded = false }) {
     setDetailError('');
     setDetailSuccess('');
     setShowEmailConfirm(false);
+    resetDetailPasswordForm();
     try {
       const { data } = await api.get(`/api/v1/admin/users/${userId}`);
       setDetailUser(data);
@@ -141,6 +185,50 @@ export default function AdminUsers({ embedded = false }) {
     setSelectedUser(null);
     setDetailUser(null);
     setShowEmailConfirm(false);
+    resetDetailPasswordForm();
+  };
+
+  const handleDetailGeneratePassword = () => {
+    setDetailNewPassword(generatePassword(12));
+    setDetailPwdShow(true);
+    setDetailPwdErr('');
+  };
+
+  const handleDetailCopyPassword = async () => {
+    if (!detailNewPassword) return;
+    try {
+      await navigator.clipboard.writeText(detailNewPassword);
+      if (detailPwdCopyTimerRef.current) clearTimeout(detailPwdCopyTimerRef.current);
+      setDetailPwdCopied(true);
+      detailPwdCopyTimerRef.current = setTimeout(() => {
+        setDetailPwdCopied(false);
+        detailPwdCopyTimerRef.current = null;
+      }, 2000);
+    } catch {
+      setDetailPwdErr('Could not copy to clipboard.');
+    }
+  };
+
+  const handleDetailResetPassword = async () => {
+    if (!detailUser) return;
+    setDetailPwdErr('');
+    if (detailNewPassword.length < 8) {
+      setDetailPwdErr('Password must be at least 8 characters.');
+      return;
+    }
+    setDetailPwdSaving(true);
+    try {
+      await api.post('/api/v1/admin/reset-password', {
+        user_id: detailUser.id,
+        new_password: detailNewPassword,
+      });
+      toast(`Password reset for ${detailUser.email}`, 'success');
+      resetDetailPasswordForm();
+    } catch (err) {
+      setDetailPwdErr(formatApiError(err));
+    } finally {
+      setDetailPwdSaving(false);
+    }
   };
 
   const toggleAdmin = async (e, userId, currentIsAdmin) => {
@@ -796,6 +884,62 @@ export default function AdminUsers({ embedded = false }) {
                   <span className="text-sm text-gray-900 text-right max-w-[60%]">{detailUser.account_status_reason}</span>
                 </div>
               )}
+            </div>
+
+            {/* Reset Password */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-900">Reset Password</h3>
+              {detailPwdErr && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{detailPwdErr}</div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type={detailPwdShow ? 'text' : 'password'}
+                  value={detailNewPassword}
+                  onChange={(e) => {
+                    setDetailNewPassword(e.target.value);
+                    setDetailPwdErr('');
+                  }}
+                  className={inputClass}
+                  placeholder="Enter new password"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={handleDetailGeneratePassword}
+                  className="px-3 py-2 shrink-0 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                >
+                  Generate
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDetailPwdShow((s) => !s)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  {detailPwdShow ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {detailPwdShow ? 'Hide' : 'Show'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDetailCopyPassword}
+                  disabled={!detailNewPassword}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40"
+                >
+                  <Copy className="w-4 h-4" />
+                  {detailPwdCopied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleDetailResetPassword}
+                disabled={detailPwdSaving}
+                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Reset Password
+              </button>
             </div>
 
             {/* Read-only fields */}

@@ -4,6 +4,13 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 
 
+class AdminPasswordResetRequest(BaseModel):
+    """Admin-only: set a user's password directly (no email)."""
+
+    user_id: UUID
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
 class SignupDay(BaseModel):
     date: date
     count: int

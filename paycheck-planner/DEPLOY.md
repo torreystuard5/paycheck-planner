@@ -6,6 +6,15 @@
 - **Frontend**: React + Vite on **Netlify** (static)
 - **Database**: PostgreSQL on **Render**
 
+### Source of truth in this repository
+
+**What ships to production** (per the paths below): the app at the **repository root** — `backend/` and `frontend/`.
+
+This `paycheck-planner/` directory may exist as a **second copy** of the same app inside the repo. **Netlify/Render should use the root `frontend/` and `backend/`** unless you deliberately point hosting at this subdirectory.
+
+- Prefer editing **`backend/`** and **`frontend/`** at the **repo root** for changes that must go live.
+- If you edit files under `paycheck-planner/`, mirror the same change at the repo root (or remove the duplicate when consolidating).
+
 ## Backend (Render)
 
 ### Setup

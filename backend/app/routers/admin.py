@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 from app.schemas.admin import (
     AdminHouseholdListResponse,
     AdminHouseholdSummary,
+    AdminPasswordResetRequest,
     AdminStatsResponse,
     AdminSubscriptionTierUpdate,
     AdminToggleRequest,
@@ -58,7 +59,7 @@ from app.services.tier_access import (
     deactivate_user_feature_overrides,
     sync_app_mode_to_subscription,
 )
-from app.utils.security import get_current_user
+from app.utils.security import get_current_user, hash_password
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -604,6 +605,47 @@ async def update_user_email(
 
 
 # ── Password Reset (Admin-initiated) ──────────────────────────────
+
+
+@router.post("/reset-password")
+async def admin_set_password_direct(
+    body: AdminPasswordResetRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Set a user's password hash directly. Does not send email."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(select(User).where(User.id == body.user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.password_hash = hash_password(body.new_password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    user.must_reset_password = False
+    user.failed_login_count = 0
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="admin_set_password",
+        target_type="user",
+        target_id=str(body.user_id),
+        details=json.dumps({"email": user.email}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+    return {"message": f"Password reset successfully for user {user.email}"}
 
 
 @router.post("/users/{user_id}/reset-password")

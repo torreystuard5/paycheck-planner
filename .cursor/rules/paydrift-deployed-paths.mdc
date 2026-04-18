@@ -1,0 +1,15 @@
+---
+description: PayDrift — which folders are deployed (root vs paycheck-planner duplicate)
+alwaysApply: true
+---
+
+# PayDrift: deployed code vs duplicate tree
+
+**Production / Netlify + Render (see `DEPLOY.md`):**
+
+- Backend: repo root `backend/`
+- Frontend: repo root `frontend/` (Netlify base directory `frontend`)
+
+**Duplicate:** `paycheck-planner/backend/` and `paycheck-planner/frontend/` are a second full copy of the app. They are **not** the documented deploy targets unless the hosting UI is explicitly pointed there.
+
+**When implementing features:** change **root** `backend/` and `frontend/` first so production matches. If you touch files under `paycheck-planner/`, port the same change to the root tree (or delete the duplicate when consolidating the repo).

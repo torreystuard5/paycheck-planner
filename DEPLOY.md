@@ -6,6 +6,15 @@
 - **Frontend**: React + Vite on **Netlify** (static)
 - **Database**: PostgreSQL on **Render**
 
+### Source of truth in this repository
+
+**What ships to production** (per the paths below): the app at the **repository root** — `backend/` and `frontend/`.
+
+There is also a **`paycheck-planner/`** directory containing another copy of the app (same layout: `paycheck-planner/backend`, `paycheck-planner/frontend`). That tree exists from an earlier nested layout / merge. **Do not assume it is what Netlify or Render build unless you explicitly configure those services to that subdirectory.**
+
+- For PayDrift as documented here: edit **`backend/`** and **`frontend/`** at the repo root.
+- If you change the nested copy, mirror the same change under **`backend/`** and **`frontend/`** at the root (or remove the duplicate tree later when you are ready to consolidate).
+
 ## Backend (Render)
 
 ### Setup
