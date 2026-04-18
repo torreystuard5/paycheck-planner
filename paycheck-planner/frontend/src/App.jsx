@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
+import AdminRoute from './components/Layout/AdminRoute';
 import MainLayout from './components/Layout/MainLayout';
 import TosOverlay from './components/TosOverlay';
 import MaintenanceOverlay from './components/MaintenanceOverlay';
@@ -116,10 +117,12 @@ export default function App() {
               <Route path="vault" element={<Vault />} />
               <Route path="calendar" element={<Calendar />} />
               <Route path="tax-prep" element={<TaxPrep />} />
-              <Route path="admin/tickets" element={<AdminTickets />} />
-              <Route path="admin/stats" element={<AdminStats />} />
-              <Route path="admin/users" element={<AdminUsers />} />
-              <Route path="admin/command-center" element={<CommandCenter />} />
+              <Route element={<AdminRoute />}>
+                <Route path="admin/tickets" element={<AdminTickets />} />
+                <Route path="admin/stats" element={<AdminStats />} />
+                <Route path="admin/users" element={<AdminUsers />} />
+                <Route path="admin/command-center" element={<CommandCenter />} />
+              </Route>
             </Route>
 
             {/* Business Edition (requires app_mode=business) */}

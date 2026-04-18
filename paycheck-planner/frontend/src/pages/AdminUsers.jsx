@@ -1,13 +1,35 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, ChevronLeft, ChevronRight, ShieldCheck, Loader2, Save, AlertTriangle, Crown, Settings2, ToggleLeft, ToggleRight } from 'lucide-react';
+import {
+  Users,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  Loader2,
+  Save,
+  AlertTriangle,
+  Crown,
+  Settings2,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Copy,
+} from 'lucide-react';
 import api from '../services/api';
+import { formatApiError } from '../utils/formatApiError';
 import { formatFriendlyDate } from '../utils/formatDate';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+
+function generatePassword(length = 12) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+  return Array.from(crypto.getRandomValues(new Uint8Array(length)))
+    .map((b) => chars[b % chars.length])
+    .join('');
+}
 
 const TIER_COLORS = {
   free: 'bg-gray-100 text-gray-700',
@@ -49,6 +71,12 @@ export default function AdminUsers({ embedded = false }) {
   const [savingTier, setSavingTier] = useState(false);
   const [extendTrialDays, setExtendTrialDays] = useState(7);
   const [extendTrialSaving, setExtendTrialSaving] = useState(false);
+
+  const [resetPwdUser, setResetPwdUser] = useState(null);
+  const [resetPwdValue, setResetPwdValue] = useState('');
+  const [resetPwdShow, setResetPwdShow] = useState(false);
+  const [resetPwdSubmitting, setResetPwdSubmitting] = useState(false);
+  const [resetPwdErr, setResetPwdErr] = useState('');
 
   // Override modal state
   const [overrideUser, setOverrideUser] = useState(null);
@@ -388,6 +416,52 @@ export default function AdminUsers({ embedded = false }) {
     }
   };
 
+  const openResetPasswordModal = (e, u) => {
+    e.stopPropagation();
+    setResetPwdUser({ id: u.id, email: u.email });
+    setResetPwdValue('');
+    setResetPwdShow(false);
+    setResetPwdErr('');
+  };
+
+  const closeResetPasswordModal = () => {
+    setResetPwdUser(null);
+    setResetPwdValue('');
+    setResetPwdErr('');
+  };
+
+  const handleResetPasswordSubmit = async () => {
+    if (!resetPwdUser) return;
+    if (resetPwdValue.length < 8) {
+      setResetPwdErr('Password must be at least 8 characters.');
+      return;
+    }
+    setResetPwdSubmitting(true);
+    setResetPwdErr('');
+    try {
+      await api.post('/api/v1/admin/reset-password', {
+        user_id: resetPwdUser.id,
+        new_password: resetPwdValue,
+      });
+      toast(`Password reset for ${resetPwdUser.email}`, 'success');
+      closeResetPasswordModal();
+    } catch (err) {
+      setResetPwdErr(formatApiError(err));
+    } finally {
+      setResetPwdSubmitting(false);
+    }
+  };
+
+  const copyResetPassword = async () => {
+    if (!resetPwdValue) return;
+    try {
+      await navigator.clipboard.writeText(resetPwdValue);
+      toast('Copied to clipboard', 'success');
+    } catch {
+      toast('Could not copy to clipboard', 'error');
+    }
+  };
+
   const handleSaveEmail = async () => {
     setSavingEmail(true);
     setDetailError('');
@@ -543,9 +617,11 @@ export default function AdminUsers({ embedded = false }) {
                     <th className="px-4 py-3 font-medium text-gray-600">Email</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Name</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Tier</th>
+                    <th className="px-4 py-3 font-medium text-gray-600">Joined</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Active</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Admin</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Override</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 w-36">Password</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -573,6 +649,7 @@ export default function AdminUsers({ embedded = false }) {
                             )}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDate(u.created_at)}</td>
                         <td className="px-4 py-3">
                           <button
                             onClick={(e) => toggleActive(e, u.id, u.is_active)}
@@ -621,6 +698,16 @@ export default function AdminUsers({ embedded = false }) {
                             Override
                           </button>
                         </td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={(e) => openResetPasswordModal(e, u)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-violet-700 bg-violet-50 rounded-lg hover:bg-violet-100 transition-colors"
+                          >
+                            <KeyRound className="w-3.5 h-3.5 shrink-0" />
+                            Reset
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -655,6 +742,86 @@ export default function AdminUsers({ embedded = false }) {
           )}
         </>
       )}
+
+      <Modal
+        isOpen={!!resetPwdUser}
+        onClose={() => {
+          if (!resetPwdSubmitting) closeResetPasswordModal();
+        }}
+        title="Reset password"
+      >
+        {resetPwdUser && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Reset password for <span className="font-medium text-gray-900">{resetPwdUser.email}</span>
+            </p>
+            {resetPwdErr && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{resetPwdErr}</div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">New password (min 8 characters)</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={resetPwdShow ? 'text' : 'password'}
+                    value={resetPwdValue}
+                    onChange={(e) => setResetPwdValue(e.target.value)}
+                    className={`${inputClass} pr-10`}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setResetPwdShow((s) => !s)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
+                    aria-label={resetPwdShow ? 'Hide password' : 'Show password'}
+                  >
+                    {resetPwdShow ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyResetPassword}
+                  disabled={!resetPwdValue}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 shrink-0"
+                  title="Copy password"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const next = generatePassword(12);
+                setResetPwdValue(next);
+                setResetPwdShow(true);
+              }}
+              className="text-sm font-medium text-violet-600 hover:text-violet-700"
+            >
+              Generate random (12 characters)
+            </button>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeResetPasswordModal}
+                disabled={resetPwdSubmitting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResetPasswordSubmit}
+                disabled={resetPwdSubmitting}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50"
+              >
+                {resetPwdSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Confirm reset
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* User detail modal */}
       <Modal
