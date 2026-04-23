@@ -25,6 +25,7 @@ class PaymentResponse(BaseModel):
     amount: Optional[Decimal] = None
     paid_date: Optional[date] = None
     pay_period_date: Optional[date] = None
+    derived_pay_period_date: Optional[date] = None
     is_extra: bool = False
     source: Optional[str] = None
     auto_logged: bool = False

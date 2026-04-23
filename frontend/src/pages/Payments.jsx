@@ -239,66 +239,132 @@ export default function Payments() {
       {payments.length === 0 ? (
         <EmptyState icon={Receipt} title="No Payments Found" message="Record a payment to start tracking your payment history." actionLabel="Record Payment" onAction={() => setShowModal(true)} />
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Paid Date</th>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Pay Period</th>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">For</th>
-                  <th className="text-right px-6 py-3 text-gray-600 font-medium">Amount</th>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Type</th>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Source</th>
-                  <th className="px-6 py-3"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map((payment) => {
-                  const billName = payment.bill_id ? bills.find(b => b.id === payment.bill_id)?.name : null;
-                  const debtName = payment.debt_id ? debts.find(d => d.id === payment.debt_id)?.name : null;
-                  return (
-                    <tr key={payment.id} className="border-t border-gray-100 hover:bg-gray-50">
-                      <td className="px-6 py-4 text-gray-900">
-                        {payment.paid_date ? formatFriendlyDate(payment.paid_date) : '--'}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {payment.pay_period_date ? formatFriendlyDate(payment.pay_period_date) : '--'}
-                      </td>
-                      <td className="px-6 py-4 text-gray-700">
-                        {billName || debtName || 'Payment'}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <CurrencyDisplay amount={payment.amount} className="font-medium text-gray-900" />
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {payment.is_extra ? <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">Extra</span> : <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">Regular</span>}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {payment.auto_logged ? (
-                          <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
-                            {payment.source === 'dashboard' ? 'Dashboard' : payment.source === 'bills_page' ? 'Bills' : payment.source === 'debts_page' ? 'Debts' : payment.source === 'calendar' ? 'Calendar' : 'Auto'}
-                          </span>
-                        ) : (
-                          <span className="text-xs px-2 py-0.5 bg-gray-50 text-gray-400 rounded-full">Manual</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => setDeleteTarget({ ...payment, _billName: billName, _debtName: debtName })}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          aria-label="Delete payment"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <>
+          {/* Mobile card layout */}
+          <div className="sm:hidden space-y-3">
+            {payments.map((payment) => {
+              const billName = payment.bill_id ? bills.find(b => b.id === payment.bill_id)?.name : null;
+              const debtName = payment.debt_id ? debts.find(d => d.id === payment.debt_id)?.name : null;
+              const isDerived = !payment.pay_period_date && !!payment.derived_pay_period_date;
+              const payPeriodDisplay = payment.pay_period_date
+                ? formatFriendlyDate(payment.pay_period_date)
+                : payment.derived_pay_period_date
+                  ? formatFriendlyDate(payment.derived_pay_period_date)
+                  : null;
+              return (
+                <div key={payment.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-900">
+                      {payment.paid_date ? formatFriendlyDate(payment.paid_date) : '--'}
+                    </span>
+                    <CurrencyDisplay amount={payment.amount} className="font-semibold text-gray-900" />
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    {payment.bill_id && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Bill</span>}
+                    {payment.debt_id && <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">Debt</span>}
+                    <span className="text-sm text-gray-700 truncate">{billName || debtName || 'Payment'}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                    {payPeriodDisplay && (
+                      <span className={isDerived ? 'italic' : ''}>
+                        Period: {payPeriodDisplay}{isDerived ? ' (est.)' : ''}
+                      </span>
+                    )}
+                    {!payPeriodDisplay && <span>Period: —</span>}
+                    {payment.is_extra
+                      ? <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">Extra</span>
+                      : <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">Regular</span>}
+                    {payment.auto_logged ? (
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                        {payment.source === 'dashboard' ? 'Dashboard' : payment.source === 'bills_page' ? 'Bills' : payment.source === 'debts_page' ? 'Debts' : payment.source === 'calendar' ? 'Calendar' : 'Auto'}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-gray-50 text-gray-400 rounded-full">Manual</span>
+                    )}
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      onClick={() => setDeleteTarget({ ...payment, _billName: billName, _debtName: debtName })}
+                      className="flex items-center gap-1.5 min-h-[44px] min-w-[44px] px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      aria-label="Delete payment"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+
+          {/* Desktop table layout */}
+          <div className="hidden sm:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Paid Date</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Pay Period</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">For</th>
+                    <th className="text-right px-6 py-3 text-gray-600 font-medium">Amount</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Type</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Source</th>
+                    <th className="px-6 py-3"><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((payment) => {
+                    const billName = payment.bill_id ? bills.find(b => b.id === payment.bill_id)?.name : null;
+                    const debtName = payment.debt_id ? debts.find(d => d.id === payment.debt_id)?.name : null;
+                    const isDerived = !payment.pay_period_date && !!payment.derived_pay_period_date;
+                    const payPeriodDisplay = payment.pay_period_date
+                      ? formatFriendlyDate(payment.pay_period_date)
+                      : payment.derived_pay_period_date
+                        ? formatFriendlyDate(payment.derived_pay_period_date)
+                        : '—';
+                    return (
+                      <tr key={payment.id} className="border-t border-gray-100 hover:bg-gray-50">
+                        <td className="px-6 py-4 text-gray-900">
+                          {payment.paid_date ? formatFriendlyDate(payment.paid_date) : '--'}
+                        </td>
+                        <td className={`px-6 py-4 ${isDerived ? 'italic text-gray-400' : 'text-gray-600'}`}>
+                          {payPeriodDisplay}{isDerived ? ' (est.)' : ''}
+                        </td>
+                        <td className="px-6 py-4 text-gray-700 max-w-[200px] truncate">
+                          {billName || debtName || 'Payment'}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <CurrencyDisplay amount={payment.amount} className="font-medium text-gray-900" />
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {payment.is_extra ? <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">Extra</span> : <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">Regular</span>}
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {payment.auto_logged ? (
+                            <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                              {payment.source === 'dashboard' ? 'Dashboard' : payment.source === 'bills_page' ? 'Bills' : payment.source === 'debts_page' ? 'Debts' : payment.source === 'calendar' ? 'Calendar' : 'Auto'}
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-0.5 bg-gray-50 text-gray-400 rounded-full">Manual</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => setDeleteTarget({ ...payment, _billName: billName, _debtName: debtName })}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            aria-label="Delete payment"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Payment">
