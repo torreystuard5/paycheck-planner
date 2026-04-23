@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   ArrowUpCircle,
   Loader2,
+  ScrollText,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { canSwitchAppMode } from '../../utils/tierAccess';
@@ -49,6 +50,7 @@ const personalLinks = [
   { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
+  { to: '/changelog', label: 'Changelog', icon: ScrollText, small: true },
 ];
 
 const businessLinks = [
@@ -152,24 +154,28 @@ export default function Sidebar({ open, onClose }) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {links.map(({ to, label, icon: Icon, warm, adminOnly }) => {
+        {links.map(({ to, label, icon: Icon, warm, adminOnly, small }) => {
           if (adminOnly && !user?.is_admin) return null;
           return (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-700'
-                    : warm
-                      ? 'text-rose-500 hover:bg-rose-50 hover:text-rose-600'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                `flex items-center gap-3 rounded-lg font-medium transition-colors ${
+                  small
+                    ? `px-3 py-1.5 text-xs ${isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`
+                    : `px-3 py-2.5 text-sm ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700'
+                          : warm
+                            ? 'text-rose-500 hover:bg-rose-50 hover:text-rose-600'
+                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      }`
                 }`
               }
               onClick={onClose}
             >
-              <Icon className="h-5 w-5 shrink-0" />
+              <Icon className={`shrink-0 ${small ? 'h-4 w-4' : 'h-5 w-5'}`} />
               {label}
             </NavLink>
           );
