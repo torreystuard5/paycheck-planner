@@ -10,6 +10,7 @@ class SavingsGoalCreate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=150)
     target_amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
     target_date: Optional[date] = None
+    budget_id: Optional[UUID] = None
 
 
 class SavingsGoalUpdate(BaseModel):
@@ -22,6 +23,7 @@ class SavingsGoalUpdate(BaseModel):
     )
     target_date: Optional[date] = None
     is_active: Optional[bool] = None
+    budget_id: Optional[UUID] = None
 
 
 class SavingsGoalResponse(BaseModel):
@@ -31,6 +33,7 @@ class SavingsGoalResponse(BaseModel):
     target_amount: Optional[Decimal] = None
     current_amount: Optional[Decimal] = None
     target_date: Optional[date] = None
+    budget_id: Optional[UUID] = None
     is_active: bool = True
     created_at: datetime
     updated_at: datetime

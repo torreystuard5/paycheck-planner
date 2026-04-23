@@ -14,6 +14,7 @@ from app.models.transaction import Payment
 from app.models.user import User
 from app.schemas.payment import PaymentCreate, PaymentResponse
 from app.services.household_service import log_activity
+from app.utils.budget import resolve_budget_id
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
@@ -159,6 +160,7 @@ async def create_payment(
             )
         entity_name = debt_obj.name
 
+    budget_id = await resolve_budget_id(current_user, db, data.budget_id)
     payment = Payment(
         user_id=current_user.id,
         bill_id=data.bill_id,
@@ -167,6 +169,7 @@ async def create_payment(
         paid_date=data.paid_date,
         pay_period_date=data.pay_period_date,
         is_extra=data.is_extra,
+        budget_id=budget_id,
     )
     db.add(payment)
     await db.flush()
@@ -194,6 +197,7 @@ async def list_payments(
     pay_period_date: date | None = Query(default=None),
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    budget_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -205,6 +209,8 @@ async def list_payments(
     else:
         query = select(Payment).where(Payment.user_id == current_user.id)
 
+    if budget_id is not None:
+        query = query.where(Payment.budget_id == budget_id)
     if pay_period_date:
         query = query.where(Payment.pay_period_date == pay_period_date)
     if start_date:

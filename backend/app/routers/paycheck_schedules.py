@@ -1,5 +1,7 @@
 import calendar
 from datetime import date, timedelta
+from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -14,6 +16,7 @@ from app.schemas.paycheck_schedule import (
     PaycheckScheduleUpdate,
     UpcomingPaycheckDate,
 )
+from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/paycheck-schedules", tags=["Paycheck Schedules"])
@@ -139,12 +142,14 @@ async def get_upcoming_paycheck_dates(
 
 @router.get("", response_model=list[PaycheckScheduleOut])
 async def list_paycheck_schedules(
+    budget_id: Optional[UUID] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(PaycheckSchedule).where(PaycheckSchedule.user_id == current_user.id)
-    )
+    query = select(PaycheckSchedule).where(PaycheckSchedule.user_id == current_user.id)
+    if budget_id is not None:
+        query = query.where(PaycheckSchedule.budget_id == budget_id)
+    result = await db.execute(query)
     return result.scalars().all()
 
 
@@ -154,6 +159,7 @@ async def create_paycheck_schedule(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    budget_id = await resolve_budget_id(current_user, db, data.budget_id)
     schedule = PaycheckSchedule(
         user_id=current_user.id,
         frequency=data.frequency,
@@ -162,6 +168,7 @@ async def create_paycheck_schedule(
         day1=data.day1,
         day2=data.day2,
         income_source_name=data.income_source_name,
+        budget_id=budget_id,
     )
     db.add(schedule)
     await db.flush()
@@ -187,6 +194,8 @@ async def update_paycheck_schedule(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paycheck schedule not found")
 
     update_data = data.model_dump(exclude_unset=True)
+    if "budget_id" in update_data and update_data["budget_id"] is not None:
+        await validate_budget_ownership(current_user, db, update_data["budget_id"])
     for field, value in update_data.items():
         setattr(schedule, field, value)
 

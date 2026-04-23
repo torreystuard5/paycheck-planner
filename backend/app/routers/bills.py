@@ -27,6 +27,7 @@ from app.schemas.bill import (
 )
 from app.services.household_billing import get_bill_breakdown
 from app.services.household_service import log_activity, resolve_valid_household_id
+from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
@@ -189,6 +190,7 @@ def _bill_to_response(
         next_due_date=_compute_next_due_date(bill),
         created_at=bill.created_at,
         updated_at=bill.updated_at,
+        budget_id=bill.budget_id,
         is_household_bill=is_household,
         user_share=user_share,
         is_user_responsible=is_user_responsible,
@@ -214,6 +216,7 @@ async def create_bill(
     current_user: User = Depends(get_current_user),
 ):
     effective_household_id = await resolve_valid_household_id(db, current_user)
+    budget_id = await resolve_budget_id(current_user, db, data.budget_id)
     try:
         bill = Bill(
             user_id=current_user.id,
@@ -231,6 +234,7 @@ async def create_bill(
             start_date=data.start_date,
             is_tax_deductible=data.is_tax_deductible,
             tax_category=data.tax_category,
+            budget_id=budget_id,
         )
         db.add(bill)
         await db.flush()
@@ -279,6 +283,7 @@ async def list_bills(
     status: str | None = Query(default=None, pattern="^(paid|unpaid)$"),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    budget_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -291,6 +296,8 @@ async def list_bills(
         query = select(Bill).where(Bill.user_id.in_(household_member_ids))
     else:
         query = select(Bill).where(Bill.user_id == current_user.id)
+    if budget_id is not None:
+        query = query.where(Bill.budget_id == budget_id)
     if active_only:
         query = query.where(Bill.is_active.is_(True))
     if status == "paid":
@@ -559,6 +566,10 @@ async def update_bill(
 
     # Capture old values for history logging
     old_values = {k: getattr(bill, k) for k in update_data}
+
+    # Validate budget ownership if changing budget_id
+    if "budget_id" in update_data and update_data["budget_id"] is not None:
+        await validate_budget_ownership(current_user, db, update_data["budget_id"])
 
     # Validate assigned_member_id belongs to the same household
     if "assigned_member_id" in update_data and update_data["assigned_member_id"] is not None:

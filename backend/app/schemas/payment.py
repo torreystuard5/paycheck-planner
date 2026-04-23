@@ -15,6 +15,7 @@ class PaymentCreate(BaseModel):
     is_extra: bool = False
     source: Optional[str] = None
     auto_logged: bool = False
+    budget_id: Optional[UUID] = None
 
 
 class PaymentResponse(BaseModel):
@@ -28,6 +29,7 @@ class PaymentResponse(BaseModel):
     derived_pay_period_date: Optional[date] = None
     is_extra: bool = False
     source: Optional[str] = None
+    budget_id: Optional[UUID] = None
     auto_logged: bool = False
     created_at: datetime
 

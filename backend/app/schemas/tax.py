@@ -25,6 +25,7 @@ class TaxDeductionCreate(BaseModel):
     tax_year: int = Field(ge=2000, le=2100)
     receipt_note: Optional[str] = None
     bill_id: Optional[UUID] = None
+    budget_id: Optional[UUID] = None
 
 
 class TaxDeductionUpdate(BaseModel):
@@ -34,6 +35,7 @@ class TaxDeductionUpdate(BaseModel):
     date: Optional[date] = None
     tax_year: Optional[int] = Field(default=None, ge=2000, le=2100)
     receipt_note: Optional[str] = None
+    budget_id: Optional[UUID] = None
 
 
 class TaxDeductionResponse(BaseModel):
@@ -46,6 +48,7 @@ class TaxDeductionResponse(BaseModel):
     date: date
     tax_year: int
     receipt_note: Optional[str] = None
+    budget_id: Optional[UUID] = None
     bill_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime

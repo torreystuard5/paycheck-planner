@@ -25,6 +25,7 @@ class BillCreate(BaseModel):
     start_date: Optional[date] = None
     is_tax_deductible: Optional[bool] = False
     tax_category: Optional[str] = Field(default=None, max_length=50)
+    budget_id: Optional[UUID] = None
 
 
 class BillUpdate(BaseModel):
@@ -47,6 +48,7 @@ class BillUpdate(BaseModel):
     start_date: Optional[date] = None
     is_tax_deductible: Optional[bool] = None
     tax_category: Optional[str] = None
+    budget_id: Optional[UUID] = None
 
 
 class BillPostponeRequest(BaseModel):
@@ -81,6 +83,7 @@ class BillResponse(BaseModel):
     assigned_member_name: Optional[str] = None
     day_of_week: Optional[int] = None
     start_date: Optional[date] = None
+    budget_id: Optional[UUID] = None
     postpone_until: Optional[date] = None
     next_due_date: Optional[date] = None
     created_at: datetime

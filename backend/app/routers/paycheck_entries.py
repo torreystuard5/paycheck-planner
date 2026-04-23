@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -16,6 +17,7 @@ from app.schemas.paycheck_entry import (
     PaycheckEntryResponse,
     PaycheckEntryUpdate,
 )
+from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/paycheck-entries", tags=["Paycheck Entries"])
@@ -35,6 +37,7 @@ async def create_entry(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    budget_id = await resolve_budget_id(current_user, db, data.budget_id)
     entry = PaycheckEntry(
         user_id=current_user.id,
         income_source_id=data.income_source_id,
@@ -43,6 +46,7 @@ async def create_entry(
         gross_amount=data.gross_amount,
         net_amount=data.net_amount,
         memo=data.memo,
+        budget_id=budget_id,
     )
     db.add(entry)
     await db.flush()
@@ -54,6 +58,7 @@ async def create_entry(
 async def list_entries(
     month: int | None = Query(default=None, ge=1, le=12),
     year: int | None = Query(default=None, ge=2000),
+    budget_id: Optional[UUID] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -62,6 +67,8 @@ async def list_entries(
         .options(selectinload(PaycheckEntry.income_source))
         .where(PaycheckEntry.user_id == current_user.id)
     )
+    if budget_id is not None:
+        query = query.where(PaycheckEntry.budget_id == budget_id)
     if month and year:
         query = query.where(
             extract("month", PaycheckEntry.pay_date) == month,
@@ -163,7 +170,10 @@ async def update_entry(
     if not entry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paycheck entry not found")
 
-    for field, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    if "budget_id" in update_data and update_data["budget_id"] is not None:
+        await validate_budget_ownership(current_user, db, update_data["budget_id"])
+    for field, value in update_data.items():
         setattr(entry, field, value)
 
     await db.flush()

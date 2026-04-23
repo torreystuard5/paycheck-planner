@@ -13,6 +13,7 @@ class PaycheckEntryCreate(BaseModel):
     gross_amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
     net_amount: Decimal = Field(..., max_digits=12, decimal_places=2)
     memo: Optional[str] = Field(default=None, max_length=255)
+    budget_id: Optional[UUID] = None
 
 
 class PaycheckEntryUpdate(BaseModel):
@@ -22,6 +23,7 @@ class PaycheckEntryUpdate(BaseModel):
     gross_amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
     net_amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
     memo: Optional[str] = Field(default=None, max_length=255)
+    budget_id: Optional[UUID] = None
 
 
 class PaycheckEntryResponse(BaseModel):
@@ -33,6 +35,7 @@ class PaycheckEntryResponse(BaseModel):
     gross_amount: Optional[Decimal] = None
     net_amount: Decimal
     memo: Optional[str] = None
+    budget_id: Optional[UUID] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,6 +9,7 @@ from app.database import get_db
 from app.models.income import IncomeSource
 from app.models.user import User
 from app.schemas.income import IncomeCreate, IncomeResponse, IncomeUpdate
+from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/income", tags=["Income Sources"])
@@ -21,12 +23,14 @@ async def create_income(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    budget_id = await resolve_budget_id(current_user, db, data.budget_id)
     income = IncomeSource(
         user_id=current_user.id,
         name=data.name,
         amount=data.amount,
         frequency=data.frequency,
         next_pay_date=data.next_pay_date,
+        budget_id=budget_id,
     )
     db.add(income)
     await db.flush()
@@ -39,10 +43,13 @@ async def list_income(
     active_only: bool = True,
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    budget_id: Optional[UUID] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     query = select(IncomeSource).where(IncomeSource.user_id == current_user.id)
+    if budget_id is not None:
+        query = query.where(IncomeSource.budget_id == budget_id)
     if active_only:
         query = query.where(IncomeSource.is_active.is_(True))
 
@@ -93,6 +100,8 @@ async def update_income(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Income source not found")
 
     update_data = data.model_dump(exclude_unset=True)
+    if "budget_id" in update_data and update_data["budget_id"] is not None:
+        await validate_budget_ownership(current_user, db, update_data["budget_id"])
     for field, value in update_data.items():
         setattr(income, field, value)
 

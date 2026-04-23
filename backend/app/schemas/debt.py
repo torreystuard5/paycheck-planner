@@ -24,6 +24,7 @@ class DebtCreate(BaseModel):
     reminder_days: Optional[int] = Field(default=3, ge=0, le=30)
     is_split: Optional[bool] = None
     split_members: Optional[list] = None
+    budget_id: Optional[UUID] = None
 
 
 class DebtUpdate(BaseModel):
@@ -46,6 +47,7 @@ class DebtUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_split: Optional[bool] = None
     split_members: Optional[list] = None
+    budget_id: Optional[UUID] = None
 
 
 class DebtResponse(BaseModel):
@@ -64,6 +66,7 @@ class DebtResponse(BaseModel):
     is_active: bool = True
     is_split: bool = False
     split_members: Optional[list] = None
+    budget_id: Optional[UUID] = None
     postpone_until: Optional[date] = None
     next_due_date: Optional[date] = None
     is_paid_this_period: bool = False

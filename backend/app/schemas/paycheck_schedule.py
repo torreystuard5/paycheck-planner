@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -11,6 +12,7 @@ class PaycheckScheduleCreate(BaseModel):
     day1: Optional[int] = None
     day2: Optional[int] = None
     income_source_name: Optional[str] = None
+    budget_id: Optional[UUID] = None
 
 
 class PaycheckScheduleUpdate(BaseModel):
@@ -20,6 +22,7 @@ class PaycheckScheduleUpdate(BaseModel):
     day1: Optional[int] = None
     day2: Optional[int] = None
     income_source_name: Optional[str] = None
+    budget_id: Optional[UUID] = None
 
 
 class PaycheckScheduleOut(BaseModel):
@@ -30,6 +33,7 @@ class PaycheckScheduleOut(BaseModel):
     day1: Optional[int] = None
     day2: Optional[int] = None
     income_source_name: Optional[str] = None
+    budget_id: Optional[UUID] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

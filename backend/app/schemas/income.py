@@ -13,6 +13,7 @@ class IncomeCreate(BaseModel):
         default="monthly", pattern="^(weekly|biweekly|semi_monthly|monthly)$"
     )
     next_pay_date: Optional[date] = None
+    budget_id: Optional[UUID] = None
 
 
 class IncomeUpdate(BaseModel):
@@ -23,6 +24,7 @@ class IncomeUpdate(BaseModel):
     )
     next_pay_date: Optional[date] = None
     is_active: Optional[bool] = None
+    budget_id: Optional[UUID] = None
 
 
 class IncomeResponse(BaseModel):
@@ -32,6 +34,7 @@ class IncomeResponse(BaseModel):
     amount: Optional[Decimal] = None
     frequency: Optional[str] = None
     next_pay_date: Optional[date] = None
+    budget_id: Optional[UUID] = None
     is_active: bool = True
     created_at: datetime
     updated_at: datetime

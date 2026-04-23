@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,6 +16,7 @@ from app.schemas.savings import (
     SavingsGoalUpdate,
 )
 from app.services.household_service import log_activity
+from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/savings", tags=["Savings"])
@@ -31,11 +33,13 @@ async def create_goal(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    budget_id = await resolve_budget_id(current_user, db, data.budget_id)
     goal = SavingsGoal(
         user_id=current_user.id,
         name=data.name,
         target_amount=data.target_amount,
         target_date=data.target_date,
+        budget_id=budget_id,
     )
     db.add(goal)
     await db.flush()
@@ -63,6 +67,7 @@ async def list_goals(
     active_only: bool = True,
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    budget_id: Optional[UUID] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -74,6 +79,8 @@ async def list_goals(
         query = select(SavingsGoal).where(SavingsGoal.user_id.in_(member_ids))
     else:
         query = select(SavingsGoal).where(SavingsGoal.user_id == current_user.id)
+    if budget_id is not None:
+        query = query.where(SavingsGoal.budget_id == budget_id)
     if active_only:
         query = query.where(SavingsGoal.is_active.is_(True))
 
@@ -123,6 +130,8 @@ async def update_goal(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Savings goal not found")
 
     update_data = data.model_dump(exclude_unset=True)
+    if "budget_id" in update_data and update_data["budget_id"] is not None:
+        await validate_budget_ownership(current_user, db, update_data["budget_id"])
     for field, value in update_data.items():
         setattr(goal, field, value)
 

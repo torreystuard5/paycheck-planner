@@ -126,6 +126,13 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Active budget tracking (Phase 4B)
+    current_budget_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("budgets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Relationships
     household = relationship("Household", back_populates="members", foreign_keys=[household_id])
     income_sources = relationship("IncomeSource", back_populates="user", cascade="all, delete-orphan")
@@ -146,4 +153,5 @@ class User(Base):
     )
     bill_member_payments = relationship("BillMemberPayment", back_populates="member", cascade="all, delete-orphan")
     paycheck_schedules = relationship("PaycheckSchedule", back_populates="user", cascade="all, delete-orphan")
-    budgets = relationship("Budget", back_populates="user", cascade="all, delete-orphan")
+    budgets = relationship("Budget", back_populates="user", cascade="all, delete-orphan", foreign_keys="[Budget.user_id]")
+    current_budget = relationship("Budget", foreign_keys=[current_budget_id])

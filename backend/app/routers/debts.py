@@ -32,6 +32,7 @@ from app.services.credit_efficiency import (
 )
 from app.services.debt_calculator import compare_strategies, simulate_extra_payments
 from app.services.household_service import log_activity, resolve_valid_household_id
+from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/debts", tags=["Debts"])
@@ -355,6 +356,7 @@ async def create_debt(
     current_user: User = Depends(get_current_user),
 ):
     effective_household_id = await resolve_valid_household_id(db, current_user)
+    budget_id = await resolve_budget_id(current_user, db, data.budget_id)
     split_json = None
     if data.split_members is not None:
         split_json = json.dumps([str(m) for m in data.split_members])
@@ -374,6 +376,7 @@ async def create_debt(
             reminder_days=data.reminder_days if data.reminder_days is not None else 3,
             is_split=data.is_split if data.is_split is not None else False,
             split_members=split_json,
+            budget_id=budget_id,
         )
         db.add(debt)
         await db.flush()
@@ -406,6 +409,7 @@ async def list_debts(
     active_only: bool = True,
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    budget_id: Optional[UUID] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -418,6 +422,8 @@ async def list_debts(
         )
     else:
         query = select(Debt).where(Debt.user_id == current_user.id)
+    if budget_id is not None:
+        query = query.where(Debt.budget_id == budget_id)
     if active_only:
         query = query.where(Debt.is_active.is_(True))
 
@@ -478,6 +484,8 @@ async def update_debt(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     update_data = data.model_dump(exclude_unset=True)
+    if "budget_id" in update_data and update_data["budget_id"] is not None:
+        await validate_budget_ownership(current_user, db, update_data["budget_id"])
     if "split_members" in update_data:
         sm = update_data["split_members"]
         update_data["split_members"] = (

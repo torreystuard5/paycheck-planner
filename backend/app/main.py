@@ -14,7 +14,7 @@ from app.database import async_session
 from app.models.system_setting import SystemSetting
 from app.models.user import User
 from app.services.tier_access import has_personal_home_access, normalize_plan_tier
-from app.routers import admin, announcements, auth, billing, bills, business, calendar, debts, households, import_export, income, notes, passwords, paycheck_checklist, paycheck_engine, paycheck_entries, paycheck_schedules, payments, referrals, reminders, savings, subscriptions, support, supporter, tax, unsubscribe, updates, user_preferences
+from app.routers import admin, announcements, auth, billing, bills, budgets, business, calendar, debts, households, import_export, income, notes, passwords, paycheck_checklist, paycheck_engine, paycheck_entries, paycheck_schedules, payments, referrals, reminders, savings, subscriptions, support, supporter, tax, unsubscribe, updates, user_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -293,6 +293,7 @@ app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(tax.router, prefix="/api/v1")
 app.include_router(subscriptions.router, prefix="/api/v1")
 app.include_router(user_preferences.router, prefix="/api/v1")
+app.include_router(budgets.router, prefix="/api/v1")
 app.include_router(business.router, prefix="/api/v1")
 
 

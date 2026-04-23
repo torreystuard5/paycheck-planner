@@ -5,6 +5,7 @@ import io
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -22,6 +23,7 @@ from app.schemas.tax import (
     TaxSummaryResponse,
     MonthlyBreakdown,
 )
+from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/tax", tags=["Tax"])
@@ -36,6 +38,7 @@ async def create_deduction(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    budget_id = await resolve_budget_id(current_user, db, body.budget_id)
     deduction = TaxDeduction(
         user_id=current_user.id,
         household_id=current_user.household_id,
@@ -46,6 +49,7 @@ async def create_deduction(
         tax_year=body.tax_year,
         receipt_note=body.receipt_note,
         bill_id=body.bill_id,
+        budget_id=budget_id,
     )
     db.add(deduction)
     await db.commit()
@@ -57,6 +61,7 @@ async def create_deduction(
 async def list_deductions(
     tax_year: int = Query(..., ge=2000, le=2100),
     category: str | None = Query(default=None),
+    budget_id: Optional[UUID] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -65,6 +70,8 @@ async def list_deductions(
         .where(TaxDeduction.user_id == current_user.id, TaxDeduction.tax_year == tax_year)
         .order_by(TaxDeduction.date.desc())
     )
+    if budget_id is not None:
+        stmt = stmt.where(TaxDeduction.budget_id == budget_id)
     if category:
         stmt = stmt.where(TaxDeduction.category == category)
     result = await db.execute(stmt)
@@ -88,6 +95,8 @@ async def update_deduction(
         raise HTTPException(status_code=404, detail="Deduction not found")
 
     updates = body.model_dump(exclude_unset=True)
+    if "budget_id" in updates and updates["budget_id"] is not None:
+        await validate_budget_ownership(current_user, db, updates["budget_id"])
     for field, value in updates.items():
         setattr(deduction, field, value)
 
