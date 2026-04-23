@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { Menu, Shield } from 'lucide-react';
 import Sidebar from './Sidebar';
-import EarlyAccessBanner from '../EarlyAccessBanner';
+// EarlyAccessBanner removed (Phase 2 cleanup)
 import AnnouncementBanner from '../AnnouncementBanner';
 import Footer from '../Footer';
 import { useAuth } from '../../context/AuthContext';
@@ -14,7 +14,6 @@ export default function MainLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <EarlyAccessBanner />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main content */}

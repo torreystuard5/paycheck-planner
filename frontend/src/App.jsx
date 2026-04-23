@@ -22,14 +22,14 @@ import Payments from './pages/Payments';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Support from './pages/Support';
-import Supporter from './pages/Supporter';
+// Supporter import removed (Phase 2 — nav hidden, page dormant)
 import Household from './pages/Household';
 import Income from './pages/Income';
 import AdminTickets from './pages/AdminTickets';
 import AdminStats from './pages/AdminStats';
 import AdminUsers from './pages/AdminUsers';
 import CommandCenter from './pages/CommandCenter';
-import Refer from './pages/Refer';
+// Refer import removed (Phase 2 — nav hidden, page dormant)
 import Vault from './pages/Vault';
 import Calendar from './pages/Calendar';
 import TaxPrep from './pages/TaxPrep';
@@ -106,10 +106,10 @@ export default function App() {
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
               <Route path="support" element={<Support />} />
-              <Route path="supporter" element={<Supporter />} />
+              {/* supporter route removed — Phase 2 cleanup */}
               <Route path="household" element={<Household />} />
               <Route path="income" element={<Income />} />
-              <Route path="refer" element={<Refer />} />
+              {/* refer route removed — Phase 2 cleanup */}
               <Route path="vault" element={<Vault />} />
               <Route path="calendar" element={<Calendar />} />
               <Route path="tax-prep" element={<TaxPrep />} />

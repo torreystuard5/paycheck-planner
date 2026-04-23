@@ -9,13 +9,11 @@ import {
   BarChart3,
   Settings,
   HelpCircle,
-  Heart,
   LogOut,
   X,
   Wallet,
   Users,
   MessageSquare,
-  Gift,
   Shield,
   Lock,
   CalendarDays,
@@ -30,7 +28,7 @@ import {
   ScrollText,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { canSwitchAppMode } from '../../utils/tierAccess';
+// tierAccess import removed — early access, mode toggle always shown
 import { APP_VERSION } from '../../config';
 import api from '../../services/api';
 import logo from '../../assets/PayDrift-Logo.jpg';
@@ -46,8 +44,6 @@ const personalLinks = [
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/tax-prep', label: 'Tax Prep', icon: FileText },
   { to: '/vault', label: 'Secure Vault', icon: Lock },
-  { to: '/refer', label: 'Refer a Friend', icon: Gift },
-  { to: '/supporter', label: 'Support Us', icon: Heart, warm: true },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
   { to: '/changelog', label: 'Changelog', icon: ScrollText, small: true },
@@ -78,7 +74,7 @@ export default function Sidebar({ open, onClose }) {
   const appMode = user?.app_mode || 'personal';
   const baseLinks = appMode === 'business' ? businessLinks : personalLinks;
   const links = user?.is_admin ? [...baseLinks, ...adminLinks] : baseLinks;
-  const showModeToggle = canSwitchAppMode(user?.subscription_tier);
+  const showModeToggle = true; // early access: everyone can switch
 
   const handleModeSwitch = async (mode) => {
     if (mode === appMode || switching) return;
