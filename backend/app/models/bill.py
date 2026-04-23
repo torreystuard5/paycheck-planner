@@ -66,6 +66,13 @@ class Bill(Base):
     # Postpone override — temporarily moves bill to a later pay period
     postpone_until: Mapped[str | None] = mapped_column(Date, nullable=True)
 
+    # Budget scoping (Phase 4A)
+    budget_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("budgets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # New fields: biweekly support
     day_of_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
     start_date: Mapped[str | None] = mapped_column(Date, nullable=True)
@@ -84,7 +91,10 @@ class Bill(Base):
     payments = relationship("Payment", back_populates="bill")
     member_payments = relationship("BillMemberPayment", back_populates="bill", cascade="all, delete-orphan")
 
+    budget = relationship("Budget")
+
     __table_args__ = (
         Index("ix_bills_user_id", "user_id"),
         Index("ix_bills_due_day", "due_day"),
+        Index("ix_bills_budget_id", "budget_id"),
     )

@@ -146,3 +146,4 @@ class User(Base):
     )
     bill_member_payments = relationship("BillMemberPayment", back_populates="member", cascade="all, delete-orphan")
     paycheck_schedules = relationship("PaycheckSchedule", back_populates="user", cascade="all, delete-orphan")
+    budgets = relationship("Budget", back_populates="user", cascade="all, delete-orphan")

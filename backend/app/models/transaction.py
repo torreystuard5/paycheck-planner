@@ -46,6 +46,13 @@ class Payment(Base):
     is_extra: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     auto_logged: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
+
+    # Budget scoping (Phase 4A)
+    budget_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("budgets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -54,8 +61,10 @@ class Payment(Base):
     user = relationship("User", back_populates="payments")
     bill = relationship("Bill", back_populates="payments")
     debt = relationship("Debt", back_populates="payments")
+    budget = relationship("Budget")
 
     __table_args__ = (
         Index("ix_payments_user_id", "user_id"),
         Index("ix_payments_pay_period_date", "pay_period_date"),
+        Index("ix_payments_budget_id", "budget_id"),
     )

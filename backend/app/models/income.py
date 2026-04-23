@@ -26,6 +26,13 @@ class IncomeSource(Base):
     frequency: Mapped[str | None] = mapped_column(String(20), nullable=True, server_default=text("'monthly'"))
     next_pay_date: Mapped[str | None] = mapped_column(Date, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+
+    # Budget scoping (Phase 4A)
+    budget_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("budgets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -35,7 +42,9 @@ class IncomeSource(Base):
 
     # Relationships
     user = relationship("User", back_populates="income_sources")
+    budget = relationship("Budget")
 
     __table_args__ = (
         Index("ix_income_sources_user_id", "user_id"),
+        Index("ix_income_sources_budget_id", "budget_id"),
     )

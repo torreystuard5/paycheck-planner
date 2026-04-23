@@ -1,4 +1,5 @@
 from app.models.promo_code import PromoCode
+from app.models.budget import Budget
 from app.models.user import User
 from app.models.household import Household
 from app.models.household_chore import HouseholdChore
@@ -42,6 +43,7 @@ from app.models.business import (
 
 __all__ = [
     "PromoCode",
+    "Budget",
     "User",
     "Household",
     "HouseholdChore",

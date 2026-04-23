@@ -47,6 +47,13 @@ class TaxDeduction(Base):
         ForeignKey("bills.id", ondelete="SET NULL"),
         nullable=True,
     )
+
+    # Budget scoping (Phase 4A)
+    budget_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("budgets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -58,9 +65,11 @@ class TaxDeduction(Base):
     user = relationship("User")
     household = relationship("Household")
     bill = relationship("Bill")
+    budget = relationship("Budget")
 
     __table_args__ = (
         Index("ix_tax_deductions_user_id", "user_id"),
         Index("ix_tax_deductions_tax_year", "tax_year"),
         Index("ix_tax_deductions_user_year", "user_id", "tax_year"),
+        Index("ix_tax_deductions_budget_id", "budget_id"),
     )

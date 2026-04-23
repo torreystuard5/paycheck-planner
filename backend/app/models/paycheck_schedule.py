@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -17,6 +17,12 @@ class PaycheckSchedule(Base):
     day1 = Column(Integer, nullable=True)  # Day of month (for semi_monthly first date, or monthly)
     day2 = Column(Integer, nullable=True)  # Day of month (for semi_monthly second date)
     income_source_name = Column(String(100), nullable=True)  # Optional label
+    budget_id = Column(UUID(as_uuid=True), ForeignKey("budgets.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="paycheck_schedules")
+    budget = relationship("Budget")
+
+    __table_args__ = (
+        Index("ix_paycheck_schedules_budget_id", "budget_id"),
+    )

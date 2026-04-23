@@ -50,6 +50,13 @@ class Debt(Base):
     is_split: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     split_members: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Budget scoping (Phase 4A)
+    budget_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("budgets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Postpone override — temporarily moves debt to a later pay period
     postpone_until: Mapped[str | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[str] = mapped_column(
@@ -65,7 +72,10 @@ class Debt(Base):
     payments = relationship("Payment", back_populates="debt")
     debt_payments = relationship("DebtPayment", back_populates="debt", cascade="all, delete-orphan")
 
+    budget = relationship("Budget")
+
     __table_args__ = (
         Index("ix_debts_user_id", "user_id"),
         Index("ix_debts_due_day", "due_day"),
+        Index("ix_debts_budget_id", "budget_id"),
     )

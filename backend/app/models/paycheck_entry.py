@@ -35,6 +35,13 @@ class PaycheckEntry(Base):
     )
     source_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     memo: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Budget scoping (Phase 4A)
+    budget_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("budgets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -42,8 +49,10 @@ class PaycheckEntry(Base):
     # Relationships
     user = relationship("User", backref="paycheck_entries")
     income_source = relationship("IncomeSource", backref="paycheck_entries")
+    budget = relationship("Budget")
 
     __table_args__ = (
         Index("ix_paycheck_entries_user_id", "user_id"),
         Index("ix_paycheck_entries_pay_date", "user_id", "pay_date"),
+        Index("ix_paycheck_entries_budget_id", "budget_id"),
     )
