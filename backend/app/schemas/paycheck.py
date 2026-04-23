@@ -21,6 +21,7 @@ class PaycheckItem(BaseModel):
     is_paid: bool = False
     is_overdue: bool = False
     hidden_overdue: bool = False
+    postpone_until: Optional[str] = None
 
 
 class PaycheckPlan(BaseModel):

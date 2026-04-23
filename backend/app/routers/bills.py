@@ -19,6 +19,7 @@ from app.schemas.bill import (
     BillHistoryEntry,
     BillHistoryResponse,
     BillPayRequest,
+    BillPostponeRequest,
     BillResponse,
     BillUpdate,
     MemberPaymentRequest,
@@ -866,6 +867,44 @@ async def unpay_bill(
         await db.flush()
     except Exception:
         pass
+
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    return _bill_to_response(bill, current_user.id, member_count)
+
+
+@router.patch("/{bill_id}/postpone", response_model=BillResponse)
+async def postpone_bill(
+    bill_id: UUID,
+    body: BillPostponeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.household_id:
+        result = await db.execute(
+            select(Bill).where(
+                Bill.id == bill_id,
+                or_(
+                    Bill.user_id == current_user.id,
+                    Bill.household_id == current_user.household_id,
+                ),
+            ).options(selectinload(Bill.assigned_member))
+        )
+    else:
+        result = await db.execute(
+            select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
+                .options(selectinload(Bill.assigned_member))
+        )
+    bill = result.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    bill.postpone_until = body.postpone_until
+    await db.flush()
+    await db.refresh(bill)
+
+    action = "postponed" if body.postpone_until else "postpone_cleared"
+    detail_str = str(body.postpone_until) if body.postpone_until else None
+    await log_bill_action(db, bill.id, bill.name, current_user.id, action, detail_str)
 
     member_count = await _get_household_member_count(db, current_user.household_id)
     return _bill_to_response(bill, current_user.id, member_count)

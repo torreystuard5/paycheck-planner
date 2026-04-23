@@ -49,6 +49,10 @@ class BillUpdate(BaseModel):
     tax_category: Optional[str] = None
 
 
+class BillPostponeRequest(BaseModel):
+    postpone_until: Optional[date] = None
+
+
 class BillPayRequest(BaseModel):
     paid_amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=10, decimal_places=2)
     paid_date: Optional[datetime] = None
@@ -77,6 +81,7 @@ class BillResponse(BaseModel):
     assigned_member_name: Optional[str] = None
     day_of_week: Optional[int] = None
     start_date: Optional[date] = None
+    postpone_until: Optional[date] = None
     next_due_date: Optional[date] = None
     created_at: datetime
     updated_at: datetime

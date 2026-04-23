@@ -536,3 +536,28 @@ async def delete_debt(
             )
         except Exception:
             pass
+
+
+@router.patch("/{debt_id}/postpone", response_model=DebtResponse)
+async def postpone_debt(
+    debt_id: UUID,
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Debt).where(Debt.id == debt_id, Debt.user_id == current_user.id)
+    )
+    debt = result.scalar_one_or_none()
+    if not debt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+
+    raw = body.get("postpone_until")
+    if raw is None:
+        debt.postpone_until = None
+    else:
+        debt.postpone_until = date.fromisoformat(str(raw))
+    await db.flush()
+    await db.refresh(debt)
+
+    return await _debt_to_response(debt, db, current_user.id)

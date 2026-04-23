@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit, Trash2, CreditCard, TrendingDown, Shield, DollarSign, Upload, ChevronDown, ChevronUp, AlertCircle, CheckCircle, Users } from 'lucide-react';
+import { Plus, Edit, Trash2, CreditCard, TrendingDown, Shield, DollarSign, Upload, ChevronDown, ChevronUp, AlertCircle, CheckCircle, Users, Clock, X } from 'lucide-react';
 import SortDropdown from '../components/SortDropdown';
 import ImportExportButton from '../components/ImportExportButton';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { formatFriendlyDate } from '../utils/formatDate';
 import { getCategoryColor } from '../utils/categoryColors';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -10,6 +10,7 @@ import api from '../services/api';
 import { formatApiError } from '../utils/formatApiError';
 import { formatLabel } from '../utils/formatLabel';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -42,6 +43,7 @@ const fmtCurrency = (val) => {
 
 export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
   const { user } = useAuth();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState('Overview');
   const [debts, setDebts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,9 +75,26 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
   const [payError, setPayError] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Postpone state
+  const [postponeTarget, setPostponeTarget] = useState(null);
+  const [postponeMode, setPostponeMode] = useState('next');
+  const [postponeDate, setPostponeDate] = useState('');
+  const [postponing, setPostponing] = useState(false);
+  const [paycheckDates, setPaycheckDates] = useState([]);
+
   useEffect(() => {
     fetchDebts(true);
+    fetchPaycheckDates();
   }, [sortBy, sortOrder]);
+
+  const fetchPaycheckDates = async () => {
+    try {
+      const res = await api.get('/api/v1/paycheck-schedules/upcoming?count=10');
+      setPaycheckDates(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      setPaycheckDates([]);
+    }
+  };
 
   // Auto-open add modal when triggered from parent
   useEffect(() => {
@@ -338,6 +357,59 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
     });
   };
 
+  const openPostpone = (debt) => {
+    setPostponeTarget(debt);
+    setPostponeMode('next');
+    setPostponeDate('');
+  };
+
+  const getNextPaycheckDate = () => {
+    if (paycheckDates.length < 2) return null;
+    const d = paycheckDates[1];
+    return typeof d === 'string' ? d : d.date;
+  };
+
+  const handlePostpone = async () => {
+    if (!postponeTarget) return;
+    setPostponing(true);
+    try {
+      let targetDate = null;
+      if (postponeMode === 'next') {
+        targetDate = getNextPaycheckDate();
+        if (!targetDate) {
+          setError('No upcoming paycheck date found.');
+          setPostponing(false);
+          return;
+        }
+      } else {
+        targetDate = postponeDate;
+        if (!targetDate) {
+          setError('Please select a date.');
+          setPostponing(false);
+          return;
+        }
+      }
+      await api.patch(`/api/v1/debts/${postponeTarget.id}/postpone`, { postpone_until: targetDate });
+      setPostponeTarget(null);
+      fetchDebts();
+      toast(`${postponeTarget.name} postponed to ${targetDate}`);
+    } catch (err) {
+      setError(formatApiError(err) || 'Failed to postpone debt.');
+    } finally {
+      setPostponing(false);
+    }
+  };
+
+  const handleClearPostpone = async (debt) => {
+    try {
+      await api.patch(`/api/v1/debts/${debt.id}/postpone`, { postpone_until: null });
+      fetchDebts();
+      toast(`Postponement cleared for ${debt.name}`);
+    } catch (err) {
+      setError(formatApiError(err) || 'Failed to clear postponement.');
+    }
+  };
+
   const totalDebt = debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
   const totalMinPayment = debts.reduce((sum, d) => sum + (Number(d.minimum_payment) || 0), 0);
 
@@ -375,6 +447,15 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-base font-semibold text-gray-900 truncate">{debt.name}</h3>
             <div className="flex items-center gap-1 shrink-0">
+              {Number(debt.balance) > 0 && !debt.is_paid_this_period && (
+                <button
+                  onClick={() => openPostpone(debt)}
+                  className="p-1.5 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors"
+                  title="Postpone"
+                >
+                  <Clock className="w-4 h-4" />
+                </button>
+              )}
               <button onClick={() => openEdit(debt)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
                 <Edit className="w-4 h-4" />
               </button>
@@ -396,6 +477,17 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
                 <CheckCircle className="w-3 h-3" /> Paid
               </span>
+            )}
+            {debt.postpone_until && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleClearPostpone(debt); }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                title="Click to clear postponement"
+              >
+                <Clock className="w-3 h-3" />
+                Postponed to {formatFriendlyDate(debt.postpone_until)}
+                <X className="w-3 h-3 ml-0.5" />
+              </button>
             )}
             {debt.is_household_bill && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
@@ -1071,6 +1163,68 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Postpone Modal */}
+      <Modal isOpen={!!postponeTarget} onClose={() => setPostponeTarget(null)} title={`Postpone ${postponeTarget?.name || 'Debt'}`}>
+        <div className="space-y-4">
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="radio"
+                name="postponeMode"
+                value="next"
+                checked={postponeMode === 'next'}
+                onChange={() => setPostponeMode('next')}
+                className="text-blue-600"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-900">Next paycheck</span>
+                {getNextPaycheckDate() && (
+                  <span className="block text-xs text-gray-500">{formatFriendlyDate(getNextPaycheckDate())}</span>
+                )}
+              </div>
+            </label>
+            <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="radio"
+                name="postponeMode"
+                value="custom"
+                checked={postponeMode === 'custom'}
+                onChange={() => setPostponeMode('custom')}
+                className="text-blue-600"
+              />
+              <span className="text-sm font-medium text-gray-900">Custom date</span>
+            </label>
+            {postponeMode === 'custom' && (
+              <div className="pl-8">
+                <input
+                  type="date"
+                  value={postponeDate}
+                  onChange={(e) => setPostponeDate(e.target.value)}
+                  min={format(new Date(), 'yyyy-MM-dd')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setPostponeTarget(null)}
+              className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handlePostpone}
+              disabled={postponing || (postponeMode === 'custom' && !postponeDate)}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors"
+            >
+              {postponing ? 'Saving...' : 'Postpone'}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       <ConfirmDialog

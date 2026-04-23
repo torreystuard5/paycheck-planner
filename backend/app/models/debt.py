@@ -48,6 +48,9 @@ class Debt(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     is_split: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     split_members: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Postpone override — temporarily moves debt to a later pay period
+    postpone_until: Mapped[str | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

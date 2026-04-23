@@ -281,11 +281,23 @@ def assign_bills_to_paycheck(
 
     for bill in bills:
         freq = bill.frequency or "monthly"
-        due_dates = _due_dates_in_window(
-            bill.due_day, freq, window_start, window_end,
-            day_of_week=getattr(bill, "day_of_week", None),
-            start_date=getattr(bill, "start_date", None),
-        )
+        # If postponed, override the due date with the postpone_until value
+        postpone_dt = getattr(bill, "postpone_until", None)
+        if postpone_dt is not None:
+            # Convert to date if needed
+            if isinstance(postpone_dt, datetime):
+                postpone_dt = postpone_dt.date() if hasattr(postpone_dt, "date") else postpone_dt
+            # Only include if the postponed date falls in this window
+            if window_start <= postpone_dt <= window_end:
+                due_dates = [postpone_dt]
+            else:
+                due_dates = []
+        else:
+            due_dates = _due_dates_in_window(
+                bill.due_day, freq, window_start, window_end,
+                day_of_week=getattr(bill, "day_of_week", None),
+                start_date=getattr(bill, "start_date", None),
+            )
         full_amount = Decimal(str(bill.amount or 0))
         # Use user_share_amount if set (household-aware), otherwise full amount
         user_amount = getattr(bill, "user_share_amount", None)
@@ -343,6 +355,7 @@ def assign_bills_to_paycheck(
                     "is_paid": paid_for_period,
                     "is_overdue": is_overdue,
                     "hidden_overdue": bool(getattr(bill, "hidden_overdue", False)),
+                    "postpone_until": str(postpone_dt) if postpone_dt else None,
                 }
             )
 
@@ -350,9 +363,18 @@ def assign_bills_to_paycheck(
         paid_debt_ids = set()
 
     for debt in debts:
-        due_dates = _due_dates_in_window(
-            debt.due_day, "monthly", window_start, window_end
-        )
+        postpone_dt = getattr(debt, "postpone_until", None)
+        if postpone_dt is not None:
+            if isinstance(postpone_dt, datetime):
+                postpone_dt = postpone_dt.date() if hasattr(postpone_dt, "date") else postpone_dt
+            if window_start <= postpone_dt <= window_end:
+                due_dates = [postpone_dt]
+            else:
+                due_dates = []
+        else:
+            due_dates = _due_dates_in_window(
+                debt.due_day, "monthly", window_start, window_end
+            )
         full_amount = Decimal(str(debt.minimum_payment or 0))
         # Use user_share_amount if set (split-aware), otherwise full amount
         user_amount = getattr(debt, "user_share_amount", None)
@@ -385,6 +407,7 @@ def assign_bills_to_paycheck(
                     "split_count": split_count if is_split else 1,
                     "is_paid": debt_is_paid,
                     "is_overdue": is_overdue,
+                    "postpone_until": str(postpone_dt) if postpone_dt else None,
                 }
             )
 

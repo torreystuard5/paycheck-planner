@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit, Trash2, Search, FileText, Upload, ChevronDown, ChevronUp, X, AlertCircle, CheckCircle, Circle, Undo2, Users, DollarSign, Loader2, History, ArrowLeft, Pencil } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, FileText, Upload, ChevronDown, ChevronUp, X, AlertCircle, CheckCircle, Circle, Undo2, Users, DollarSign, Loader2, History, ArrowLeft, Pencil, Clock } from 'lucide-react';
 import SortDropdown from '../components/SortDropdown';
 import ImportExportButton from '../components/ImportExportButton';
 import { useToast } from '../components/Toast';
@@ -106,6 +106,12 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
   // Pay period grouping state
   const [paycheckDates, setPaycheckDates] = useState([]);
   const [hasPaycheckSchedule, setHasPaycheckSchedule] = useState(false);
+
+  // Postpone state
+  const [postponeTarget, setPostponeTarget] = useState(null);
+  const [postponeMode, setPostponeMode] = useState('next');
+  const [postponeDate, setPostponeDate] = useState('');
+  const [postponing, setPostponing] = useState(false);
 
   useEffect(() => {
     fetchBills(true);
@@ -324,6 +330,61 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
     } catch (err) {
       const detail = err.response?.data?.detail;
       setError(detail ? `Failed to delete bill: ${detail}` : 'Failed to delete bill.');
+    }
+  };
+
+  const openPostpone = (bill) => {
+    setPostponeTarget(bill);
+    setPostponeMode('next');
+    setPostponeDate('');
+  };
+
+  const getNextPaycheckDate = () => {
+    if (paycheckDates.length < 2) return null;
+    const d = paycheckDates[1];
+    return typeof d === 'string' ? d : d.date;
+  };
+
+  const handlePostpone = async () => {
+    if (!postponeTarget) return;
+    setPostponing(true);
+    try {
+      let targetDate = null;
+      if (postponeMode === 'next') {
+        targetDate = getNextPaycheckDate();
+        if (!targetDate) {
+          setError('No upcoming paycheck date found.');
+          setPostponing(false);
+          return;
+        }
+      } else {
+        targetDate = postponeDate;
+        if (!targetDate) {
+          setError('Please select a date.');
+          setPostponing(false);
+          return;
+        }
+      }
+      await api.patch(`/api/v1/bills/${postponeTarget.id}/postpone`, { postpone_until: targetDate });
+      setPostponeTarget(null);
+      fetchBills();
+      toast(`${postponeTarget.name} postponed to ${targetDate}`);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(detail || 'Failed to postpone bill.');
+    } finally {
+      setPostponing(false);
+    }
+  };
+
+  const handleClearPostpone = async (bill) => {
+    try {
+      await api.patch(`/api/v1/bills/${bill.id}/postpone`, { postpone_until: null });
+      fetchBills();
+      toast(`Postponement cleared for ${bill.name}`);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(detail || 'Failed to clear postponement.');
     }
   };
 
@@ -577,6 +638,15 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
                   <CheckCircle className="w-4 h-4" />
                 </button>
               )}
+              {!isPaid && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); openPostpone(bill); }}
+                  className="p-1.5 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors"
+                  title="Postpone"
+                >
+                  <Clock className="w-4 h-4" />
+                </button>
+              )}
               <button onClick={(e) => { e.stopPropagation(); openEdit(bill); }} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors" title="Edit">
                 <Edit className="w-4 h-4" />
               </button>
@@ -598,6 +668,17 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
                 Paid ✓
               </span>
+            )}
+            {bill.postpone_until && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleClearPostpone(bill); }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                title="Click to clear postponement"
+              >
+                <Clock className="w-3 h-3" />
+                Postponed to {formatFriendlyDate(bill.postpone_until)}
+                <X className="w-3 h-3 ml-0.5" />
+              </button>
             )}
             {bill.is_household_bill && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
@@ -998,6 +1079,68 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Postpone Modal */}
+      <Modal isOpen={!!postponeTarget} onClose={() => setPostponeTarget(null)} title={`Postpone ${postponeTarget?.name || 'Bill'}`}>
+        <div className="space-y-4">
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="radio"
+                name="postponeMode"
+                value="next"
+                checked={postponeMode === 'next'}
+                onChange={() => setPostponeMode('next')}
+                className="text-blue-600"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-900">Next paycheck</span>
+                {getNextPaycheckDate() && (
+                  <span className="block text-xs text-gray-500">{formatFriendlyDate(getNextPaycheckDate())}</span>
+                )}
+              </div>
+            </label>
+            <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="radio"
+                name="postponeMode"
+                value="custom"
+                checked={postponeMode === 'custom'}
+                onChange={() => setPostponeMode('custom')}
+                className="text-blue-600"
+              />
+              <span className="text-sm font-medium text-gray-900">Custom date</span>
+            </label>
+            {postponeMode === 'custom' && (
+              <div className="pl-8">
+                <input
+                  type="date"
+                  value={postponeDate}
+                  onChange={(e) => setPostponeDate(e.target.value)}
+                  min={format(new Date(), 'yyyy-MM-dd')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setPostponeTarget(null)}
+              className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handlePostpone}
+              disabled={postponing || (postponeMode === 'custom' && !postponeDate)}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors"
+            >
+              {postponing ? 'Saving...' : 'Postpone'}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Member Payment Modal */}
