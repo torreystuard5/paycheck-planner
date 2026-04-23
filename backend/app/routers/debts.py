@@ -545,9 +545,20 @@ async def postpone_debt(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Debt).where(Debt.id == debt_id, Debt.user_id == current_user.id)
-    )
+    if current_user.household_id:
+        result = await db.execute(
+            select(Debt).where(
+                Debt.id == debt_id,
+                or_(
+                    Debt.user_id == current_user.id,
+                    Debt.household_id == current_user.household_id,
+                ),
+            )
+        )
+    else:
+        result = await db.execute(
+            select(Debt).where(Debt.id == debt_id, Debt.user_id == current_user.id)
+        )
     debt = result.scalar_one_or_none()
     if not debt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
