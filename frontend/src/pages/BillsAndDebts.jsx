@@ -85,7 +85,8 @@ export default function BillsAndDebts() {
   }, [bills, debts]);
 
   const totalBillsAmount = bills.filter(b => b.is_user_responsible !== false).reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0);
-  const totalDebtAmount = debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
+  const activeDebts = debts.filter(d => Number(d.balance) > 0);
+  const totalDebtAmount = activeDebts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
 
   // Close add menu on outside click
   useEffect(() => {

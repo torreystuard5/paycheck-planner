@@ -455,7 +455,8 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
             )}
           </div>
 
-          {/* Mark Paid / Undo */}
+          {/* Mark Paid / Undo — hidden for fully paid-off debts */}
+          {Number(debt.balance) > 0 && (
           <div className="mt-3">
             {debt.is_paid_this_period ? (
               <button
@@ -478,6 +479,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
               </button>
             )}
           </div>
+          )}
         </div>
 
         {/* Expanded section */}

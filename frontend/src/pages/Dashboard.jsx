@@ -229,9 +229,10 @@ export default function Dashboard() {
   const totalIncome = incomeSummary ? Number(incomeSummary.total_net) || 0 : 0;
   const incomePaycheckCount = incomeSummary ? incomeSummary.paycheck_count || 0 : 0;
   const totalBills = Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false).reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0) : 0;
-  const totalDebt = Array.isArray(debts) ? debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0) : 0;
-  const debtsPaidThisPeriod = Array.isArray(debts) ? debts.filter(d => d.is_paid_this_period).length : 0;
-  const totalDebtCount = Array.isArray(debts) ? debts.length : 0;
+  const activeDebts = Array.isArray(debts) ? debts.filter(d => Number(d.balance) > 0) : [];
+  const totalDebt = activeDebts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
+  const debtsPaidThisPeriod = activeDebts.filter(d => d.is_paid_this_period).length;
+  const totalDebtCount = activeDebts.length;
   const savingsCount = Array.isArray(savingsGoals) ? savingsGoals.length : 0;
 
   const billsThisMonth = Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false) : [];
@@ -624,7 +625,7 @@ export default function Dashboard() {
               </div>
               <div className="flex justify-between items-center mt-2">
                 <span className="text-gray-600">Active Debts</span>
-                <span className="font-medium text-gray-900">{Array.isArray(debts) ? debts.length : 0}</span>
+                <span className="font-medium text-gray-900">{activeDebts.length}</span>
               </div>
               {totalBillCount > 0 && (
                 <div className="flex justify-between items-center mt-2">

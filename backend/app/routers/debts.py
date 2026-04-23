@@ -97,7 +97,9 @@ async def _debt_to_response(
     resp.total_paid = total_paid
     current_bal = Decimal(str(debt.balance or 0))
     original = total_paid + current_bal
-    if original > 0:
+    if current_bal <= 0 and total_paid > 0:
+        resp.percent_paid = 100
+    elif original > 0:
         resp.percent_paid = int(round(total_paid * 100 / original))
     else:
         resp.percent_paid = 0

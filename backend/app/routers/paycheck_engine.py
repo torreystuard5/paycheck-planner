@@ -141,6 +141,9 @@ async def _fetch_user_data(db: AsyncSession, user: User):
 
         filtered_debts.append(debt)
 
+    # Exclude fully paid-off debts (balance <= 0) from paycheck assignments
+    filtered_debts = [d for d in filtered_debts if Decimal(str(d.balance or 0)) > 0]
+
     return income_sources, bills, filtered_debts
 
 
