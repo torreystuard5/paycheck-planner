@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import api from '../services/api';
+import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -164,6 +165,7 @@ function EventDetail({ evt, onClose, onTogglePaid }) {
 
 // ── Main component ──
 export default function Calendar() {
+  const { activeBudget, budgetVersion } = useBudget();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth()); // 0-indexed
@@ -176,16 +178,18 @@ export default function Calendar() {
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/api/v1/calendar', { params: { month: month + 1, year, view } });
+      const params = { month: month + 1, year, view };
+      if (activeBudget?.id) params.budget_id = activeBudget.id;
+      const { data } = await api.get('/api/v1/calendar', { params });
       setEvents(data);
     } catch {
       setEvents([]);
     } finally {
       setLoading(false);
     }
-  }, [month, year, view]);
+  }, [month, year, view, activeBudget?.id]);
 
-  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+  useEffect(() => { fetchEvents(); }, [fetchEvents, budgetVersion]);
 
   const goPrev = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { BudgetProvider } from './context/BudgetContext';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
 import MainLayout from './components/Layout/MainLayout';
 import TosOverlay from './components/TosOverlay';
@@ -34,6 +35,7 @@ import Vault from './pages/Vault';
 import Calendar from './pages/Calendar';
 import TaxPrep from './pages/TaxPrep';
 import Changelog from './pages/Changelog';
+import Budgets from './pages/Budgets';
 import NotFound from './pages/NotFound';
 import TermsOfService from './pages/legal/TermsOfService';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
@@ -72,6 +74,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <BudgetProvider>
         <MaintenanceGate>
         <ToastProvider>
         <TosGate>
@@ -113,6 +116,7 @@ export default function App() {
               <Route path="vault" element={<Vault />} />
               <Route path="calendar" element={<Calendar />} />
               <Route path="tax-prep" element={<TaxPrep />} />
+              <Route path="budgets" element={<Budgets />} />
               <Route path="changelog" element={<Changelog />} />
               <Route path="admin/tickets" element={<AdminTickets />} />
               <Route path="admin/stats" element={<AdminStats />} />
@@ -146,6 +150,7 @@ export default function App() {
         </TosGate>
         </ToastProvider>
         </MaintenanceGate>
+        </BudgetProvider>
       </AuthProvider>
     </BrowserRouter>
   );

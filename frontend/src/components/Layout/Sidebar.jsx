@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -26,8 +26,12 @@ import {
   ArrowUpCircle,
   Loader2,
   ScrollText,
+  ChevronDown,
+  Check,
+  FolderOpen,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useBudget } from '../../context/BudgetContext';
 // tierAccess import removed — early access, mode toggle always shown
 import { APP_VERSION } from '../../config';
 import api from '../../services/api';
@@ -46,6 +50,7 @@ const personalLinks = [
   { to: '/vault', label: 'Secure Vault', icon: Lock },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
+  { to: '/budgets', label: 'Budgets', icon: FolderOpen, small: true },
   { to: '/changelog', label: 'Changelog', icon: ScrollText, small: true },
 ];
 
@@ -65,6 +70,85 @@ const businessLinks = [
 const adminLinks = [
   { to: '/admin/command-center', label: 'Command Center', icon: Shield, adminOnly: true },
 ];
+
+function BudgetSwitcher({ onClose }) {
+  const { activeBudget, budgets, setActiveBudget } = useBudget();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [switchingId, setSwitchingId] = useState(null);
+  const menuRef = useRef(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const handleSwitch = async (id) => {
+    if (id === activeBudget?.id) {
+      setMenuOpen(false);
+      return;
+    }
+    setSwitchingId(id);
+    try {
+      await setActiveBudget(id);
+    } catch { /* ignore */ }
+    setSwitchingId(null);
+    setMenuOpen(false);
+  };
+
+  if (!activeBudget) return null;
+
+  return (
+    <div className="px-3 pb-1 relative" ref={menuRef}>
+      <button
+        onClick={() => setMenuOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors min-h-[44px] text-left"
+      >
+        {activeBudget.color && (
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: activeBudget.color }} />
+        )}
+        <span className="flex-1 text-xs font-medium text-gray-700 truncate">{activeBudget.name}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {menuOpen && (
+        <div className="absolute left-3 right-3 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1 max-h-60 overflow-y-auto">
+          {budgets.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => handleSwitch(b.id)}
+              disabled={!!switchingId}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs text-left transition-colors min-h-[44px] ${
+                b.id === activeBudget.id ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'
+              } ${switchingId ? 'opacity-60' : ''}`}
+            >
+              {b.color ? (
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: b.color }} />
+              ) : (
+                <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-gray-300" />
+              )}
+              <span className="flex-1 truncate">{b.name}</span>
+              {b.id === activeBudget.id && <Check className="w-3.5 h-3.5 shrink-0" />}
+              {switchingId === b.id && <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />}
+            </button>
+          ))}
+          <div className="border-t border-gray-100 mt-1 pt-1">
+            <button
+              onClick={() => { setMenuOpen(false); navigate('/budgets'); onClose(); }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors min-h-[44px]"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Manage budgets…
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Sidebar({ open, onClose }) {
   const { user, logout, updateUser } = useAuth();
@@ -147,6 +231,9 @@ export default function Sidebar({ open, onClose }) {
           </div>
         </div>
       )}
+
+      {/* Budget Switcher — below mode toggle, personal mode only */}
+      {appMode === 'personal' && <BudgetSwitcher onClose={onClose} />}
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

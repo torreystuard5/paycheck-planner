@@ -5,6 +5,7 @@ import { formatFriendlyDate } from '../utils/formatDate';
 import { formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useBudget } from '../context/BudgetContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -18,6 +19,7 @@ const defaultContribForm = { goal_id: '', amount: '', pay_period_date: '' };
 
 export default function Savings() {
   const { user } = useAuth();
+  const { activeBudget, budgetVersion } = useBudget();
   const [goals, setGoals] = useState([]);
   const [contributions, setContributions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,11 +38,12 @@ export default function Savings() {
 
   useEffect(() => {
     fetchData(true);
-  }, [sortBy, sortOrder]);
+  }, [sortBy, sortOrder, budgetVersion]);
 
   const pollData = useCallback(async () => {
+    const bq = activeBudget?.id ? `&budget_id=${activeBudget.id}` : '';
     try {
-      const goalsRes = await api.get(`/api/v1/savings/goals?sort_by=${sortBy}&sort_order=${sortOrder}`);
+      const goalsRes = await api.get(`/api/v1/savings/goals?sort_by=${sortBy}&sort_order=${sortOrder}${bq}`);
       const goalsData = Array.isArray(goalsRes.data) ? goalsRes.data : [];
       setGoals(goalsData);
       const allContribs = [];
@@ -56,15 +59,16 @@ export default function Savings() {
     } catch {
       // silent poll
     }
-  }, [sortBy, sortOrder]);
+  }, [sortBy, sortOrder, activeBudget?.id]);
 
   usePolling(pollData, 30000, !!user?.household_id);
 
   const fetchData = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
+    const bq = activeBudget?.id ? `&budget_id=${activeBudget.id}` : '';
     try {
-      const goalsRes = await api.get(`/api/v1/savings/goals?sort_by=${sortBy}&sort_order=${sortOrder}`);
+      const goalsRes = await api.get(`/api/v1/savings/goals?sort_by=${sortBy}&sort_order=${sortOrder}${bq}`);
       const goalsData = Array.isArray(goalsRes.data) ? goalsRes.data : [];
       setGoals(goalsData);
       const allContribs = [];

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Plus, ChevronDown, Receipt, CreditCard } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import { formatLabel } from '../utils/formatLabel';
@@ -23,6 +24,7 @@ const fmtCurrency = (val) => {
 
 export default function BillsAndDebts() {
   const { user } = useAuth();
+  const { activeBudget, budgetVersion } = useBudget();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const activeTab = TABS.find(t => t.key === tabParam)?.key || 'all';
@@ -45,10 +47,11 @@ export default function BillsAndDebts() {
   const fetchAll = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
+    const bq = activeBudget?.id ? `budget_id=${activeBudget.id}` : '';
     try {
       const [billsRes, debtsRes] = await Promise.all([
-        api.get('/api/v1/bills'),
-        api.get('/api/v1/debts'),
+        api.get(bq ? `/api/v1/bills?${bq}` : '/api/v1/bills'),
+        api.get(bq ? `/api/v1/debts?${bq}` : '/api/v1/debts'),
       ]);
       setBills(Array.isArray(billsRes.data) ? billsRes.data : []);
       setDebts(Array.isArray(debtsRes.data) ? debtsRes.data : []);
@@ -57,7 +60,7 @@ export default function BillsAndDebts() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, []);
+  }, [activeBudget?.id]);
 
   useEffect(() => {
     if (activeTab === 'all') {
@@ -65,7 +68,7 @@ export default function BillsAndDebts() {
     } else {
       setLoading(false);
     }
-  }, [activeTab, fetchAll]);
+  }, [activeTab, fetchAll, budgetVersion]);
 
   // Combined and sorted items for All tab
   const combinedItems = useMemo(() => {

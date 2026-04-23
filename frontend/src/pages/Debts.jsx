@@ -10,6 +10,7 @@ import api from '../services/api';
 import { formatApiError } from '../utils/formatApiError';
 import { formatLabel } from '../utils/formatLabel';
 import { useAuth } from '../context/AuthContext';
+import { useBudget } from '../context/BudgetContext';
 import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -43,6 +44,7 @@ const fmtCurrency = (val) => {
 
 export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
   const { user } = useAuth();
+  const { activeBudget, budgetVersion } = useBudget();
   const toast = useToast();
   const [activeTab, setActiveTab] = useState('Overview');
   const [debts, setDebts] = useState([]);
@@ -85,7 +87,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
   useEffect(() => {
     fetchDebts(true);
     fetchPaycheckDates();
-  }, [sortBy, sortOrder]);
+  }, [sortBy, sortOrder, budgetVersion]);
 
   const fetchPaycheckDates = async () => {
     try {
@@ -114,13 +116,14 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
 
   const pollDebts = useCallback(async () => {
     try {
-      const res = await api.get(`/api/v1/debts?sort_by=${sortBy}&sort_order=${sortOrder}`);
+      const bq = activeBudget?.id ? `&budget_id=${activeBudget.id}` : '';
+      const res = await api.get(`/api/v1/debts?sort_by=${sortBy}&sort_order=${sortOrder}${bq}`);
       setDebts(Array.isArray(res.data) ? res.data : []);
       setLastUpdated(new Date());
     } catch {
       // silent poll
     }
-  }, [sortBy, sortOrder]);
+  }, [sortBy, sortOrder, activeBudget?.id]);
 
   usePolling(pollDebts, 30000, !!user?.household_id);
 
@@ -133,7 +136,8 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/api/v1/debts?sort_by=${sortBy}&sort_order=${sortOrder}`);
+      const bq = activeBudget?.id ? `&budget_id=${activeBudget.id}` : '';
+      const res = await api.get(`/api/v1/debts?sort_by=${sortBy}&sort_order=${sortOrder}${bq}`);
       setDebts(Array.isArray(res.data) ? res.data : []);
     } catch {
       setError('Failed to load debts.');

@@ -13,6 +13,7 @@ import {
   Tag,
 } from 'lucide-react';
 import api from '../services/api';
+import { useBudget } from '../context/BudgetContext';
 import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -85,6 +86,7 @@ function CategoryBars({ byCategory, total }) {
 
 // ── Main component ──
 export default function TaxPrep() {
+  const { activeBudget, budgetVersion } = useBudget();
   const toast = useToast();
   const currentYear = new Date().getFullYear();
 
@@ -109,9 +111,11 @@ export default function TaxPrep() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const params = { tax_year: taxYear };
+      if (activeBudget?.id) params.budget_id = activeBudget.id;
       const [deductionsRes, summaryRes] = await Promise.all([
-        api.get('/api/v1/tax/deductions', { params: { tax_year: taxYear } }),
-        api.get('/api/v1/tax/summary', { params: { tax_year: taxYear } }),
+        api.get('/api/v1/tax/deductions', { params }),
+        api.get('/api/v1/tax/summary', { params }),
       ]);
       setDeductions(deductionsRes.data);
       setSummary(summaryRes.data);
@@ -121,9 +125,9 @@ export default function TaxPrep() {
     } finally {
       setLoading(false);
     }
-  }, [taxYear]);
+  }, [taxYear, activeBudget?.id]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData, budgetVersion]);
 
   // Year options
   const yearOptions = [];

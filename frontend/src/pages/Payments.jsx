@@ -4,6 +4,7 @@ import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useBudget } from '../context/BudgetContext';
 import Modal from '../components/Modal';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
@@ -15,6 +16,7 @@ import usePolling from '../hooks/usePolling';
 
 export default function Payments() {
   const { user } = useAuth();
+  const { activeBudget, budgetVersion } = useBudget();
   const [payments, setPayments] = useState([]);
   const [bills, setBills] = useState([]);
   const [debts, setDebts] = useState([]);
@@ -40,14 +42,15 @@ export default function Payments() {
 
   useEffect(() => {
     fetchAll(true);
-  }, []);
+  }, [budgetVersion]);
 
   const pollPayments = useCallback(async () => {
+    const bq = activeBudget?.id ? `?budget_id=${activeBudget.id}` : '';
     try {
       const [paymentsRes, billsRes, debtsRes] = await Promise.allSettled([
-        api.get('/api/v1/payments'),
-        api.get('/api/v1/bills'),
-        api.get('/api/v1/debts'),
+        api.get(`/api/v1/payments${bq}`),
+        api.get(`/api/v1/bills${bq}`),
+        api.get(`/api/v1/debts${bq}`),
       ]);
       if (paymentsRes.status === 'fulfilled') setPayments(Array.isArray(paymentsRes.value.data) ? paymentsRes.value.data : []);
       if (billsRes.status === 'fulfilled') setBills(Array.isArray(billsRes.value.data) ? billsRes.value.data : []);
@@ -56,7 +59,7 @@ export default function Payments() {
     } catch {
       // silent poll
     }
-  }, []);
+  }, [activeBudget?.id]);
 
   usePolling(pollPayments, 30000, !!user?.household_id);
 
@@ -73,11 +76,12 @@ export default function Payments() {
   const fetchAll = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
+    const bq = activeBudget?.id ? `?budget_id=${activeBudget.id}` : '';
     try {
       const [paymentsRes, billsRes, debtsRes] = await Promise.allSettled([
-        api.get('/api/v1/payments'),
-        api.get('/api/v1/bills'),
-        api.get('/api/v1/debts'),
+        api.get(`/api/v1/payments${bq}`),
+        api.get(`/api/v1/bills${bq}`),
+        api.get(`/api/v1/debts${bq}`),
       ]);
       if (paymentsRes.status === 'fulfilled') setPayments(Array.isArray(paymentsRes.value.data) ? paymentsRes.value.data : []);
       if (billsRes.status === 'fulfilled') setBills(Array.isArray(billsRes.value.data) ? billsRes.value.data : []);

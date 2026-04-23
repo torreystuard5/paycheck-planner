@@ -8,6 +8,7 @@ import { formatFriendlyDate } from '../utils/formatDate';
 import { getCategoryColor } from '../utils/categoryColors';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useBudget } from '../context/BudgetContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -59,6 +60,7 @@ const freqLabel = (freq) => {
 
 export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
   const { user } = useAuth();
+  const { activeBudget, budgetVersion } = useBudget();
   const toast = useToast();
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -116,7 +118,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
   useEffect(() => {
     fetchBills(true);
     fetchPaycheckDates();
-  }, [statusFilter, sortBy, sortOrder]);
+  }, [statusFilter, sortBy, sortOrder, budgetVersion]);
 
   // Auto-open add modal when triggered from parent
   useEffect(() => {
@@ -144,13 +146,14 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
       if (statusFilter) queryParams.set('status', statusFilter);
       queryParams.set('sort_by', sortBy);
       queryParams.set('sort_order', sortOrder);
+      if (activeBudget?.id) queryParams.set('budget_id', activeBudget.id);
       const res = await api.get(`/api/v1/bills?${queryParams.toString()}`);
       setBills(Array.isArray(res.data) ? res.data : []);
       setLastUpdated(new Date());
     } catch {
       // silent poll failure
     }
-  }, [statusFilter, sortBy, sortOrder]);
+  }, [statusFilter, sortBy, sortOrder, activeBudget?.id]);
 
   usePolling(pollBills, 30000, !!user?.household_id);
 
@@ -171,6 +174,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
       if (statusFilter) queryParams.set('status', statusFilter);
       queryParams.set('sort_by', sortBy);
       queryParams.set('sort_order', sortOrder);
+      if (activeBudget?.id) queryParams.set('budget_id', activeBudget.id);
       const res = await api.get(`/api/v1/bills?${queryParams.toString()}`);
       setBills(Array.isArray(res.data) ? res.data : []);
     } catch {

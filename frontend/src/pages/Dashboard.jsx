@@ -4,6 +4,7 @@ import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, Aler
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import usePolling from '../hooks/usePolling';
@@ -45,6 +46,7 @@ function CollapsibleSection({ sectionKey, title, icon: Icon, iconColor, collapse
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { activeBudget, budgetVersion } = useBudget();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -129,13 +131,15 @@ export default function Dashboard() {
   const fetchDashboardData = useCallback(async () => {
     if (user?.app_mode === 'business') return;
     setError(null);
+    const bq = activeBudget?.id ? `budget_id=${activeBudget.id}` : '';
+    const sep = (url) => url.includes('?') ? `${url}&${bq}` : `${url}?${bq}`;
     try {
       const [incomeRes, billsRes, debtsRes, savingsRes, paymentsRes] = await Promise.allSettled([
-        api.get('/api/v1/paycheck-entries/monthly-summary'),
-        api.get('/api/v1/bills'),
-        api.get('/api/v1/debts'),
-        api.get('/api/v1/savings/goals'),
-        api.get('/api/v1/payments?limit=5'),
+        api.get(bq ? sep('/api/v1/paycheck-entries/monthly-summary') : '/api/v1/paycheck-entries/monthly-summary'),
+        api.get(bq ? `/api/v1/bills?${bq}` : '/api/v1/bills'),
+        api.get(bq ? `/api/v1/debts?${bq}` : '/api/v1/debts'),
+        api.get(bq ? `/api/v1/savings/goals?${bq}` : '/api/v1/savings/goals'),
+        api.get(bq ? `/api/v1/payments?limit=5&${bq}` : '/api/v1/payments?limit=5'),
       ]);
 
       if (incomeRes.status === 'fulfilled') setIncomeSummary(incomeRes.value.data || null);
@@ -176,7 +180,7 @@ export default function Dashboard() {
     } catch (err) {
       setError('Failed to load dashboard data.');
     }
-  }, [fetchChecklist, user?.app_mode]);
+  }, [fetchChecklist, user?.app_mode, activeBudget?.id]);
 
   useEffect(() => {
     const init = async () => {
@@ -185,7 +189,7 @@ export default function Dashboard() {
       setLoading(false);
     };
     init();
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, budgetVersion]);
 
   usePolling(fetchDashboardData, 30000, !!household && user?.app_mode !== 'business');
 

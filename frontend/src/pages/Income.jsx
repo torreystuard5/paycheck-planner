@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Edit, Trash2, ChevronDown, ChevronUp, DollarSign, Clock, Archive, Calendar } from 'lucide-react';
 import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
+import { useBudget } from '../context/BudgetContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -18,6 +19,7 @@ const defaultEntryForm = {
 };
 
 export default function Income() {
+  const { activeBudget, budgetVersion } = useBudget();
   const [entries, setEntries] = useState([]);
   const [monthlySummary, setMonthlySummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -54,11 +56,13 @@ export default function Income() {
   const fetchData = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
+    const bq = activeBudget?.id ? `&budget_id=${activeBudget.id}` : '';
+    const bqFirst = activeBudget?.id ? `?budget_id=${activeBudget.id}` : '';
     try {
       const [entriesRes, summaryRes, sourcesRes] = await Promise.allSettled([
-        api.get(`/api/v1/paycheck-entries?month=${selectedMonth}&year=${selectedYear}`),
-        api.get(`/api/v1/paycheck-entries/monthly-summary?month=${selectedMonth}&year=${selectedYear}`),
-        api.get('/api/v1/paycheck-entries/distinct-sources'),
+        api.get(`/api/v1/paycheck-entries?month=${selectedMonth}&year=${selectedYear}${bq}`),
+        api.get(`/api/v1/paycheck-entries/monthly-summary?month=${selectedMonth}&year=${selectedYear}${bq}`),
+        api.get(`/api/v1/paycheck-entries/distinct-sources${bqFirst}`),
       ]);
       if (entriesRes.status === 'fulfilled') {
         const all = Array.isArray(entriesRes.value.data) ? entriesRes.value.data : [];
@@ -79,11 +83,11 @@ export default function Income() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [selectedMonth, selectedYear, firstLoad]);
+  }, [selectedMonth, selectedYear, firstLoad, activeBudget?.id]);
 
   useEffect(() => {
     fetchData(true);
-  }, [fetchData]);
+  }, [fetchData, budgetVersion]);
 
   // ── Paycheck entry handlers ──
   const openAddEntry = () => {
