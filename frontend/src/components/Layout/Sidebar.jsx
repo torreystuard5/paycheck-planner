@@ -29,6 +29,7 @@ import {
   ChevronDown,
   Check,
   FolderOpen,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useBudget } from '../../context/BudgetContext';
@@ -50,6 +51,7 @@ const personalLinks = [
   { to: '/vault', label: 'Secure Vault', icon: Lock },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
+  { to: '/uploads', label: 'Uploads', icon: Upload },
   { to: '/budgets', label: 'Budgets', icon: FolderOpen, small: true },
   { to: '/changelog', label: 'Changelog', icon: ScrollText, small: true },
 ];

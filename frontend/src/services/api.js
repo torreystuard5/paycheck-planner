@@ -116,4 +116,26 @@ api.interceptors.response.use(
   }
 );
 
+// ── Document upload helpers (Phase 6B) ──
+
+export function requestUploadPresign({ filename, content_type, file_size, document_type }) {
+  return api.post('/api/v1/documents/presign', { filename, content_type, file_size, document_type });
+}
+
+export function finalizeUpload({ document_id, file_size }) {
+  return api.post('/api/v1/documents/finalize', { document_id, file_size });
+}
+
+export function listDocuments(params = {}) {
+  return api.get('/api/v1/documents', { params });
+}
+
+export function getDocument(id) {
+  return api.get(`/api/v1/documents/${id}`);
+}
+
+export function deleteDocument(id) {
+  return api.delete(`/api/v1/documents/${id}`);
+}
+
 export default api;

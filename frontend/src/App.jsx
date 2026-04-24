@@ -36,6 +36,7 @@ import Calendar from './pages/Calendar';
 import TaxPrep from './pages/TaxPrep';
 import Changelog from './pages/Changelog';
 import Budgets from './pages/Budgets';
+import Uploads from './pages/Uploads';
 import NotFound from './pages/NotFound';
 import TermsOfService from './pages/legal/TermsOfService';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
@@ -116,6 +117,7 @@ export default function App() {
               <Route path="vault" element={<Vault />} />
               <Route path="calendar" element={<Calendar />} />
               <Route path="tax-prep" element={<TaxPrep />} />
+              <Route path="uploads" element={<Uploads />} />
               <Route path="budgets" element={<Budgets />} />
               <Route path="changelog" element={<Changelog />} />
               <Route path="admin/tickets" element={<AdminTickets />} />
