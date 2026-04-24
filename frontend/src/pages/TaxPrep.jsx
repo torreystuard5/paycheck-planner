@@ -120,6 +120,7 @@ export default function TaxPrep() {
       setDeductions(deductionsRes.data);
       setSummary(summaryRes.data);
     } catch {
+      toast('Failed to load deductions');
       setDeductions([]);
       setSummary(null);
     } finally {
@@ -199,14 +200,16 @@ export default function TaxPrep() {
   // Export CSV
   const handleExport = async () => {
     try {
+      const params = { tax_year: taxYear };
+      if (activeBudget?.id) params.budget_id = activeBudget.id;
       const res = await api.get('/api/v1/tax/export', {
-        params: { tax_year: taxYear },
+        params,
         responseType: 'blob',
       });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const a = document.createElement('a');
       a.href = url;
-      a.download = `tax_deductions_${taxYear}.csv`;
+      a.download = `paydrift-tax-deductions-${taxYear}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast('CSV downloaded');
@@ -378,8 +381,12 @@ export default function TaxPrep() {
               <tbody className="divide-y divide-gray-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-400">
-                      No deductions found for {taxYear}
+                    <td colSpan={6} className="px-4 py-12 text-center">
+                      <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                      <p className="text-sm text-gray-500">No deductions for {taxYear}</p>
+                      <button onClick={openAdd} className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
+                        <Plus className="h-4 w-4" />Add your first deduction
+                      </button>
                     </td>
                   </tr>
                 ) : (
@@ -422,6 +429,9 @@ export default function TaxPrep() {
               <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                 <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-500">No deductions for {taxYear}</p>
+                <button onClick={openAdd} className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
+                  <Plus className="h-4 w-4" />Add your first deduction
+                </button>
               </div>
             ) : (
               filtered.map((d) => {
@@ -446,11 +456,11 @@ export default function TaxPrep() {
                       <div className="text-right shrink-0">
                         <p className="text-sm font-bold text-gray-900">{fmtCurrency(d.amount)}</p>
                         <div className="flex items-center gap-1 mt-1 justify-end">
-                          <button onClick={() => openEdit(d)} className="p-1 text-gray-400 hover:text-blue-600">
-                            <Pencil className="h-3.5 w-3.5" />
+                          <button onClick={() => openEdit(d)} className="p-2 text-gray-400 hover:text-blue-600 min-w-[44px] min-h-[44px] flex items-center justify-center">
+                            <Pencil className="h-4 w-4" />
                           </button>
-                          <button onClick={() => setDeleteTarget(d)} className="p-1 text-gray-400 hover:text-red-600">
-                            <Trash2 className="h-3.5 w-3.5" />
+                          <button onClick={() => setDeleteTarget(d)} className="p-2 text-gray-400 hover:text-red-600 min-w-[44px] min-h-[44px] flex items-center justify-center">
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </div>

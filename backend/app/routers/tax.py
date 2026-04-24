@@ -130,14 +130,16 @@ async def delete_deduction(
 @router.get("/summary", response_model=TaxSummaryResponse)
 async def tax_summary(
     tax_year: int = Query(..., ge=2000, le=2100),
+    budget_id: Optional[UUID] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(TaxDeduction).where(
-            TaxDeduction.user_id == current_user.id, TaxDeduction.tax_year == tax_year
-        )
+    stmt = select(TaxDeduction).where(
+        TaxDeduction.user_id == current_user.id, TaxDeduction.tax_year == tax_year
     )
+    if budget_id is not None:
+        stmt = stmt.where(TaxDeduction.budget_id == budget_id)
+    result = await db.execute(stmt)
     deductions = result.scalars().all()
 
     total = Decimal("0")
@@ -170,14 +172,18 @@ async def tax_summary(
 @router.get("/export")
 async def export_deductions(
     tax_year: int = Query(..., ge=2000, le=2100),
+    budget_id: Optional[UUID] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
+    stmt = (
         select(TaxDeduction)
         .where(TaxDeduction.user_id == current_user.id, TaxDeduction.tax_year == tax_year)
         .order_by(TaxDeduction.date)
     )
+    if budget_id is not None:
+        stmt = stmt.where(TaxDeduction.budget_id == budget_id)
+    result = await db.execute(stmt)
     deductions = result.scalars().all()
 
     output = io.StringIO()
