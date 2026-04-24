@@ -31,6 +31,7 @@ from app.models.tax_deduction import TaxDeduction
 from app.models.user_feature_override import UserFeatureOverride
 from app.models.global_feature_override import GlobalFeatureOverride
 from app.models.user_ui_preference import UserUIPreference
+from app.models.document_upload import DocumentUpload
 from app.models.business import (
     BusinessCustomer,
     BusinessDeduction,
@@ -83,4 +84,5 @@ __all__ = [
     "BusinessStaffPayRun",
     "BusinessFund",
     "BusinessFundTransaction",
+    "DocumentUpload",
 ]

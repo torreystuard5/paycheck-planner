@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     NOTES_ENCRYPTION_KEY: str | None = None
     CURRENT_TOS_VERSION: str = "1.0"
 
+    # Cloudflare R2 storage (all optional — app boots fine without them)
+    R2_ACCOUNT_ID: str | None = None
+    R2_ACCESS_KEY_ID: str | None = None
+    R2_SECRET_ACCESS_KEY: str | None = None
+    R2_BUCKET_NAME: str | None = None
+    R2_ENDPOINT_URL: str | None = None
+    R2_PUBLIC_BASE_URL: str | None = None
+    R2_PRESIGNED_URL_TTL: int = 900
+    R2_MAX_UPLOAD_BYTES: int = 15_728_640
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @model_validator(mode="after")
