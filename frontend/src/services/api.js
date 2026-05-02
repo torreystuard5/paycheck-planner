@@ -19,10 +19,19 @@ export function onTosRequired(cb) {
   tosRequiredCallback = cb;
 }
 
+/** Must match FastAPI JSONResponse `detail` for maintenance lockout (see backend `maintenance_mode_middleware`). */
+export const MAINTENANCE_MODE_DETAIL =
+  'System is under maintenance. Please try again later.';
+
 // Maintenance mode state — shared globally
 let maintenanceCallback = null;
 export function onMaintenanceMode(cb) {
   maintenanceCallback = cb;
+}
+
+/** Clear or set the global maintenance UI flag (e.g. after /auth/me confirms an admin). */
+export function setMaintenanceModeForced(value) {
+  if (maintenanceCallback) maintenanceCallback(!!value);
 }
 
 // Attach access token to every request
@@ -51,8 +60,12 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
-    // Intercept 503 maintenance mode responses
-    if (error.response?.status === 503 && maintenanceCallback) {
+    // Intercept 503 maintenance mode responses (ignore unrelated 503s)
+    if (
+      error.response?.status === 503 &&
+      error.response?.data?.detail === MAINTENANCE_MODE_DETAIL &&
+      maintenanceCallback
+    ) {
       maintenanceCallback(true);
       return Promise.reject(error);
     }

@@ -114,6 +114,11 @@ MAINTENANCE_EXEMPT_PREFIXES = (
 _maintenance_cache: dict = {"enabled": False, "checked_at": 0.0}
 
 
+def invalidate_maintenance_cache() -> None:
+    """Force next request to re-read maintenance_mode from the database (e.g. after admin toggles it)."""
+    _maintenance_cache["checked_at"] = 0.0
+
+
 @app.middleware("http")
 async def tos_check_middleware(request: Request, call_next):
     # Skip preflight / non-mutating CORS requests
@@ -250,13 +255,18 @@ async def maintenance_mode_middleware(request: Request, call_next):
             if payload.get("type") == "access":
                 user_id = payload.get("sub")
                 if user_id:
-                    async with async_session() as session:
-                        result = await session.execute(
-                            select(User.is_admin).where(User.id == user_id)
-                        )
-                        is_admin = result.scalar_one_or_none()
-                        if is_admin:
-                            return await call_next(request)
+                    try:
+                        uid = UUID(str(user_id))
+                    except (ValueError, TypeError):
+                        uid = None
+                    if uid is not None:
+                        async with async_session() as session:
+                            result = await session.execute(
+                                select(User.is_admin).where(User.id == uid)
+                            )
+                            is_admin = result.scalar_one_or_none()
+                            if is_admin:
+                                return await call_next(request)
         except (JWTError, Exception):
             pass
 

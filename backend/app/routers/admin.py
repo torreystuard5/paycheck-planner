@@ -1131,6 +1131,13 @@ async def update_system_setting(
     )
     await db.flush()
     await db.refresh(setting)
+    if key == "maintenance_mode":
+        try:
+            from app.main import invalidate_maintenance_cache
+
+            invalidate_maintenance_cache()
+        except Exception:
+            logger.exception("invalidate_maintenance_cache failed after maintenance_mode update")
     return SystemSettingOut.model_validate(setting)
 
 

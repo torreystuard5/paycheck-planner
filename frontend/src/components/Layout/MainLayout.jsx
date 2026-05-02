@@ -4,6 +4,7 @@ import { Menu, Shield } from 'lucide-react';
 import Sidebar from './Sidebar';
 // EarlyAccessBanner removed (Phase 2 cleanup)
 import AnnouncementBanner from '../AnnouncementBanner';
+import AdminMaintenanceBanner from '../AdminMaintenanceBanner';
 import Footer from '../Footer';
 import { useAuth } from '../../context/AuthContext';
 import logo from '../../assets/PayDrift-Logo.jpg';
@@ -43,6 +44,7 @@ export default function MainLayout() {
         </div>
 
         <main className="p-4 md:p-6">
+          <AdminMaintenanceBanner />
           <AnnouncementBanner />
           <Outlet />
         </main>

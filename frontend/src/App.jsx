@@ -62,12 +62,15 @@ function TosGate({ children }) {
 }
 
 function MaintenanceGate({ children }) {
+  const { user, loading } = useAuth();
   const [maintenance, setMaintenance] = useState(false);
   useEffect(() => {
     onMaintenanceMode(setMaintenance);
     return () => onMaintenanceMode(null);
   }, []);
-  if (maintenance) return <MaintenanceOverlay />;
+  if (maintenance && !loading && !user?.is_admin) {
+    return <MaintenanceOverlay />;
+  }
   return children;
 }
 

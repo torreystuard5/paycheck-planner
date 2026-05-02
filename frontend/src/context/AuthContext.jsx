@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import api from '../services/api';
-import { onTosRequired } from '../services/api';
+import api, { onTosRequired, setMaintenanceModeForced } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -65,16 +64,22 @@ export function AuthProvider({ children }) {
           const { data } = await api.get('/api/v1/auth/me');
           setUser({ ...data, app_mode: data.app_mode || 'personal' });
           setIsAuthenticated(true);
+          if (data.is_admin) {
+            setMaintenanceModeForced(false);
+          }
           if (!data.tos_version || data.tos_version < '1.0') {
             setTosRequired('1.0');
           }
-          // Fetch subscription status on app load
-          await fetchSubscription();
         } catch {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           setUser(null);
           setIsAuthenticated(false);
+        }
+        try {
+          await fetchSubscription();
+        } catch {
+          // optional — must not clear session (e.g. maintenance 503 for non-subscription paths)
         }
       }
       setLoading(false);
@@ -95,7 +100,14 @@ export function AuthProvider({ children }) {
     const me = await api.get('/api/v1/auth/me');
     setUser({ ...me.data, app_mode: me.data.app_mode || 'personal' });
     setIsAuthenticated(true);
-    await fetchSubscription();
+    if (me.data.is_admin) {
+      setMaintenanceModeForced(false);
+    }
+    try {
+      await fetchSubscription();
+    } catch {
+      /* ignore */
+    }
     return me.data;
   };
 
@@ -106,7 +118,14 @@ export function AuthProvider({ children }) {
     const me = await api.get('/api/v1/auth/me');
     setUser({ ...me.data, app_mode: me.data.app_mode || 'personal' });
     setIsAuthenticated(true);
-    await fetchSubscription();
+    if (me.data.is_admin) {
+      setMaintenanceModeForced(false);
+    }
+    try {
+      await fetchSubscription();
+    } catch {
+      /* ignore */
+    }
     return me.data;
   };
 
