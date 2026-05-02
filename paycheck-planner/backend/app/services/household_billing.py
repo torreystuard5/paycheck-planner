@@ -9,6 +9,13 @@ from app.models.bill_member_payment import BillMemberPayment
 from app.models.user import User
 
 
+def _bill_amount_decimal(bill: Bill) -> Decimal:
+    """Coerce bill.amount to Decimal; DB may return None despite server_default."""
+    if bill.amount is None:
+        return Decimal("0")
+    return Decimal(str(bill.amount))
+
+
 async def calculate_member_shares(
     bill: Bill,
     household_members: list[User],
@@ -23,7 +30,7 @@ async def calculate_member_shares(
         return []
 
     member_count = len(household_members)
-    bill_amount = Decimal(str(bill.amount))
+    bill_amount = _bill_amount_decimal(bill)
     share_per_member = (bill_amount / member_count).quantize(Decimal("0.01"))
 
     # Fetch sum of payments per member for this bill
@@ -71,7 +78,7 @@ async def get_bill_breakdown(
     member_shares = await calculate_member_shares(bill, members, db)
 
     total_paid = sum(m["paid"] for m in member_shares)
-    bill_amount = Decimal(str(bill.amount))
+    bill_amount = _bill_amount_decimal(bill)
     total_remaining = bill_amount - total_paid
 
     return {
