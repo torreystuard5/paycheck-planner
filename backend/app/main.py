@@ -28,6 +28,7 @@ app = FastAPI(
 # CORS: FRONTEND_URL (comma-separated) + FRONTEND_ORIGIN (dev default) + production app hosts.
 # Never use allow_origins=["*"] with allow_credentials=True — browsers block credentialed XHR (login, cookies).
 _PRODUCTION_APP_ORIGIN = "https://paydrift.net"
+_WWW_PRODUCTION_ORIGIN = "https://www.paydrift.net"
 _LEGACY_NETLIFY_ORIGIN = "https://paydrift.netlify.app"
 _raw = (settings.FRONTEND_URL or "").strip()
 _env_origin = (os.getenv("FRONTEND_ORIGIN") or "").strip() or None
@@ -41,18 +42,10 @@ elif _raw:
 else:
     origins = []
 
-for _extra in (_PRODUCTION_APP_ORIGIN, _LEGACY_NETLIFY_ORIGIN, _dev_default):
+for _extra in (_PRODUCTION_APP_ORIGIN, _WWW_PRODUCTION_ORIGIN, _LEGACY_NETLIFY_ORIGIN, _dev_default):
     if _extra and _extra not in origins:
         origins.append(_extra)
 origins = list(dict.fromkeys(origins))
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Paths exempt from the TOS version check
 # Business-only plans cannot call personal finance APIs (direct URL / tooling).
@@ -279,6 +272,17 @@ async def maintenance_mode_middleware(request: Request, call_next):
         content={"detail": "System is under maintenance. Please try again later."},
     )
 
+
+# Register CORS last so it wraps all other middleware. If CORSMiddleware is innermost,
+# middleware that returns a Response without call_next never runs CORS — browsers then
+# report "No Access-Control-Allow-Origin" even for same-origin-adjacent failures.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(income.router, prefix="/api/v1")

@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -20,6 +21,8 @@ from app.utils.security import (
     hash_password,
     verify_password,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -106,7 +109,14 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(credentials.password, user.password_hash):
+    password_ok = False
+    if user:
+        try:
+            password_ok = verify_password(credentials.password, user.password_hash)
+        except Exception:
+            logger.exception("Login password verify failed for email=%s", credentials.email)
+
+    if not user or not password_ok:
         # Increment failed login count if user exists but password is wrong
         if user:
             user.failed_login_count = (user.failed_login_count or 0) + 1
