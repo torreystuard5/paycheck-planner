@@ -1,0 +1,9 @@
+feat: subscription tier gating, household roles/chores, audit fixes
+
+- Enforce plan tier on business APIs, app_mode, and personal finance middleware
+- Admin PATCH subscription-tier clears overrides; tier-scoped feature overrides
+- Household member roles, child permissions, chores (Alembic 039) + UI
+- Audit log targets, remove log-access spam; dashboard scrollable payments
+- PersonalModeRoute, Bundle-only mode switcher, tier_access + audit doc
+
+Made-with: Cursor

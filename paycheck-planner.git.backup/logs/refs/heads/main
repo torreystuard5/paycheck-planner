@@ -1,0 +1,4 @@
+0000000000000000000000000000000000000000 1d16410c94ff7b5bc75abf54a06c35287d71cb9d torreystuard5 <torreystuard5@gmail.com> 1776538788 -0500	clone: from https://github.com/torreystuard5/paycheck-planner.git
+1d16410c94ff7b5bc75abf54a06c35287d71cb9d 15fd4edf86fbdfcbb8afb2784a85bfef73e6ce1a torreystuard5 <torreystuard5@gmail.com> 1776543017 -0500	commit: feat: Business Edition API and UI, migration 035, local Docker dev
+15fd4edf86fbdfcbb8afb2784a85bfef73e6ce1a e94e10a9fb7f9d7932adaa4509885f4703293b4d torreystuard5 <torreystuard5@gmail.com> 1776545054 -0500	commit: fix(business): fund withdrawals, customers, payroll UX, sales/deductions
+e94e10a9fb7f9d7932adaa4509885f4703293b4d fe50348ded4d2f5fd15ac1516b3376e087f250b4 torreystuard5 <torreystuard5@gmail.com> 1776547499 -0500	commit: feat: subscription tier gating, household roles/chores, audit fixes
