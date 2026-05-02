@@ -109,6 +109,12 @@ class BillBreakdownResponse(BaseModel):
     members: list[MemberShareResponse]
 
 
+class HouseholdBillBreakdownsResponse(BaseModel):
+    """Keyed by bill id string for JSON object stability."""
+
+    breakdowns: dict[str, BillBreakdownResponse]
+
+
 class BillHistoryEntry(BaseModel):
     id: int
     bill_id: Optional[UUID] = None

@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
@@ -22,13 +23,16 @@ from app.schemas.bill import (
     BillPostponeRequest,
     BillResponse,
     BillUpdate,
+    HouseholdBillBreakdownsResponse,
     MemberPaymentRequest,
     MemberShareResponse,
 )
-from app.services.household_billing import get_bill_breakdown
+from app.services.household_billing import batch_household_breakdown_dicts, get_bill_breakdown
 from app.services.household_service import log_activity, resolve_valid_household_id
 from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
 
@@ -400,6 +404,50 @@ async def get_bill_history(
         total=total,
         page=page,
     )
+
+
+@router.get("/household-breakdowns", response_model=HouseholdBillBreakdownsResponse)
+async def list_household_bill_breakdowns(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """All active household-scoped bill breakdowns in one round trip (replaces N /breakdown calls)."""
+    if not current_user.household_id:
+        return HouseholdBillBreakdownsResponse(breakdowns={})
+
+    hid = current_user.household_id
+    result = await db.execute(
+        select(Bill)
+        .where(
+            Bill.household_id == hid,
+            Bill.is_active.is_(True),
+        )
+        .options(selectinload(Bill.assigned_member))
+    )
+    bills = list(result.scalars().all())
+    if not bills:
+        return HouseholdBillBreakdownsResponse(breakdowns={})
+
+    member_count = await _get_household_member_count(db, hid)
+    raw_by_id = await batch_household_breakdown_dicts(bills, hid, db)
+
+    out: dict[str, BillBreakdownResponse] = {}
+    for bill in bills:
+        try:
+            raw = raw_by_id.get(bill.id)
+            if not raw:
+                continue
+            out[str(bill.id)] = BillBreakdownResponse(
+                bill=_bill_to_response(bill, current_user.id, member_count),
+                total_paid=raw["total_paid"],
+                total_remaining=raw["total_remaining"],
+                members=[MemberShareResponse(**m) for m in raw["members"]],
+            )
+        except Exception:
+            logger.exception("household-breakdowns: skip bill %s", bill.id)
+            continue
+
+    return HouseholdBillBreakdownsResponse(breakdowns=out)
 
 
 @router.get("/{bill_id}", response_model=BillResponse)

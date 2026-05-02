@@ -82,29 +82,35 @@ export default function Household() {
       const shared = bills.filter((b) => b.is_household_bill && b.is_active);
       setHouseholdBills(shared);
 
-      // Fetch breakdowns for each household bill
-      const breakdowns = {};
-      await Promise.allSettled(
-        shared.map(async (bill) => {
-          try {
-            const bdRes = await api.get(`/api/v1/bills/${bill.id}/breakdown`);
-            breakdowns[bill.id] = bdRes.data;
-          } catch {
-            // skip failed breakdowns
-          }
-        })
-      );
-      setBillBreakdowns(breakdowns);
+      if (shared.length === 0) {
+        setBillBreakdowns({});
+        return;
+      }
+      try {
+        const bdRes = await api.get('/api/v1/bills/household-breakdowns');
+        const raw = bdRes.data?.breakdowns ?? {};
+        const breakdowns = {};
+        for (const bill of shared) {
+          const key = String(bill.id);
+          if (raw[key]) breakdowns[bill.id] = raw[key];
+        }
+        setBillBreakdowns(breakdowns);
+      } catch {
+        setBillBreakdowns({});
+      }
     } catch {
-      // silent
+      setHouseholdBills([]);
+      setBillBreakdowns({});
     }
   }, []);
 
   const fetchAll = useCallback(async () => {
-    await fetchHousehold();
-    await fetchActivity();
-    await fetchHouseholdBills();
-    await fetchChores();
+    await Promise.all([
+      fetchHousehold(),
+      fetchActivity(),
+      fetchHouseholdBills(),
+      fetchChores(),
+    ]);
   }, [fetchHousehold, fetchActivity, fetchHouseholdBills, fetchChores]);
 
   useEffect(() => {

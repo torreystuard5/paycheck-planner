@@ -1,3 +1,4 @@
+import asyncio
 from decimal import Decimal
 from uuid import UUID
 
@@ -50,9 +51,10 @@ async def calculate_member_shares(
     for member in household_members:
         member_paid = paid_map.get(member.id, Decimal("0.00"))
         member_balance = share_per_member - member_paid
+        name = f"{member.first_name or ''} {member.last_name or ''}".strip() or (member.email or "Member")
         shares.append({
             "member_id": member.id,
-            "member_name": f"{member.first_name} {member.last_name}".strip(),
+            "member_name": name,
             "share": share_per_member,
             "paid": member_paid,
             "balance": member_balance,
@@ -61,21 +63,16 @@ async def calculate_member_shares(
     return shares
 
 
-async def get_bill_breakdown(
+async def build_breakdown_dict(
     bill: Bill,
+    household_members: list[User],
     db: AsyncSession,
-) -> dict:
-    """Return full bill breakdown with per-member shares."""
+) -> dict | None:
+    """Shared breakdown payload (used by single-bill and batch endpoints)."""
     if not bill.household_id:
         return None
 
-    # Get household members
-    result = await db.execute(
-        select(User).where(User.household_id == bill.household_id)
-    )
-    members = list(result.scalars().all())
-
-    member_shares = await calculate_member_shares(bill, members, db)
+    member_shares = await calculate_member_shares(bill, household_members, db)
 
     total_paid = sum(m["paid"] for m in member_shares)
     bill_amount = _bill_amount_decimal(bill)
@@ -87,3 +84,47 @@ async def get_bill_breakdown(
         "total_remaining": total_remaining,
         "members": member_shares,
     }
+
+
+async def get_bill_breakdown(
+    bill: Bill,
+    db: AsyncSession,
+) -> dict | None:
+    """Return full bill breakdown with per-member shares."""
+    if not bill.household_id:
+        return None
+
+    result = await db.execute(
+        select(User).where(User.household_id == bill.household_id)
+    )
+    members = list(result.scalars().all())
+
+    return await build_breakdown_dict(bill, members, db)
+
+
+async def batch_household_breakdown_dicts(
+    bills: list[Bill],
+    household_id: UUID,
+    db: AsyncSession,
+) -> dict[UUID, dict]:
+    """Build breakdowns for many bills with one household-member query and parallel aggregates."""
+    if not bills:
+        return {}
+
+    result = await db.execute(select(User).where(User.household_id == household_id))
+    members = list(result.scalars().all())
+    if not members:
+        return {}
+
+    async def _one(bill: Bill) -> tuple[UUID, dict | None]:
+        data = await build_breakdown_dict(bill, members, db)
+        if data is None:
+            return bill.id, None
+        return bill.id, data
+
+    pairs = await asyncio.gather(*[_one(b) for b in bills])
+    out: dict[UUID, dict] = {}
+    for bid, data in pairs:
+        if data is not None:
+            out[bid] = data
+    return out
