@@ -42,6 +42,6 @@ class Budget(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    # Relationships
-    user = relationship("User", back_populates="budgets")
+    # Relationships (foreign_keys: User also has current_budget_id -> budgets.id)
+    user = relationship("User", back_populates="budgets", foreign_keys=[user_id])
     household = relationship("Household")
