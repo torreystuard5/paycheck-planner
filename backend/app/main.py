@@ -25,22 +25,26 @@ app = FastAPI(
     redirect_slashes=False,
 )
 
-# CORS: FRONTEND_URL (comma-separated) + FRONTEND_ORIGIN (dev default) + production app host
+# CORS: FRONTEND_URL (comma-separated) + FRONTEND_ORIGIN (dev default) + production app hosts.
+# Never use allow_origins=["*"] with allow_credentials=True — browsers block credentialed XHR (login, cookies).
 _PRODUCTION_APP_ORIGIN = "https://paydrift.net"
+_LEGACY_NETLIFY_ORIGIN = "https://paydrift.netlify.app"
 _raw = (settings.FRONTEND_URL or "").strip()
 _env_origin = (os.getenv("FRONTEND_ORIGIN") or "").strip() or None
 _dev_default = _env_origin or "http://localhost:5173"
 
 if _raw == "*":
-    origins = ["*"]
+    # Wildcard is invalid with credentials; fall back to known PayDrift frontends + dev.
+    origins = []
 elif _raw:
     origins = [o.strip() for o in _raw.split(",") if o.strip()]
-    for _extra in (_PRODUCTION_APP_ORIGIN, _dev_default):
-        if _extra not in origins:
-            origins.append(_extra)
-    origins = list(dict.fromkeys(origins))
 else:
-    origins = list(dict.fromkeys([_dev_default, _PRODUCTION_APP_ORIGIN]))
+    origins = []
+
+for _extra in (_PRODUCTION_APP_ORIGIN, _LEGACY_NETLIFY_ORIGIN, _dev_default):
+    if _extra and _extra not in origins:
+        origins.append(_extra)
+origins = list(dict.fromkeys(origins))
 
 app.add_middleware(
     CORSMiddleware,
