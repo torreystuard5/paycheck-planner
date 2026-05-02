@@ -47,6 +47,9 @@ for _extra in (_PRODUCTION_APP_ORIGIN, _WWW_PRODUCTION_ORIGIN, _LEGACY_NETLIFY_O
         origins.append(_extra)
 origins = list(dict.fromkeys(origins))
 
+# Netlify branch / deploy-preview hosts: {slug}--paydrift.netlify.app (static list only has apex host).
+_NETLIFY_PAYDRIFT_ORIGIN_REGEX = r"^https://([\w-]+--)?paydrift\.netlify\.app$"
+
 # Paths exempt from the TOS version check
 # Business-only plans cannot call personal finance APIs (direct URL / tooling).
 _PERSONAL_API_PREFIXES = (
@@ -298,6 +301,7 @@ async def maintenance_mode_middleware(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=_NETLIFY_PAYDRIFT_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

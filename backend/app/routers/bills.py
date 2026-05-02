@@ -449,6 +449,11 @@ async def get_bill_breakdown_endpoint(
         )
 
     breakdown = await get_bill_breakdown(bill, db)
+    if breakdown is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bill is not a household bill",
+        )
     member_count = await _get_household_member_count(db, current_user.household_id)
 
     return BillBreakdownResponse(
@@ -523,6 +528,11 @@ async def create_member_payment(
         pass
 
     breakdown = await get_bill_breakdown(bill, db)
+    if breakdown is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bill is not a household bill",
+        )
     member_count = await _get_household_member_count(db, current_user.household_id)
 
     return BillBreakdownResponse(
