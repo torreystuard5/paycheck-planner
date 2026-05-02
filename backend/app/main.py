@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from jose import JWTError, jwt
 from sqlalchemy import select
 
@@ -98,6 +98,7 @@ MAINTENANCE_EXEMPT_PATHS_EXACT = {
     "/api/v1/auth/refresh",
     "/api/v1/auth/forgot-password",
     "/api/v1/auth/reset-password",
+    "/api/v1/version",
     "/health",
     "/openapi.json",
 }
@@ -243,6 +244,9 @@ async def maintenance_mode_middleware(request: Request, call_next):
     # Always allow exempt paths
     if path in MAINTENANCE_EXEMPT_PATHS_EXACT:
         return await call_next(request)
+    # Render and load balancers often probe GET/HEAD /
+    if path == "/" and request.method in ("GET", "HEAD"):
+        return await call_next(request)
     if path == "/api/v1/auth/me" and request.method == "GET":
         return await call_next(request)
     if any(path.startswith(prefix) for prefix in MAINTENANCE_EXEMPT_PREFIXES):
@@ -367,6 +371,16 @@ async def promote_initial_admin():
             logger.info("Promoted %s to admin", email)
     except Exception:
         logger.exception("Error promoting initial admin %s", email)
+
+
+@app.head("/")
+async def service_root_head():
+    return Response(status_code=200)
+
+
+@app.get("/")
+async def service_root():
+    return {"service": "paydrift-api", "health": "/health", "version": "/api/v1/version"}
 
 
 @app.get("/health")
