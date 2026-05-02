@@ -291,14 +291,17 @@ async def maintenance_mode_middleware(request: Request, call_next):
         token = auth_header.split(" ", 1)[1]
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            if payload.get("type") == "access":
-                user_id = payload.get("sub")
-                if user_id:
+        except JWTError:
+            payload = None
+        if payload and payload.get("type") == "access":
+            user_id = payload.get("sub")
+            if user_id:
+                try:
+                    uid = UUID(str(user_id))
+                except (ValueError, TypeError):
+                    uid = None
+                if uid is not None:
                     try:
-                        uid = UUID(str(user_id))
-                    except (ValueError, TypeError):
-                        uid = None
-                    if uid is not None:
                         async with async_session() as session:
                             result = await session.execute(
                                 select(User.is_admin).where(User.id == uid)
@@ -306,8 +309,11 @@ async def maintenance_mode_middleware(request: Request, call_next):
                             is_admin = result.scalar_one_or_none()
                             if is_admin:
                                 return await call_next(request)
-        except (JWTError, Exception):
-            pass
+                    except Exception:
+                        logger.exception(
+                            "maintenance_mode_middleware: admin is_admin lookup failed — re-raising"
+                        )
+                        raise
 
     return JSONResponse(
         status_code=503,
