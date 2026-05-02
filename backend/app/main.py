@@ -90,7 +90,8 @@ TOS_EXEMPT_PATHS = {
     "/health",
 }
 
-# Paths exempt from maintenance mode — only minimal auth endpoints, not /me
+# Paths exempt from maintenance mode — auth bootstrap + read-only identity.
+# GET /auth/me must stay reachable so the SPA can load is_admin; PUT/PATCH /me stay blocked.
 MAINTENANCE_EXEMPT_PATHS_EXACT = {
     "/api/v1/auth/login",
     "/api/v1/auth/register",
@@ -144,8 +145,13 @@ async def tos_check_middleware(request: Request, call_next):
         return await call_next(request)
 
     try:
+        uid = UUID(str(user_id))
+    except (ValueError, TypeError):
+        return await call_next(request)
+
+    try:
         async with async_session() as session:
-            result = await session.execute(select(User.tos_version).where(User.id == user_id))
+            result = await session.execute(select(User.tos_version).where(User.id == uid))
             tos_version = result.scalar_one_or_none()
     except Exception:
         logger.exception("TOS middleware DB lookup failed — allowing request through")
@@ -236,6 +242,8 @@ async def maintenance_mode_middleware(request: Request, call_next):
 
     # Always allow exempt paths
     if path in MAINTENANCE_EXEMPT_PATHS_EXACT:
+        return await call_next(request)
+    if path == "/api/v1/auth/me" and request.method == "GET":
         return await call_next(request)
     if any(path.startswith(prefix) for prefix in MAINTENANCE_EXEMPT_PREFIXES):
         return await call_next(request)

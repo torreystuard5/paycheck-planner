@@ -1,5 +1,12 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import api, { onTosRequired, setMaintenanceModeForced } from '../services/api';
+import api, { onTosRequired, setMaintenanceModeForced, MAINTENANCE_MODE_DETAIL } from '../services/api';
+
+function isMaintenance503(err) {
+  return (
+    err?.response?.status === 503 &&
+    err?.response?.data?.detail === MAINTENANCE_MODE_DETAIL
+  );
+}
 
 const AuthContext = createContext(null);
 
@@ -70,11 +77,17 @@ export function AuthProvider({ children }) {
           if (!data.tos_version || data.tos_version < '1.0') {
             setTosRequired('1.0');
           }
-        } catch {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          setUser(null);
-          setIsAuthenticated(false);
+        } catch (err) {
+          if (isMaintenance503(err)) {
+            // Keep session; maintenance overlay is set by the API interceptor.
+            setUser(null);
+            setIsAuthenticated(false);
+          } else {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            setUser(null);
+            setIsAuthenticated(false);
+          }
         }
         try {
           await fetchSubscription();
