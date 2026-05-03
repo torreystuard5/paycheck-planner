@@ -125,9 +125,20 @@ export default function Dashboard() {
       const map = { ...seedMap };
       items.forEach((entry) => {
         const key = `${entry.item_type}_${entry.item_id}`;
-        if (!enginePaidKeys.has(key)) {
-          map[key] = entry.is_checked;
+        if (enginePaidKeys.has(key)) return;
+        const eng = Array.isArray(assignedItems)
+          ? assignedItems.find((i) => `${i.item_type}_${i.id || i.item_id}` === key)
+          : null;
+        if (
+          eng &&
+          (eng.item_type === 'bill' || eng.item_type === 'debt') &&
+          eng.is_paid === false &&
+          entry.is_checked
+        ) {
+          map[key] = false;
+          return;
         }
+        map[key] = entry.is_checked;
       });
       setChecklist(map);
     } catch {
