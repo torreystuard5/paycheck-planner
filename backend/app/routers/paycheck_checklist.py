@@ -46,6 +46,14 @@ async def toggle_checklist_item(
     - debt items → DebtPayment (mark-paid / unmark-paid)
     - bill items → Bill.is_paid / paid_date / paid_amount
     """
+    # Sync shared tables first. Unchecking may delete all checklist rows for this
+    # bill/debt so other household members do not keep stale is_checked=true.
+    if body.item_type == "debt":
+        await _sync_debt_payment(db, current_user, body.item_id, body.is_checked)
+
+    if body.item_type == "bill":
+        await _sync_bill_payment(db, current_user, body.item_id, body.is_checked)
+
     result = await db.execute(
         select(PaycheckChecklist).where(
             PaycheckChecklist.user_id == current_user.id,
@@ -69,14 +77,6 @@ async def toggle_checklist_item(
     else:
         item.is_checked = body.is_checked
         item.checked_at = datetime.now(timezone.utc) if body.is_checked else None
-
-    # ── Sync debt paid status with DebtPayment table ──
-    if body.item_type == "debt":
-        await _sync_debt_payment(db, current_user, body.item_id, body.is_checked)
-
-    # ── Sync bill paid status with Bill table ──
-    if body.item_type == "bill":
-        await _sync_bill_payment(db, current_user, body.item_id, body.is_checked)
 
     await db.flush()
     await db.refresh(item)
@@ -149,6 +149,14 @@ async def _sync_debt_payment(
         except Exception:
             pass
 
+    if not is_checked:
+        await db.execute(
+            delete(PaycheckChecklist).where(
+                PaycheckChecklist.item_type == "debt",
+                PaycheckChecklist.item_id == debt_id,
+            )
+        )
+
 
 async def _sync_bill_payment(
     db: AsyncSession, user: User, bill_id, is_checked: bool
@@ -207,6 +215,12 @@ async def _sync_bill_payment(
                 await db.delete(auto_pay)
         except Exception:
             pass
+        await db.execute(
+            delete(PaycheckChecklist).where(
+                PaycheckChecklist.item_type == "bill",
+                PaycheckChecklist.item_id == bill_id,
+            )
+        )
 
 
 @router.delete("")
