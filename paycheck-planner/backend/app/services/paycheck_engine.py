@@ -294,12 +294,19 @@ def assign_bills_to_paycheck(
         is_split = getattr(bill, "payment_mode", "single") == "split" and bill.household_id is not None
         split_count = getattr(bill, "split_member_count", 1) or 1
         is_recurring = freq in ("weekly", "biweekly")
+        is_household_bill = getattr(bill, "household_id", None) is not None
         for due_dt in due_dates:
             days = (due_dt - current_date).days
 
             # Determine if the bill is paid *for this specific occurrence*.
             paid_for_period = False
-            if getattr(bill, "is_paid", False) and getattr(bill, "paid_date", None):
+            if is_household_bill and getattr(bill, "is_paid", False):
+                # Household bills share one is_paid / paid_date row. Never derive
+                # paid state from whether paid_date falls inside *this viewer's*
+                # pay-period window — members with different pay anchors would
+                # disagree on the same DB row (recurring bills used window-only).
+                paid_for_period = True
+            elif getattr(bill, "is_paid", False) and getattr(bill, "paid_date", None):
                 pd = bill.paid_date
                 try:
                     pd_date = pd.date() if isinstance(pd, datetime) else (
@@ -313,7 +320,12 @@ def assign_bills_to_paycheck(
             # is authoritative because there is at most one occurrence per
             # month.  For weekly/biweekly bills, paid status MUST be
             # period-scoped — a payment from a prior period does not count.
-            if not paid_for_period and getattr(bill, "is_paid", False) and not is_recurring:
+            if (
+                not is_household_bill
+                and not paid_for_period
+                and getattr(bill, "is_paid", False)
+                and not is_recurring
+            ):
                 paid_for_period = True
 
             # A bill is overdue ONLY if the ENTIRE pay period it belongs to

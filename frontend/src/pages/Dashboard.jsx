@@ -71,6 +71,13 @@ export default function Dashboard() {
   const [showHiddenOverdue, setShowHiddenOverdue] = useState(false);
   const [hidingOverdue, setHidingOverdue] = useState({});
 
+  /** Stable key + paid flag: engine is_paid (household source of truth) OR user checklist row. */
+  const assignItemKey = useCallback((item) => `${item.item_type}_${item.id || item.item_id}`, []);
+  const assignItemPaid = useCallback(
+    (item, map = checklist) => Boolean(item.is_paid) || Boolean(map[assignItemKey(item)]),
+    [checklist, assignItemKey],
+  );
+
   // Collapsible sections state
   const [collapsedSections, setCollapsedSections] = useState([]);
   const [sectionsLoaded, setSectionsLoaded] = useState(false);
@@ -194,8 +201,8 @@ export default function Dashboard() {
   usePolling(fetchDashboardData, 30000, !!household && user?.app_mode !== 'business');
 
   const toggleChecklistItem = async (item, payPeriodStart) => {
-    const key = `${item.item_type}_${item.id || item.item_id}`;
-    const currentState = !!checklist[key];
+    const key = assignItemKey(item);
+    const currentState = Boolean(item.is_paid) || !!checklist[key];
     const newState = !currentState;
 
     setChecklist((prev) => ({ ...prev, [key]: newState }));
@@ -255,12 +262,12 @@ export default function Dashboard() {
 
   const billsTotalInPlan = billItemsInPlan.reduce((s, i) => s + (Number(i.amount) || 0), 0);
   const billsPaidInPlan = billItemsInPlan
-    .filter(i => !!checklist[`${i.item_type}_${i.id || i.item_id}`])
+    .filter((i) => assignItemPaid(i))
     .reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
   const debtTotalInPlan = debtItemsInPlan.reduce((s, i) => s + (Number(i.amount) || 0), 0);
   const debtPaidInPlan = debtItemsInPlan
-    .filter(i => i.is_paid || !!checklist[`${i.item_type}_${i.id || i.item_id}`])
+    .filter((i) => assignItemPaid(i))
     .reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
   const billsPaidSubtitle = billItemsInPlan.length > 0
@@ -386,27 +393,27 @@ export default function Dashboard() {
                 const payPeriodStart = next.pay_period_start || next.paycheck_date;
                 const assignedItems = Array.isArray(next.assigned_items) ? next.assigned_items : [];
 
-                const visibleItems = assignedItems.filter((item) => !(item.is_overdue && item.hidden_overdue && !checklist[`${item.item_type}_${item.id || item.item_id}`]));
-                const hiddenOverdueItems = assignedItems.filter((item) => item.is_overdue && item.hidden_overdue && !checklist[`${item.item_type}_${item.id || item.item_id}`]);
+                const visibleItems = assignedItems.filter(
+                  (item) => !(item.is_overdue && item.hidden_overdue && !assignItemPaid(item)),
+                );
+                const hiddenOverdueItems = assignedItems.filter(
+                  (item) => item.is_overdue && item.hidden_overdue && !assignItemPaid(item),
+                );
 
                 const sortedItems = [...visibleItems].sort((a, b) => {
-                  const aKey = `${a.item_type}_${a.id || a.item_id}`;
-                  const bKey = `${b.item_type}_${b.id || b.item_id}`;
-                  const aChecked = !!checklist[aKey];
-                  const bChecked = !!checklist[bKey];
+                  const aChecked = assignItemPaid(a);
+                  const bChecked = assignItemPaid(b);
                   if (aChecked !== bChecked) return aChecked ? 1 : -1;
                   return new Date(a.due_date) - new Date(b.due_date);
                 });
 
-                const checkedCount = visibleItems.filter(
-                  (item) => !!checklist[`${item.item_type}_${item.id || item.item_id}`]
-                ).length;
+                const checkedCount = visibleItems.filter((item) => assignItemPaid(item)).length;
                 const totalItems = visibleItems.length;
                 const progressPct = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0;
 
                 const totalAssignedAmount = visibleItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
                 const paidAmount = visibleItems
-                  .filter((item) => !!checklist[`${item.item_type}_${item.id || item.item_id}`])
+                  .filter((item) => assignItemPaid(item))
                   .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
                 const stillOwed = totalAssignedAmount - paidAmount;
 
@@ -453,8 +460,8 @@ export default function Dashboard() {
 
                         <div className="space-y-1.5">
                           {sortedItems.map((item) => {
-                            const key = `${item.item_type}_${item.id || item.item_id}`;
-                            const isChecked = !!checklist[key];
+                            const key = assignItemKey(item);
+                            const isChecked = assignItemPaid(item);
                             const isToggling = !!checklistLoading[key];
                             const isSplit = item.is_split || (item.split_count && item.split_count > 1);
                             const isHiding = !!hidingOverdue[item.id || item.item_id];
