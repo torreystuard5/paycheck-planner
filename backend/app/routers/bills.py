@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models.bill import Bill
 from app.models.bill_history import BillHistory
 from app.models.bill_member_payment import BillMemberPayment
+from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.transaction import Payment
 from app.models.user import User
 from app.schemas.bill import (
@@ -900,6 +901,15 @@ async def unpay_bill(
     bill.is_paid = False
     bill.paid_date = None
     bill.paid_amount = None
+
+    # Dashboard merges paycheck checklist with plan items; stale checked rows
+    # would keep showing "paid" for this user after Bills unpay clears Bill.is_paid.
+    await db.execute(
+        delete(PaycheckChecklist).where(
+            PaycheckChecklist.item_type == "bill",
+            PaycheckChecklist.item_id == bill_id,
+        )
+    )
 
     await db.flush()
     await db.refresh(bill)
