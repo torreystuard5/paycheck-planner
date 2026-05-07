@@ -19,7 +19,7 @@ const defaultEntryForm = {
 };
 
 export default function Income() {
-  const { activeBudget, budgetVersion } = useBudget();
+  const { activeBudget, budgetVersion, bumpBudgetVersion } = useBudget();
   const [entries, setEntries] = useState([]);
   const [monthlySummary, setMonthlySummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -134,6 +134,8 @@ export default function Income() {
         setSelectedMonth(pd.getMonth() + 1);
         setSelectedYear(pd.getFullYear());
       }
+      // Invalidate all budget-version-keyed pages (Dashboard, etc.)
+      bumpBudgetVersion();
       fetchData();
     } catch {
       setError('Failed to save paycheck entry.');

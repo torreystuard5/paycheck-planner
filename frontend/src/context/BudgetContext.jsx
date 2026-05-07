@@ -52,6 +52,10 @@ export function BudgetProvider({ children }) {
     init();
   }, [isAuthenticated, refreshBudgets]);
 
+  const bumpBudgetVersion = useCallback(() => {
+    setBudgetVersion((v) => v + 1);
+  }, []);
+
   const setActiveBudget = useCallback(async (budgetId) => {
     try {
       await api.post(`/api/v1/budgets/${budgetId}/set-active`);
@@ -72,6 +76,7 @@ export function BudgetProvider({ children }) {
         budgets,
         loading,
         budgetVersion,
+        bumpBudgetVersion,
         refreshBudgets,
         setActiveBudget,
       }}

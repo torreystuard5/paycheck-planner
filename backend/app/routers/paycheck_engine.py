@@ -12,6 +12,7 @@ from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
 from app.models.income import IncomeSource
 from app.models.paycheck_entry import PaycheckEntry
+from app.models.transaction import Payment
 from app.models.user import User
 from app.schemas.paycheck import PaycheckPlan, PaycheckPlanResponse
 from app.services.paycheck_engine import build_paycheck_plan, generate_pay_dates, get_pay_period_window
@@ -173,6 +174,35 @@ async def _get_paid_debt_ids(db: AsyncSession, user_id) -> set:
     return {row[0] for row in result.all()}
 
 
+async def _get_paid_bill_ids_by_window(
+    db: AsyncSession,
+    user_ids: list,
+    bill_ids: list,
+    overall_start: date,
+    overall_end: date,
+) -> dict:
+    """Return {bill_id: [paid_date, ...]} for payments in the overall plan window.
+
+    Fetched ONCE for the entire plan range then partitioned per-period in Python.
+    Scoped to all household member user_ids so both members see each other's payments.
+    """
+    if not bill_ids or not user_ids:
+        return {}
+    result = await db.execute(
+        select(Payment.bill_id, Payment.paid_date).where(
+            Payment.bill_id.in_(bill_ids),
+            Payment.user_id.in_(user_ids),
+            Payment.paid_date.isnot(None),
+            Payment.paid_date >= overall_start,
+            Payment.paid_date <= overall_end,
+        )
+    )
+    mapping: dict = {}
+    for row in result.all():
+        mapping.setdefault(row[0], []).append(row[1])
+    return mapping
+
+
 @router.get("", response_model=PaycheckPlanResponse)
 async def get_paycheck_plan(
     periods: int = Query(default=4, ge=1, le=12),
@@ -185,6 +215,14 @@ async def get_paycheck_plan(
     # Fetch paid debt IDs so the engine can mark debts as paid
     paid_ids = await _get_paid_debt_ids(db, current_user.id)
 
+    # Build household-aware user_ids for bill payment lookup
+    if current_user.household_id:
+        from app.services.household_service import get_household_members
+        members = await get_household_members(current_user.household_id, db)
+        user_ids = [m.id for m in members]
+    else:
+        user_ids = [current_user.id]
+
     plan = build_paycheck_plan(
         user=current_user,
         income_sources=income_sources,
@@ -193,8 +231,11 @@ async def get_paycheck_plan(
         num_periods=periods,
         paycheck_entries=entries,
         paid_debt_ids=paid_ids,
+        db=db,
+        user_ids=user_ids,
+        get_paid_bill_ids_fn=_get_paid_bill_ids_by_window,
     )
-    return plan
+    return await plan
 
 
 @router.get("/{paycheck_date}", response_model=PaycheckPlan)
@@ -207,6 +248,13 @@ async def get_single_paycheck(
     entries = await _fetch_paycheck_entries(db, current_user.id)
     paid_ids = await _get_paid_debt_ids(db, current_user.id)
 
+    if current_user.household_id:
+        from app.services.household_service import get_household_members
+        members = await get_household_members(current_user.household_id, db)
+        user_ids = [m.id for m in members]
+    else:
+        user_ids = [current_user.id]
+
     plan = build_paycheck_plan(
         user=current_user,
         income_sources=income_sources,
@@ -215,9 +263,14 @@ async def get_single_paycheck(
         num_periods=12,
         paycheck_entries=entries,
         paid_debt_ids=paid_ids,
+        db=db,
+        user_ids=user_ids,
+        get_paid_bill_ids_fn=_get_paid_bill_ids_by_window,
     )
 
-    for paycheck in plan["paychecks"]:
+    resolved_plan = await plan
+
+    for paycheck in resolved_plan["paychecks"]:
         if paycheck["paycheck_date"] == paycheck_date:
             return paycheck
 

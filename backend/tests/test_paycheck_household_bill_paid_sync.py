@@ -43,9 +43,9 @@ def _bill(
 
 
 class TestHouseholdBillPaidSync(unittest.TestCase):
-    def test_household_weekly_paid_not_scoped_to_viewer_pay_window(self):
-        """Recurring household bill: is_paid is shared; paid_date outside one member's
-        pay window must not show unpaid for that member (regression).
+    def test_household_weekly_paid_shows_paid_when_payment_in_window(self):
+        """Recurring household bill: paid state comes from paid_bill_map.
+        A payment in a given window shows the bill as paid for that window.
         """
         hid = uuid4()
         paid_at = datetime(2026, 1, 5, 12, 0, tzinfo=timezone.utc)
@@ -58,21 +58,34 @@ class TestHouseholdBillPaidSync(unittest.TestCase):
             day_of_week=1,
             start_date=date(2026, 1, 1),
         )
-        # Pay window where paid_at is OUTSIDE but a weekly due still falls inside.
-        window_a = (date(2026, 1, 20), date(2026, 1, 26))
-        window_b = (date(2026, 1, 27), date(2026, 2, 2))
-        today = date(2026, 1, 22)
+        # Payment falls on Jan 5 — only the window containing Jan 5 should show paid.
+        paid_bill_map = {bill.id: [date(2026, 1, 5)]}
 
-        for ws, we in (window_a, window_b):
-            with self.subTest(window=(ws, we)):
-                items = assign_bills_to_paycheck(
-                    [bill], [], ws, we, today, paid_debt_ids=set()
-                )
-                bill_rows = [i for i in items if i["item_type"] == "bill"]
-                self.assertTrue(
-                    any(i["is_paid"] for i in bill_rows),
-                    "household weekly bill marked paid must show paid in every member window",
-                )
+        # Window containing the payment date
+        window_with_payment = (date(2026, 1, 1), date(2026, 1, 7))
+        today = date(2026, 1, 6)
+        items = assign_bills_to_paycheck(
+            [bill], [], window_with_payment[0], window_with_payment[1],
+            today, paid_debt_ids=set(), paid_bill_map=paid_bill_map,
+        )
+        bill_rows = [i for i in items if i["item_type"] == "bill"]
+        self.assertTrue(
+            any(i["is_paid"] for i in bill_rows),
+            "household weekly bill must show paid when payment is in the window",
+        )
+
+        # Window WITHOUT the payment date
+        window_without = (date(2026, 1, 20), date(2026, 1, 26))
+        items2 = assign_bills_to_paycheck(
+            [bill], [], window_without[0], window_without[1],
+            today, paid_debt_ids=set(), paid_bill_map=paid_bill_map,
+        )
+        bill_rows2 = [i for i in items2 if i["item_type"] == "bill"]
+        for row in bill_rows2:
+            self.assertFalse(
+                row["is_paid"],
+                "household weekly bill must show unpaid when no payment in this window",
+            )
 
     def test_personal_weekly_still_scopes_paid_date_to_window(self):
         """Personal recurring bill: paid_date outside the pay window stays unpaid."""
@@ -86,10 +99,14 @@ class TestHouseholdBillPaidSync(unittest.TestCase):
             day_of_week=1,
             start_date=date(2026, 1, 1),
         )
+        # Payment only on Jan 5
+        paid_bill_map = {bill.id: [date(2026, 1, 5)]}
+
         window = (date(2026, 1, 20), date(2026, 1, 26))
         today = date(2026, 1, 22)
         items = assign_bills_to_paycheck(
-            [bill], [], window[0], window[1], today, paid_debt_ids=set()
+            [bill], [], window[0], window[1], today, paid_debt_ids=set(),
+            paid_bill_map=paid_bill_map,
         )
         for row in items:
             if row["item_type"] == "bill":

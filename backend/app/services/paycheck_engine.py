@@ -268,6 +268,7 @@ def assign_bills_to_paycheck(
     window_end: date,
     current_date: date,
     paid_debt_ids: set | None = None,
+    paid_bill_map: dict | None = None,
 ) -> list[dict]:
     """Assign bills and debts whose due dates fall within the pay-period window.
 
@@ -310,35 +311,21 @@ def assign_bills_to_paycheck(
         for due_dt in due_dates:
             days = (due_dt - current_date).days
 
-            # Determine if the bill is paid *for this specific occurrence*.
+            # Determine if the bill is paid *for this specific pay-period window*
+            # by checking whether a payment row exists with paid_date in [window_start, window_end].
+            # This replaces the old approach of trusting the global Bill.is_paid flag.
             paid_for_period = False
-            if is_household_bill and getattr(bill, "is_paid", False):
-                # Household bills share one is_paid / paid_date row. Never derive
-                # paid state from whether paid_date falls inside *this viewer's*
-                # pay-period window — members with different pay anchors would
-                # disagree on the same DB row (recurring bills used window-only).
-                paid_for_period = True
-            elif getattr(bill, "is_paid", False) and getattr(bill, "paid_date", None):
-                pd = bill.paid_date
-                try:
-                    pd_date = pd.date() if isinstance(pd, datetime) else (
-                        pd if isinstance(pd, date) else date.fromisoformat(str(pd)[:10])
-                    )
-                    paid_for_period = window_start <= pd_date <= window_end
-                except (ValueError, AttributeError, TypeError):
-                    paid_for_period = False
-
-            # For non-recurring bills (monthly, etc.), the global is_paid flag
-            # is authoritative because there is at most one occurrence per
-            # month.  For weekly/biweekly bills, paid status MUST be
-            # period-scoped — a payment from a prior period does not count.
-            if (
-                not is_household_bill
-                and not paid_for_period
-                and getattr(bill, "is_paid", False)
-                and not is_recurring
-            ):
-                paid_for_period = True
+            if paid_bill_map is not None and bill.id in paid_bill_map:
+                for pd in paid_bill_map[bill.id]:
+                    try:
+                        pd_date = pd.date() if isinstance(pd, datetime) else (
+                            pd if isinstance(pd, date) else date.fromisoformat(str(pd)[:10])
+                        )
+                        if window_start <= pd_date <= window_end:
+                            paid_for_period = True
+                            break
+                    except (ValueError, AttributeError, TypeError):
+                        pass
 
             # A bill is overdue ONLY if the ENTIRE pay period it belongs to
             # has already ended AND it was not paid.  Bills in the current
@@ -430,7 +417,7 @@ def assign_bills_to_paycheck(
 # ── Main orchestrator ──────────────────────────────────────────────
 
 
-def build_paycheck_plan(
+async def build_paycheck_plan(
     user: Any,
     income_sources: list[Any],
     bills: list[Any],
@@ -439,6 +426,10 @@ def build_paycheck_plan(
     current_date: Optional[date] = None,
     paycheck_entries: list[Any] | None = None,
     paid_debt_ids: set | None = None,
+    paid_bill_map: dict | None = None,
+    db: Any | None = None,
+    user_ids: list | None = None,
+    get_paid_bill_ids_fn: Any | None = None,
 ) -> dict:
     """Build a full paycheck plan across *num_periods* pay periods.
 
@@ -483,6 +474,17 @@ def build_paycheck_plan(
     # We need num_periods + 1 dates so the last period has a boundary
     pay_dates = generate_pay_dates(next_pay, frequency, num_periods + 1)
 
+    # Fetch paid-bill map ONCE for the entire plan window (perf: single query)
+    if paid_bill_map is None and db is not None and get_paid_bill_ids_fn is not None:
+        bill_ids = [b.id for b in bills]
+        overall_start = pay_dates[0] if pay_dates else current_date
+        overall_end = pay_dates[-1] if pay_dates else current_date
+        paid_bill_map = await get_paid_bill_ids_fn(
+            db, user_ids or [], bill_ids, overall_start, overall_end,
+        )
+    if paid_bill_map is None:
+        paid_bill_map = {}
+
     paychecks: list[dict] = []
     total_income = Decimal("0")
     total_obligations = Decimal("0")
@@ -503,6 +505,7 @@ def build_paycheck_plan(
         assigned = assign_bills_to_paycheck(
             bills, debts, window_start, window_end, current_date,
             paid_debt_ids=paid_debt_ids,
+            paid_bill_map=paid_bill_map,
         )
 
         total_due = sum((item["amount"] for item in assigned), Decimal("0"))
