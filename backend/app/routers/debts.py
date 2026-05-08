@@ -423,7 +423,15 @@ async def list_debts(
     else:
         query = select(Debt).where(Debt.user_id == current_user.id)
     if budget_id is not None:
-        query = query.where(Debt.budget_id == budget_id)
+        if current_user.household_id is not None:
+            query = query.where(
+                or_(
+                    Debt.budget_id == budget_id,
+                    Debt.household_id == current_user.household_id,
+                )
+            )
+        else:
+            query = query.where(Debt.budget_id == budget_id)
     if active_only:
         query = query.where(Debt.is_active.is_(True))
 

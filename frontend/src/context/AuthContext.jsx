@@ -146,6 +146,7 @@ export function AuthProvider({ children }) {
     api.post('/api/v1/auth/logout').catch(() => {});
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem('active_budget_id');
     setUser(null);
     setIsAuthenticated(false);
     setSubscription(null);

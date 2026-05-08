@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
+from app.utils.email import normalize_email
 from app.models.referral import ReferralReward
 from app.models.user import User
 from app.schemas.user import TokenResponse, UserCreate, UserDateFormatUpdate, UserLogin, UserResponse, UserUpdate
@@ -221,6 +222,10 @@ async def update_me(
 ):
     update_data = body.model_dump(exclude_unset=True)
 
+    # Normalize email if being changed
+    if "email" in update_data:
+        update_data["email"] = normalize_email(update_data["email"])
+
     # If email is being changed, check uniqueness
     if "email" in update_data and update_data["email"] != current_user.email:
         result = await db.execute(
@@ -271,7 +276,8 @@ async def forgot_password(
     body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
 ):
     """Send a password reset email. Always returns success to prevent email enumeration."""
-    result = await db.execute(select(User).where(User.email == body.email))
+    normalized = normalize_email(body.email)
+    result = await db.execute(select(User).where(User.email == normalized))
     user = result.scalar_one_or_none()
 
     if user and user.is_active:

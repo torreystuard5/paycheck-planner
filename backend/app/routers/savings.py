@@ -80,7 +80,15 @@ async def list_goals(
     else:
         query = select(SavingsGoal).where(SavingsGoal.user_id == current_user.id)
     if budget_id is not None:
-        query = query.where(SavingsGoal.budget_id == budget_id)
+        if current_user.household_id is not None:
+            query = query.where(
+                or_(
+                    SavingsGoal.budget_id == budget_id,
+                    SavingsGoal.user_id.in_(member_ids),
+                )
+            )
+        else:
+            query = query.where(SavingsGoal.budget_id == budget_id)
     if active_only:
         query = query.where(SavingsGoal.is_active.is_(True))
 

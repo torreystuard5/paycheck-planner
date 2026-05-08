@@ -57,6 +57,7 @@ export default function Register() {
 
     try {
       const { confirm_password, ...payload } = form;
+      payload.email = payload.email.trim().toLowerCase();
       payload.net_pay_amount = parseFloat(payload.net_pay_amount);
       payload.tos_accepted = true;
       if (refCode) {

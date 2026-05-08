@@ -33,7 +33,7 @@ export default function Login() {
     setErrorType('error');
 
     try {
-      const result = await login(form.email, form.password);
+      const result = await login(form.email.trim().toLowerCase(), form.password);
       if (result?.must_reset_password) {
         // Clear tokens — user must reset via email link
         localStorage.removeItem('access_token');

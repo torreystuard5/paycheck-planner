@@ -46,7 +46,7 @@ function CollapsibleSection({ sectionKey, title, icon: Icon, iconColor, collapse
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { activeBudget, budgetVersion } = useBudget();
+  const { activeBudget, budgetVersion, loading: budgetLoading } = useBudget();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -203,13 +203,14 @@ export default function Dashboard() {
   }, [fetchChecklist, user?.app_mode, activeBudget?.id]);
 
   useEffect(() => {
+    if (budgetLoading) return;
     const init = async () => {
       setLoading(true);
       await fetchDashboardData();
       setLoading(false);
     };
     init();
-  }, [fetchDashboardData, budgetVersion]);
+  }, [fetchDashboardData, budgetVersion, budgetLoading]);
 
   usePolling(fetchDashboardData, 30000, !!household && user?.app_mode !== 'business');
 

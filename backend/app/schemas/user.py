@@ -3,7 +3,9 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.utils.email import normalize_email
 
 
 class UserCreate(BaseModel):
@@ -18,10 +20,20 @@ class UserCreate(BaseModel):
     ref: str | None = Field(default=None, max_length=10)
     tos_accepted: bool = False
 
+    @field_validator("email", mode="after")
+    @classmethod
+    def _normalize_email(cls, v: str) -> str:
+        return normalize_email(v) or v
+
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def _normalize_email(cls, v: str) -> str:
+        return normalize_email(v) or v
 
 
 class UserResponse(BaseModel):
