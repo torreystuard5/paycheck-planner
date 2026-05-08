@@ -30,7 +30,7 @@ from app.schemas.bill import (
 )
 from app.services.household_billing import batch_household_breakdown_dicts, get_bill_breakdown
 from app.services.household_service import log_activity, resolve_valid_household_id
-from app.utils.budget import resolve_budget_id, validate_budget_ownership
+from app.utils.budget import apply_household_budget_filter, resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -301,16 +301,7 @@ async def list_bills(
         query = select(Bill).where(Bill.user_id.in_(household_member_ids))
     else:
         query = select(Bill).where(Bill.user_id == current_user.id)
-    if budget_id is not None:
-        if current_user.household_id is not None:
-            query = query.where(
-                or_(
-                    Bill.budget_id == budget_id,
-                    Bill.household_id == current_user.household_id,
-                )
-            )
-        else:
-            query = query.where(Bill.budget_id == budget_id)
+    query = apply_household_budget_filter(query, Bill, current_user, budget_id)
     if active_only:
         query = query.where(Bill.is_active.is_(True))
     if status == "paid":

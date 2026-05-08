@@ -32,7 +32,7 @@ from app.services.credit_efficiency import (
 )
 from app.services.debt_calculator import compare_strategies, simulate_extra_payments
 from app.services.household_service import log_activity, resolve_valid_household_id
-from app.utils.budget import resolve_budget_id, validate_budget_ownership
+from app.utils.budget import apply_household_budget_filter, resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/debts", tags=["Debts"])
@@ -422,16 +422,7 @@ async def list_debts(
         )
     else:
         query = select(Debt).where(Debt.user_id == current_user.id)
-    if budget_id is not None:
-        if current_user.household_id is not None:
-            query = query.where(
-                or_(
-                    Debt.budget_id == budget_id,
-                    Debt.household_id == current_user.household_id,
-                )
-            )
-        else:
-            query = query.where(Debt.budget_id == budget_id)
+    query = apply_household_budget_filter(query, Debt, current_user, budget_id)
     if active_only:
         query = query.where(Debt.is_active.is_(True))
 

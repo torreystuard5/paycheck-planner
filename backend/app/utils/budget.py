@@ -3,11 +3,35 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from app.models.budget import Budget
 from app.models.user import User
+
+
+def apply_household_budget_filter(query: Select, model, current_user, budget_id) -> Select:
+    """Apply budget_id filter that is household-aware for entities with ``household_id``.
+
+    - If ``budget_id`` is None: returns the query unchanged (caller's responsibility).
+    - If user is in a household: matches budget_id OR household_id.
+    - If solo user: strict budget_id filter.
+
+    Use only on models that have BOTH ``budget_id`` and ``household_id`` columns
+    (currently: Bill, Debt). For models without ``household_id`` (e.g., SavingsGoal),
+    keep the existing ``user_id.in_(household_member_ids)`` pattern in the router.
+    """
+    if budget_id is None:
+        return query
+    if getattr(current_user, "household_id", None) is not None:
+        return query.where(
+            or_(
+                model.budget_id == budget_id,
+                model.household_id == current_user.household_id,
+            )
+        )
+    return query.where(model.budget_id == budget_id)
 
 
 async def resolve_budget_id(
