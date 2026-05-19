@@ -37,6 +37,7 @@ import TaxPrep from './pages/TaxPrep';
 import Changelog from './pages/Changelog';
 import Budgets from './pages/Budgets';
 import Uploads from './pages/Uploads';
+import Upgrade from './pages/Upgrade';
 import NotFound from './pages/NotFound';
 import TermsOfService from './pages/legal/TermsOfService';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
@@ -52,6 +53,13 @@ import DeductionsPage from './pages/business/DeductionsPage';
 import StaffPayPage from './pages/business/StaffPayPage';
 import FundPage from './pages/business/FundPage';
 import NetProfitPage from './pages/business/NetProfitPage';
+import EditionChooser from './pages/business/EditionChooser';
+import BusinessStart from './pages/business/BusinessStart';
+import BusinessTaxPrep from './pages/business/BusinessTaxPrep';
+import BusinessReports from './pages/business/BusinessReports';
+import BusinessTeam from './pages/business/BusinessTeam';
+import BusinessDocuments from './pages/business/BusinessDocuments';
+import BusinessRevenue from './pages/business/BusinessRevenue';
 
 function TosGate({ children }) {
   const { tosRequired, clearTosRequired } = useAuth();
@@ -112,6 +120,7 @@ export default function App() {
               <Route path="payments" element={<Payments />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="upgrade" element={<Upgrade />} />
               <Route path="support" element={<Support />} />
               {/* supporter route removed — Phase 2 cleanup */}
               <Route path="household" element={<Household />} />
@@ -123,6 +132,8 @@ export default function App() {
               <Route path="uploads" element={<Uploads />} />
               <Route path="budgets" element={<Budgets />} />
               <Route path="changelog" element={<Changelog />} />
+              <Route path="edition" element={<EditionChooser />} />
+              <Route path="business/start" element={<BusinessStart />} />
               <Route path="admin/tickets" element={<AdminTickets />} />
               <Route path="admin/stats" element={<AdminStats />} />
               <Route path="admin/users" element={<AdminUsers />} />
@@ -139,6 +150,11 @@ export default function App() {
               <Route path="business/contingency-fund" element={<FundPage />} />
               <Route path="business/upgrade-fund" element={<FundPage />} />
               <Route path="business/net-profit" element={<NetProfitPage />} />
+              <Route path="business/tax-prep" element={<BusinessTaxPrep />} />
+              <Route path="business/reports" element={<BusinessReports />} />
+              <Route path="business/team" element={<BusinessTeam />} />
+              <Route path="business/documents" element={<BusinessDocuments />} />
+              <Route path="business/revenue" element={<BusinessRevenue />} />
             </Route>
 
             <Route path="biz/sales" element={<Navigate to="/business/sales" replace />} />

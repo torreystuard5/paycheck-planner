@@ -10,6 +10,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useToast } from '../../components/Toast';
+import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { payPeriodContaining, formatDateISO, PAY_PERIODS_PER_YEAR } from '../../utils/payPeriods';
 
 const ROLE_PRESETS = ['Manager', 'Cashier', 'Server', 'Cook', 'Driver', 'Associate', 'Supervisor', 'Owner', 'Other'];
@@ -39,6 +40,7 @@ const staffEmpty = () => ({
 
 export default function StaffPayPage() {
   const toast = useToast();
+  const write = useBusinessWrite('manage_staff_pay');
   const [staff, setStaff] = useState([]);
   const [roleOptionsFromApi, setRoleOptionsFromApi] = useState([]);
   const [runs, setRuns] = useState([]);
@@ -360,7 +362,11 @@ export default function StaffPayPage() {
           <h1 className="text-2xl font-bold text-gray-900">Staff pay</h1>
           <p className="text-sm text-gray-600 mt-1">Team and payroll runs</p>
         </div>
-        <button type="button" onClick={() => openStaffModal(null)} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+        <button
+          type="button"
+          onClick={() => openStaffModal(null)}
+          {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700' })}
+        >
           <Plus className="w-4 h-4" /> Add staff
         </button>
       </div>
@@ -368,7 +374,7 @@ export default function StaffPayPage() {
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-3">Staff</h2>
         {staff.length === 0 ? (
-          <EmptyState title="No staff yet" message="Add employees or contractors." actionLabel="Add staff" onAction={() => openStaffModal(null)} />
+          <EmptyState title="No staff yet" message="Add employees or contractors." actionLabel={write.allowed ? 'Add staff' : undefined} onAction={write.allowed ? () => openStaffModal(null) : undefined} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {staff.map((s) => (
@@ -379,7 +385,7 @@ export default function StaffPayPage() {
                   {s.role && <p className="text-xs text-gray-600 truncate">{formatLabel(s.role)}</p>}
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
-                  <button type="button" onClick={() => openPayModal(s, null)} className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700">Pay run</button>
+                  <button type="button" onClick={() => openPayModal(s, null)} {...write.props({ className: 'text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700' })}>Pay run</button>
                   <div className="flex gap-1">
                     <button type="button" onClick={() => openStaffModal(s)} className="p-1 text-gray-500 hover:text-blue-600"><Pencil className="w-4 h-4" /></button>
                     <button type="button" onClick={() => setDelStaff(s)} className="p-1 text-gray-500 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>

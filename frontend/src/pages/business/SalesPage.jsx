@@ -11,6 +11,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useToast } from '../../components/Toast';
+import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 
 const DEFAULT_CATEGORIES = ['Products', 'Services', 'Labor & Supplies', 'Consulting', 'Subscriptions', 'Wholesale', 'Retail', 'Other'];
 const CUSTOM_CAT = '__custom__';
@@ -30,6 +31,7 @@ const emptyForm = {
 
 export default function SalesPage() {
   const toast = useToast();
+  const write = useBusinessWrite('manage_sales');
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -216,7 +218,11 @@ export default function SalesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Sales</h1>
           <p className="text-sm text-gray-600 mt-1">Track revenue</p>
         </div>
-        <button type="button" onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+        <button
+          type="button"
+          onClick={openAdd}
+          {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:hover:bg-green-600' })}
+        >
           <Plus className="w-4 h-4" /> Add sale
         </button>
       </div>
@@ -283,7 +289,12 @@ export default function SalesPage() {
       )}
 
       {rows.length === 0 ? (
-        <EmptyState title="No sales yet" message="Add your first sale to see it here." actionLabel="Add sale" onAction={openAdd} />
+        <EmptyState
+          title="No sales yet"
+          message="Add your first sale to see it here."
+          actionLabel={write.allowed ? 'Add sale' : undefined}
+          onAction={write.allowed ? openAdd : undefined}
+        />
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm max-w-[100vw] sm:max-w-none">
           <div className="overflow-x-auto">
@@ -306,8 +317,8 @@ export default function SalesPage() {
                     <td className="px-3 py-2">{formatLabel(r.category) || '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
-                        <button type="button" onClick={() => openEdit(r)} className="p-1.5 text-gray-500 hover:text-blue-600 rounded" aria-label="Edit"><Pencil className="w-4 h-4" /></button>
-                        <button type="button" onClick={() => setDel(r)} className="p-1.5 text-gray-500 hover:text-red-600 rounded" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => openEdit(r)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-blue-600 rounded disabled:hover:text-gray-500' })} aria-label="Edit"><Pencil className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => setDel(r)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-red-600 rounded disabled:hover:text-gray-500' })} aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>

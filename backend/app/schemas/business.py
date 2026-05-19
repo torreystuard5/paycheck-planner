@@ -379,10 +379,13 @@ class NetProfitResponse(BaseModel):
 
 
 class DashboardResponse(BaseModel):
+    today_sales: Decimal = Decimal("0")
+    week_sales: Decimal = Decimal("0")
     mtd_sales: Decimal
     mtd_deductions: Decimal
     mtd_staff_pay: Decimal
     mtd_net_profit: Decimal
+    total_deductions_mtd: Decimal | None = None
     contingency_fund: Optional[FundResponse] = None
     upgrade_fund: Optional[FundResponse] = None
     recent_sales: list[SaleResponse]

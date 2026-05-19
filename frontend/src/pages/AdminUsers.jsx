@@ -16,6 +16,7 @@ import {
   EyeOff,
   Copy,
   Lock,
+  Mail,
 } from 'lucide-react';
 import api from '../services/api';
 import { formatApiError } from '../utils/formatApiError';
@@ -71,12 +72,16 @@ export default function AdminUsers({ embedded = false }) {
   const [showEmailConfirm, setShowEmailConfirm] = useState(false);
   const [editTier, setEditTier] = useState('early_access');
   const [savingTier, setSavingTier] = useState(false);
+  const [extendTrialDays, setExtendTrialDays] = useState(7);
+  const [grantAccessUntil, setGrantAccessUntil] = useState('');
+  const [savingBusinessAccess, setSavingBusinessAccess] = useState(false);
 
   const [detailNewPassword, setDetailNewPassword] = useState('');
   const [detailPwdShow, setDetailPwdShow] = useState(false);
   const [detailPwdCopied, setDetailPwdCopied] = useState(false);
   const [detailPwdErr, setDetailPwdErr] = useState('');
   const [detailPwdSaving, setDetailPwdSaving] = useState(false);
+  const [detailEmailResetSending, setDetailEmailResetSending] = useState(false);
   const detailPwdCopyTimerRef = useRef(null);
 
   // Override modal state
@@ -97,17 +102,20 @@ export default function AdminUsers({ embedded = false }) {
 
   // User overrides map for badges
   const [userOverrides, setUserOverrides] = useState({});
+  const [businessFilter, setBusinessFilter] = useState('');
 
   useEffect(() => {
     fetchUsers();
-  }, [page]);
+  }, [page, businessFilter]);
 
   const fetchUsers = async () => {
     setLoading(true);
     setError(null);
     try {
+      const params = { page, per_page: perPage };
+      if (businessFilter) params.filter = businessFilter;
       const { data } = await api.get('/api/v1/admin/users', {
-        params: { page, per_page: perPage },
+        params,
       });
       setUsers(data.users);
       setTotal(data.total);
@@ -222,12 +230,30 @@ export default function AdminUsers({ embedded = false }) {
         user_id: detailUser.id,
         new_password: detailNewPassword,
       });
-      toast(`Password reset for ${detailUser.email}`, 'success');
+      toast(`Password set for ${detailUser.email}`, 'success');
       resetDetailPasswordForm();
     } catch (err) {
       setDetailPwdErr(formatApiError(err));
     } finally {
       setDetailPwdSaving(false);
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    if (!detailUser) return;
+    setDetailPwdErr('');
+    setDetailEmailResetSending(true);
+    try {
+      const { data } = await api.post(`/api/v1/admin/users/${detailUser.id}/reset-password`);
+      if (data?.email_sent === false) {
+        toast(data.message || 'Reset link created but email could not be sent.', 'error');
+      } else {
+        toast(data.message || `Password reset email sent to ${detailUser.email}`, 'success');
+      }
+    } catch (err) {
+      setDetailPwdErr(formatApiError(err));
+    } finally {
+      setDetailEmailResetSending(false);
     }
   };
 
@@ -432,6 +458,22 @@ export default function AdminUsers({ embedded = false }) {
     }
   };
 
+  const handleSaveBusinessAccess = async (payload) => {
+    if (!detailUser) return;
+    setSavingBusinessAccess(true);
+    setDetailError('');
+    try {
+      const { data } = await api.patch(`/api/v1/admin/users/${detailUser.id}/business-access`, payload);
+      setDetailUser(data);
+      setDetailSuccess('Business access updated.');
+      toast('Business access updated', 'success');
+    } catch (err) {
+      setDetailError(formatApiError(err));
+    } finally {
+      setSavingBusinessAccess(false);
+    }
+  };
+
   const handleSaveTier = async () => {
     if (!detailUser || editTier === detailUser.subscription_tier) return;
     setSavingTier(true);
@@ -591,6 +633,25 @@ export default function AdminUsers({ embedded = false }) {
         </div>
       )}
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <label className="text-sm text-gray-600 font-medium">Business filter</label>
+        <select
+          value={businessFilter}
+          onChange={(e) => {
+            setBusinessFilter(e.target.value);
+            setPage(1);
+          }}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-[44px] bg-white"
+        >
+          <option value="">All users</option>
+          <option value="business_paid">Business / Bundle (paid)</option>
+          <option value="business_trial">Business trial active</option>
+          <option value="business_trial_expired">Business trial expired</option>
+          <option value="business_granted">Admin business grant</option>
+          <option value="business_early">Early access (Business included)</option>
+        </select>
+      </div>
+
       {users.length === 0 ? (
         <EmptyState
           icon={Users}
@@ -607,6 +668,7 @@ export default function AdminUsers({ embedded = false }) {
                     <th className="px-4 py-3 font-medium text-gray-600">Email</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Name</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Tier</th>
+                    <th className="px-4 py-3 font-medium text-gray-600">Business</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Active</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Admin</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Override</th>
@@ -636,6 +698,15 @@ export default function AdminUsers({ embedded = false }) {
                               <Crown className="w-3.5 h-3.5 text-amber-500" title={`Override: ${userOverrides[u.id]?.reason || 'Admin override'}`} />
                             )}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {u.business_access_state ? (
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                              {String(u.business_access_state).replace(/_/g, ' ')}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <button
@@ -781,6 +852,88 @@ export default function AdminUsers({ embedded = false }) {
               )}
             </div>
 
+            {/* Business Edition access */}
+            <div className="border border-purple-200 rounded-lg p-4 space-y-3 bg-purple-50/30">
+              <h3 className="text-sm font-semibold text-gray-900">Business Edition</h3>
+              <div className="text-xs text-gray-600 space-y-1">
+                <p>
+                  Trial consumed:{' '}
+                  <strong>{detailUser.business_trial_consumed ? 'Yes' : 'No'}</strong>
+                </p>
+                <p>
+                  Trial ends:{' '}
+                  <strong>{formatDateTime(detailUser.business_trial_ends_at) || '—'}</strong>
+                </p>
+                <p>
+                  Admin grant until:{' '}
+                  <strong>{formatDateTime(detailUser.business_access_granted_until) || '—'}</strong>
+                </p>
+                <p>
+                  App mode: <strong>{detailUser.app_mode || 'personal'}</strong>
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <label className="text-xs text-gray-600 flex items-center gap-1">
+                  Extend trial (days)
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    value={extendTrialDays}
+                    onChange={(e) => setExtendTrialDays(Number(e.target.value))}
+                    className="w-16 border border-gray-300 rounded px-2 py-1 text-sm"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={savingBusinessAccess}
+                  onClick={() => handleSaveBusinessAccess({ extend_trial_days: extendTrialDays })}
+                  className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg disabled:opacity-50"
+                >
+                  Extend trial
+                </button>
+                <button
+                  type="button"
+                  disabled={savingBusinessAccess}
+                  onClick={() => handleSaveBusinessAccess({ reset_trial: true })}
+                  className="px-3 py-1.5 text-xs font-medium border border-purple-300 text-purple-800 rounded-lg"
+                >
+                  Reset trial eligibility
+                </button>
+                <button
+                  type="button"
+                  disabled={savingBusinessAccess}
+                  onClick={() => handleSaveBusinessAccess({ clear_trial: true })}
+                  className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg"
+                >
+                  Clear trial dates
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 items-end">
+                <label className="text-xs text-gray-600 block">
+                  Grant access until (ISO datetime)
+                  <input
+                    type="datetime-local"
+                    value={grantAccessUntil}
+                    onChange={(e) => setGrantAccessUntil(e.target.value)}
+                    className="mt-1 block border border-gray-300 rounded px-2 py-1 text-sm w-full max-w-xs"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={savingBusinessAccess || !grantAccessUntil}
+                  onClick={() =>
+                    handleSaveBusinessAccess({
+                      grant_access_until: new Date(grantAccessUntil).toISOString(),
+                    })
+                  }
+                  className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg disabled:opacity-50 min-h-[44px]"
+                >
+                  Save grant
+                </button>
+              </div>
+            </div>
+
             {/* Plan tier (clears per-user overrides on change) */}
             <div className="border border-gray-200 rounded-lg p-4 space-y-3">
               <h3 className="text-sm font-semibold text-gray-900">Plan tier</h3>
@@ -888,7 +1041,23 @@ export default function AdminUsers({ embedded = false }) {
 
             {/* Reset Password */}
             <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-gray-900">Reset Password</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Password</h3>
+              <p className="text-xs text-gray-500">
+                Send a secure reset link by email (recommended), or set a new password directly.
+              </p>
+              <button
+                type="button"
+                onClick={handleSendResetEmail}
+                disabled={detailEmailResetSending}
+                className="flex items-center gap-2 px-3 py-2 w-full justify-center bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors"
+              >
+                {detailEmailResetSending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Mail className="w-4 h-4" />
+                )}
+                Send password reset email
+              </button>
               {detailPwdErr && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{detailPwdErr}</div>
               )}
@@ -938,7 +1107,7 @@ export default function AdminUsers({ embedded = false }) {
                 className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 <Lock className="w-3.5 h-3.5" />
-                Reset Password
+                Set password directly
               </button>
             </div>
 

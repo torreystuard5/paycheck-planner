@@ -33,6 +33,10 @@ from app.models.user_feature_override import UserFeatureOverride
 from app.models.global_feature_override import GlobalFeatureOverride
 from app.models.user_ui_preference import UserUIPreference
 from app.models.document_upload import DocumentUpload
+from app.models.pricing_config import PricingConfig
+from app.models.user_discount import UserDiscount
+from app.models.business_team import BusinessTeamAuditLog, BusinessTeamMember
+from app.models.business_payment_request import BusinessPaymentRequest
 from app.models.business import (
     BusinessCustomer,
     BusinessDeduction,
@@ -87,4 +91,9 @@ __all__ = [
     "BusinessFund",
     "BusinessFundTransaction",
     "DocumentUpload",
+    "PricingConfig",
+    "UserDiscount",
+    "BusinessTeamMember",
+    "BusinessTeamAuditLog",
+    "BusinessPaymentRequest",
 ]

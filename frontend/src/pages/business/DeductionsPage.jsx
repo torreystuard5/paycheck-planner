@@ -10,6 +10,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useToast } from '../../components/Toast';
+import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 
 const DEFAULT_CATEGORIES = [
   'Mileage', 'Supplies', 'Software', 'Meals & Entertainment', 'Travel', 'Utilities', 'Rent',
@@ -34,6 +35,7 @@ const emptyForm = {
 
 export default function DeductionsPage() {
   const toast = useToast();
+  const write = useBusinessWrite('manage_deductions');
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -202,7 +204,11 @@ export default function DeductionsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Deductions</h1>
           <p className="text-sm text-gray-600 mt-1">Business expenses</p>
         </div>
-        <button type="button" onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700">
+        <button
+          type="button"
+          onClick={openAdd}
+          {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700' })}
+        >
           <Plus className="w-4 h-4" /> Add deduction
         </button>
       </div>
@@ -254,7 +260,7 @@ export default function DeductionsPage() {
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState title="No deductions yet" message="Track tax-deductible expenses." actionLabel="Add deduction" onAction={openAdd} />
+        <EmptyState title="No deductions yet" message="Track tax-deductible expenses." actionLabel={write.allowed ? 'Add deduction' : undefined} onAction={write.allowed ? openAdd : undefined} />
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm overflow-x-auto max-w-[100vw] sm:max-w-none">
           <table className="min-w-full text-sm">
@@ -276,8 +282,8 @@ export default function DeductionsPage() {
                   <td className="px-3 py-2 hidden md:table-cell text-gray-600">{r.vendor || '—'}</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
-                      <button type="button" onClick={() => openEdit(r)} className="p-1.5 text-gray-500 hover:text-blue-600 rounded"><Pencil className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => setDel(r)} className="p-1.5 text-gray-500 hover:text-red-600 rounded"><Trash2 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => openEdit(r)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-blue-600 rounded' })}><Pencil className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => setDel(r)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-red-600 rounded' })}><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>

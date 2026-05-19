@@ -14,7 +14,44 @@ from app.database import async_session
 from app.models.system_setting import SystemSetting
 from app.models.user import User
 from app.services.tier_access import has_personal_home_access, normalize_plan_tier
-from app.routers import admin, announcements, auth, billing, bills, budgets, business, calendar, debts, documents, households, import_export, income, notes, passwords, paycheck_checklist, paycheck_engine, paycheck_entries, paycheck_schedules, payments, referrals, reminders, savings, subscriptions, support, supporter, tax, unsubscribe, updates, user_preferences
+from app.routers import (
+    admin,
+    announcements,
+    auth,
+    billing,
+    bills,
+    budgets,
+    business,
+    business_documents,
+    business_edition,
+    business_reports,
+    business_revenue,
+    business_tax,
+    calendar,
+    debts,
+    documents,
+    households,
+    import_export,
+    income,
+    notes,
+    passwords,
+    pay_periods,
+    paycheck_checklist,
+    paycheck_engine,
+    paycheck_entries,
+    paycheck_schedules,
+    payments,
+    referrals,
+    reminders,
+    savings,
+    subscriptions,
+    support,
+    supporter,
+    tax,
+    unsubscribe,
+    updates,
+    user_preferences,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +96,7 @@ _PERSONAL_API_PREFIXES = (
     "/api/v1/savings",
     "/api/v1/payments",
     "/api/v1/paycheck-plan",
+    "/api/v1/pay-periods",
     "/api/v1/paycheck-checklist",
     "/api/v1/paycheck-entries",
     "/api/v1/paycheck-schedules",
@@ -101,6 +139,7 @@ MAINTENANCE_EXEMPT_PATHS_EXACT = {
     "/api/v1/auth/refresh",
     "/api/v1/auth/forgot-password",
     "/api/v1/auth/reset-password",
+    "/api/v1/auth/validate-reset-token",
     "/api/v1/version",
     "/health",
     "/openapi.json",
@@ -314,6 +353,7 @@ app.include_router(debts.router, prefix="/api/v1")
 app.include_router(savings.router, prefix="/api/v1")
 app.include_router(payments.router, prefix="/api/v1")
 app.include_router(paycheck_engine.router, prefix="/api/v1")
+app.include_router(pay_periods.router, prefix="/api/v1")
 app.include_router(paycheck_checklist.router, prefix="/api/v1")
 app.include_router(households.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
@@ -336,6 +376,11 @@ app.include_router(subscriptions.router, prefix="/api/v1")
 app.include_router(user_preferences.router, prefix="/api/v1")
 app.include_router(budgets.router, prefix="/api/v1")
 app.include_router(business.router, prefix="/api/v1")
+app.include_router(business_edition.router, prefix="/api/v1")
+app.include_router(business_documents.router, prefix="/api/v1")
+app.include_router(business_tax.router, prefix="/api/v1")
+app.include_router(business_revenue.router, prefix="/api/v1")
+app.include_router(business_reports.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 
 

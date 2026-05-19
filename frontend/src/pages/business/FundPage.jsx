@@ -9,6 +9,7 @@ import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useToast } from '../../components/Toast';
+import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { formatLabel } from '../../utils/formatLabel';
 
 export default function FundPage() {
@@ -16,6 +17,7 @@ export default function FundPage() {
   const fundType = location.pathname.includes('upgrade') ? 'upgrade' : 'contingency';
   const title = fundType === 'upgrade' ? 'Upgrade Fund' : 'Contingency Fund';
   const toast = useToast();
+  const write = useBusinessWrite('manage_funds');
   const [fund, setFund] = useState(null);
   const [txs, setTxs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -134,7 +136,11 @@ export default function FundPage() {
           <p className="text-sm text-gray-600 mt-1">Balance and contributions</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setTxModal(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
+          <button
+            type="button"
+            onClick={() => setTxModal(true)}
+            {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700' })}
+          >
             <Plus className="w-4 h-4" /> Transaction
           </button>
           {fund && (
@@ -146,7 +152,7 @@ export default function FundPage() {
                 notes: fund.notes || '',
               });
               setEditModal(true);
-            }} className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">
+            }} {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50' })}>
               <Pencil className="w-4 h-4" /> Settings
             </button>
           )}
@@ -205,7 +211,7 @@ export default function FundPage() {
                       <CurrencyDisplay amount={t.amount} />
                     </td>
                     <td className="px-3 py-2">
-                      <button type="button" onClick={() => setDelTx(t)} className="p-1 text-gray-500 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => setDelTx(t)} {...write.props({ className: 'p-1 text-gray-500 hover:text-red-600' })}><Trash2 className="w-4 h-4" /></button>
                     </td>
                   </tr>
                 ))}

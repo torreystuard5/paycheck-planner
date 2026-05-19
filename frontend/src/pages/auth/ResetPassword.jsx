@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Loader2, CheckCircle, AlertTriangle, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import api from '../../services/api';
@@ -12,8 +12,33 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [validating, setValidating] = useState(!!token);
+  const [tokenValid, setTokenValid] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      setValidating(true);
+      try {
+        await api.post('/api/v1/auth/validate-reset-token', { token });
+        if (!cancelled) {
+          setTokenValid(true);
+          setError('');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setTokenValid(false);
+          setError(err.response?.data?.detail || 'This reset link is invalid or has expired.');
+        }
+      } finally {
+        if (!cancelled) setValidating(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
 
   if (!token) {
     return (
@@ -24,6 +49,38 @@ export default function ResetPassword() {
             <p className="text-sm font-medium text-red-800">Invalid Reset Link</p>
             <p className="text-sm text-red-700 mt-1">
               This link is missing the required token. Please request a new password reset.
+            </p>
+          </div>
+        </div>
+        <p className="mt-4 text-center">
+          <Link to="/forgot-password" className="text-sm font-medium text-blue-600 hover:text-blue-500">
+            Request New Reset Link
+          </Link>
+        </p>
+      </AuthLayout>
+    );
+  }
+
+  if (validating) {
+    return (
+      <AuthLayout>
+        <div className="flex items-center justify-center gap-2 py-12 text-gray-500">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="text-sm">Verifying reset link…</span>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  if (!tokenValid) {
+    return (
+      <AuthLayout>
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg p-4">
+          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800">Invalid Reset Link</p>
+            <p className="text-sm text-red-700 mt-1">
+              {error || 'This reset link is invalid or has expired.'}
             </p>
           </div>
         </div>

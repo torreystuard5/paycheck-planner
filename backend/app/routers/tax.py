@@ -24,9 +24,13 @@ from app.schemas.tax import (
     MonthlyBreakdown,
 )
 from app.utils.budget import resolve_budget_id, validate_budget_ownership
-from app.utils.security import get_current_user
+from app.utils.security import get_current_user, require_feature
 
-router = APIRouter(prefix="/tax", tags=["Tax"])
+router = APIRouter(
+    prefix="/tax",
+    tags=["Tax"],
+    dependencies=[Depends(require_feature("tax_prep"))],
+)
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────
@@ -62,14 +66,16 @@ async def list_deductions(
     tax_year: int = Query(..., ge=2000, le=2100),
     category: str | None = Query(default=None),
     budget_id: Optional[UUID] = Query(default=None),
+    scope: str = Query(default="mine", pattern="^(mine|household)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    stmt = (
-        select(TaxDeduction)
-        .where(TaxDeduction.user_id == current_user.id, TaxDeduction.tax_year == tax_year)
-        .order_by(TaxDeduction.date.desc())
-    )
+    stmt = select(TaxDeduction).where(TaxDeduction.tax_year == tax_year)
+    if scope == "household" and current_user.household_id:
+        stmt = stmt.where(TaxDeduction.household_id == current_user.household_id)
+    else:
+        stmt = stmt.where(TaxDeduction.user_id == current_user.id)
+    stmt = stmt.order_by(TaxDeduction.date.desc())
     if budget_id is not None:
         stmt = stmt.where(TaxDeduction.budget_id == budget_id)
     if category:

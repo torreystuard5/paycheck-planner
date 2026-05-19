@@ -1,0 +1,217 @@
+"""Shared data loading for paycheck / pay-period planning (budget-scoped)."""
+
+from __future__ import annotations
+
+import json
+from datetime import date, datetime
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import Date as SADate, cast, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.bill import Bill
+from app.models.debt import Debt
+from app.models.debt_payment import DebtPayment
+from app.models.income import IncomeSource
+from app.models.paycheck_entry import PaycheckEntry
+from app.models.transaction import Payment
+from app.models.user import User
+from app.utils.budget import apply_household_budget_filter, validate_budget_ownership
+
+
+async def household_member_ids(db: AsyncSession, user: User) -> list[UUID]:
+    if not user.household_id:
+        return [user.id]
+    result = await db.execute(
+        select(User.id).where(User.household_id == user.household_id)
+    )
+    return [row[0] for row in result.all()]
+
+
+async def resolve_anchor_income(
+    db: AsyncSession,
+    user: User,
+    budget_id: UUID,
+) -> IncomeSource | None:
+    """Household-shared pay calendar: earliest active income for this budget among members."""
+    member_ids = await household_member_ids(db, user)
+    result = await db.execute(
+        select(IncomeSource)
+        .where(
+            IncomeSource.user_id.in_(member_ids),
+            IncomeSource.budget_id == budget_id,
+            IncomeSource.is_active.is_(True),
+        )
+        .order_by(IncomeSource.created_at.asc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def fetch_paycheck_entries(
+    db: AsyncSession,
+    user: User,
+    budget_id: UUID,
+) -> list[PaycheckEntry]:
+    member_ids = await household_member_ids(db, user)
+    result = await db.execute(
+        select(PaycheckEntry)
+        .where(
+            PaycheckEntry.user_id.in_(member_ids),
+            PaycheckEntry.budget_id == budget_id,
+        )
+        .order_by(PaycheckEntry.pay_date.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def fetch_scoped_bills_debts(
+    db: AsyncSession,
+    user: User,
+    budget_id: UUID,
+) -> tuple[list[Bill], list[Debt]]:
+    """Bills/debts for planning with household budget filter and share annotations."""
+    await validate_budget_ownership(user, db, budget_id)
+
+    bills_q = select(Bill).where(Bill.is_active.is_(True))
+    debts_q = select(Debt).where(Debt.is_active.is_(True))
+
+    if user.household_id:
+        bills_q = bills_q.where(
+            or_(
+                Bill.user_id == user.id,
+                Bill.household_id == user.household_id,
+            )
+        )
+        debts_q = debts_q.where(
+            or_(
+                Debt.user_id == user.id,
+                Debt.household_id == user.household_id,
+            )
+        )
+    else:
+        bills_q = bills_q.where(Bill.user_id == user.id)
+        debts_q = debts_q.where(Debt.user_id == user.id)
+
+    bills_q = apply_household_budget_filter(bills_q, Bill, user, budget_id)
+    debts_q = apply_household_budget_filter(debts_q, Debt, user, budget_id)
+
+    bills_result = await db.execute(bills_q)
+    debts_result = await db.execute(debts_q)
+    all_bills = list(bills_result.scalars().all())
+    debts = list(debts_result.scalars().all())
+
+    member_count = 1
+    if user.household_id:
+        count_result = await db.execute(
+            select(func.count()).select_from(User).where(
+                User.household_id == user.household_id
+            )
+        )
+        member_count = max(count_result.scalar() or 1, 1)
+
+    bills: list[Bill] = []
+    for bill in all_bills:
+        is_household = bill.household_id is not None
+        amount = Decimal(str(bill.amount or 0))
+
+        if bill.payment_mode == "split" and is_household and member_count > 0:
+            share = (amount / member_count).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            bill.user_share_amount = share
+            bill.split_member_count = member_count
+            bills.append(bill)
+        elif bill.payment_mode == "single" and is_household:
+            if bill.assigned_member_id:
+                is_responsible = bill.assigned_member_id == user.id
+            else:
+                is_responsible = bill.user_id == user.id
+            if is_responsible:
+                bill.user_share_amount = amount
+                bill.split_member_count = 1
+                bills.append(bill)
+        else:
+            bill.user_share_amount = amount
+            bill.split_member_count = 1
+            bills.append(bill)
+
+    filtered_debts: list[Debt] = []
+    for debt in debts:
+        amount = Decimal(str(debt.minimum_payment or 0))
+
+        if debt.is_split:
+            split_count = 1
+            raw_members = debt.split_members
+            if raw_members:
+                try:
+                    parsed = json.loads(raw_members) if isinstance(raw_members, str) else raw_members
+                    if isinstance(parsed, list) and len(parsed) > 0:
+                        split_count = len(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            if split_count <= 1 and debt.household_id and member_count > 1:
+                split_count = member_count
+
+            if split_count > 1:
+                share = (amount / split_count).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                debt.user_share_amount = share
+                debt.split_member_count = split_count
+            else:
+                debt.user_share_amount = amount
+                debt.split_member_count = 1
+        else:
+            debt.user_share_amount = amount
+            debt.split_member_count = 1
+
+        if Decimal(str(debt.balance or 0)) > 0:
+            filtered_debts.append(debt)
+
+    return bills, filtered_debts
+
+
+async def get_paid_bill_map(
+    db: AsyncSession,
+    user_ids: list[UUID],
+    bill_ids: list[UUID],
+    overall_start: date,
+    overall_end: date,
+) -> dict[UUID, list[Any]]:
+    if not bill_ids or not user_ids:
+        return {}
+    result = await db.execute(
+        select(Payment.bill_id, Payment.paid_date).where(
+            Payment.bill_id.in_(bill_ids),
+            Payment.user_id.in_(user_ids),
+            Payment.paid_date.isnot(None),
+            Payment.paid_date >= overall_start,
+            Payment.paid_date <= overall_end,
+        )
+    )
+    mapping: dict[UUID, list[Any]] = {}
+    for row in result.all():
+        mapping.setdefault(row[0], []).append(row[1])
+    return mapping
+
+
+async def get_paid_debt_ids_in_window(
+    db: AsyncSession,
+    debt_ids: list[UUID],
+    window_start: date,
+    window_end: date,
+) -> set[UUID]:
+    """Debts with a payment row whose payment_date falls in the pay-period window."""
+    if not debt_ids:
+        return set()
+    result = await db.execute(
+        select(DebtPayment.debt_id).where(
+            DebtPayment.debt_id.in_(debt_ids),
+            cast(DebtPayment.payment_date, SADate) >= window_start,
+            cast(DebtPayment.payment_date, SADate) <= window_end,
+        )
+    )
+    return {row[0] for row in result.all()}

@@ -32,7 +32,10 @@ from app.services.household_service import (
     join_household,
     leave_household,
 )
-from app.utils.security import get_current_user
+from app.schemas.household_overview import HouseholdFinancialOverviewResponse
+from app.services.household_overview import build_household_financial_overview
+from app.utils.budget import resolve_budget_id, validate_budget_ownership
+from app.utils.security import get_current_user, require_feature
 
 router = APIRouter(prefix="/households", tags=["Households"])
 
@@ -132,6 +135,30 @@ async def get_my_household(
     household = await _get_household_row(db, current_user)
     members = await get_household_members(household.id, db)
     return _household_response(household, members)
+
+
+@router.get(
+    "/financial-overview",
+    response_model=HouseholdFinancialOverviewResponse,
+    dependencies=[Depends(require_feature("household_overview"))],
+)
+async def household_financial_overview(
+    budget_id: UUID | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    bid = await resolve_budget_id(current_user, db, budget_id)
+    if not bid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Active budget is required.",
+        )
+    await validate_budget_ownership(current_user, db, bid)
+    try:
+        data = await build_household_financial_overview(db, current_user, bid)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return HouseholdFinancialOverviewResponse(**data)
 
 
 @router.post("/leave", status_code=status.HTTP_200_OK)

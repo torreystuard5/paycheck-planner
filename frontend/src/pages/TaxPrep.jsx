@@ -18,6 +18,7 @@ import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ProFeatureGate from '../components/ProFeatureGate';
 
 const TAX_CATEGORIES = [
   'Medical',
@@ -244,6 +245,7 @@ export default function TaxPrep() {
     : null;
 
   return (
+    <ProFeatureGate featureKey="tax_prep">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -572,5 +574,6 @@ export default function TaxPrep() {
         danger
       />
     </div>
+    </ProFeatureGate>
   );
 }

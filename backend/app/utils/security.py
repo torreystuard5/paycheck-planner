@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -56,7 +56,14 @@ def decode_token(token: str) -> dict:
         )
 
 
+_PASSWORD_RESET_EXEMPT_SUFFIXES = (
+    "/auth/reset-password",
+    "/auth/validate-reset-token",
+)
+
+
 async def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
@@ -87,14 +94,48 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if user.must_reset_password:
+        path = request.url.path
+        if not any(path.endswith(suffix) for suffix in _PASSWORD_RESET_EXEMPT_SUFFIXES):
+            from app.services.password_reset_service import PASSWORD_RESET_REQUIRED_DETAIL
+
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=PASSWORD_RESET_REQUIRED_DETAIL,
+            )
+
     return user
 
 
+def require_feature(feature_key: str):
+    """Dependency: block unless user has access to feature_key (Pro/Business/early_access)."""
+
+    async def _dep(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        from app.services.tier_service import user_can_access_feature
+
+        if await user_can_access_feature(db, current_user, feature_key):
+            return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "upgrade_required",
+                "feature": feature_key,
+                "message": "This feature requires Home Pro. Upgrade to unlock it.",
+            },
+        )
+
+    return _dep
+
+
 async def require_business_mode(
+    request: Request,
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """Business Edition: business app_mode plus Business or Bundle subscription."""
-    from app.services.tier_access import has_business_dashboard_access, normalize_plan_tier
+    """Business Edition: app_mode=business plus active access (sub, trial, early access, grant)."""
+    from app.services.business_access import user_can_write_business, user_has_business_access
 
     mode = (current_user.app_mode or "personal").lower()
     if mode != "business":
@@ -102,9 +143,22 @@ async def require_business_mode(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Business mode required",
         )
-    if not has_business_dashboard_access(normalize_plan_tier(current_user.subscription_tier)):
+    if not user_has_business_access(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Business subscription required",
+            detail={
+                "code": "business_upgrade_required",
+                "message": "Business subscription or trial required",
+            },
+        )
+    if request.method not in ("GET", "HEAD", "OPTIONS") and not user_can_write_business(
+        current_user
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "business_trial_expired",
+                "message": "Business trial ended. Subscribe to edit records.",
+            },
         )
     return current_user

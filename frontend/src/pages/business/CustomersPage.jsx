@@ -7,6 +7,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useToast } from '../../components/Toast';
+import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 
 const emptyForm = {
   name: '',
@@ -19,6 +20,7 @@ const emptyForm = {
 
 export default function CustomersPage() {
   const toast = useToast();
+  const write = useBusinessWrite('manage_sales');
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
@@ -118,7 +120,11 @@ export default function CustomersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
           <p className="text-sm text-gray-600 mt-1">Track clients for sales</p>
         </div>
-        <button type="button" onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+        <button
+          type="button"
+          onClick={openAdd}
+          {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:hover:bg-indigo-600' })}
+        >
           <Plus className="w-4 h-4" /> Add customer
         </button>
       </div>
@@ -138,8 +144,8 @@ export default function CustomersPage() {
         <EmptyState
           title="No customers yet"
           message="Add your first customer to track sales by client."
-          actionLabel="Add customer"
-          onAction={openAdd}
+          actionLabel={write.allowed ? 'Add customer' : undefined}
+          onAction={write.allowed ? openAdd : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -152,8 +158,8 @@ export default function CustomersPage() {
                 {c.phone && <p className="text-xs text-gray-500">{c.phone}</p>}
               </div>
               <div className="flex gap-1 shrink-0">
-                <button type="button" onClick={() => openEdit(c)} className="p-1.5 text-gray-500 hover:text-blue-600 rounded" aria-label="Edit"><Pencil className="w-4 h-4" /></button>
-                <button type="button" onClick={() => setDel(c)} className="p-1.5 text-gray-500 hover:text-red-600 rounded" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
+                <button type="button" onClick={() => openEdit(c)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-blue-600 rounded' })} aria-label="Edit"><Pencil className="w-4 h-4" /></button>
+                <button type="button" onClick={() => setDel(c)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-red-600 rounded' })} aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
           ))}

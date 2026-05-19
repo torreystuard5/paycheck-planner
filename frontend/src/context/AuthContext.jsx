@@ -105,11 +105,6 @@ export function AuthProvider({ children }) {
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
 
-    // If must_reset_password, return the flag so the caller can redirect
-    if (data.must_reset_password) {
-      return { must_reset_password: true };
-    }
-
     const me = await api.get('/api/v1/auth/me');
     setUser({ ...me.data, app_mode: me.data.app_mode || 'personal' });
     setIsAuthenticated(true);
@@ -177,6 +172,7 @@ export function AuthProvider({ children }) {
         tosRequired,
         clearTosRequired,
         subscription,
+        fetchSubscription,
         updateUser,
       }}
     >

@@ -56,6 +56,7 @@ class UserResponse(BaseModel):
     app_mode: str | None = "personal"
     tos_accepted_at: datetime | None = None
     tos_version: str | None = None
+    must_reset_password: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

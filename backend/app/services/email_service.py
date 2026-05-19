@@ -171,6 +171,17 @@ async def send_bill_reminder(
         return False
 
 
+def build_password_reset_link(reset_token: str) -> str:
+    """User-facing reset URL (prefers custom domain over Netlify preview hosts)."""
+    origins = [u.strip() for u in FRONTEND_URL.split(",") if u.strip()]
+    frontend_base = origins[0] if origins else "http://localhost:5173"
+    for origin in origins:
+        if "netlify.app" not in origin and "localhost" not in origin:
+            frontend_base = origin
+            break
+    return f"{frontend_base}/reset-password?token={reset_token}"
+
+
 async def send_password_reset_email(
     to_email: str, user_name: str, reset_token: str
 ) -> bool:
@@ -192,15 +203,7 @@ async def send_password_reset_email(
             VALIDATE_CERTS=True,
         )
 
-        # Pick the best frontend URL from the comma-separated FRONTEND_URL.
-        # Prefer the custom domain (not *.netlify.app) for user-facing links.
-        origins = [u.strip() for u in FRONTEND_URL.split(",") if u.strip()]
-        frontend_base = origins[0]  # fallback
-        for origin in origins:
-            if "netlify.app" not in origin and "localhost" not in origin:
-                frontend_base = origin
-                break
-        reset_link = f"{frontend_base}/reset-password?token={reset_token}"
+        reset_link = build_password_reset_link(reset_token)
 
         html_body = f"""
         <h2>PayDrift — Reset Your Password</h2>

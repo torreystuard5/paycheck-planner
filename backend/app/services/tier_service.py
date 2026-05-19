@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.global_feature_override import GlobalFeatureOverride
 from app.models.user import User
 from app.models.user_feature_override import UserFeatureOverride
+from app.services.business_access import user_has_business_access
 from app.services.tier_access import (
     BUSINESS_SCOPE_FEATURE_KEYS,
     PRO_SCOPE_FEATURE_KEYS,
@@ -17,6 +18,23 @@ from app.services.tier_access import (
     has_pro_surface_access,
     normalize_plan_tier,
 )
+
+
+async def user_can_access_feature(
+    db: AsyncSession,
+    user: User,
+    feature_key: str,
+) -> bool:
+    """True when user may use a Home Pro / Business feature (incl. early_access bypass)."""
+    plan = normalize_plan_tier(getattr(user, "subscription_tier", None))
+    if plan == "early_access":
+        return True
+    if feature_key in PRO_SCOPE_FEATURE_KEYS and has_pro_surface_access(plan):
+        return True
+    if feature_key in BUSINESS_SCOPE_FEATURE_KEYS and user_has_business_access(user):
+        return True
+    status = await get_effective_tier(user.id, db)
+    return feature_key in (status.get("granted_features") or [])
 
 
 async def get_effective_tier(user_id, db: AsyncSession) -> dict:
@@ -89,7 +107,7 @@ async def get_effective_tier(user_id, db: AsyncSession) -> dict:
         "override_reason": override_reason,
         "override_expires": override_expires,
         "has_personal_access": has_personal_home_access(plan),
-        "has_business_access": has_business_dashboard_access(plan),
+        "has_business_access": user_has_business_access(user) if user else has_business_dashboard_access(plan),
         "has_pro_features": has_pro_surface_access(plan),
         "can_switch_modes": can_switch_app_mode(plan),
     }

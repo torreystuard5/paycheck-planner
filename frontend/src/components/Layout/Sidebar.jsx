@@ -35,6 +35,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useBudget } from '../../context/BudgetContext';
 // tierAccess import removed — early access, mode toggle always shown
 import { APP_VERSION } from '../../config';
+import { BUSINESS_NAV_LINKS, filterBusinessNavLinks } from '../../config/businessNav';
+import { useBusinessAccess } from '../../hooks/useBusinessAccess';
 import api from '../../services/api';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
@@ -49,24 +51,13 @@ const personalLinks = [
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/tax-prep', label: 'Tax Prep', icon: FileText },
   { to: '/vault', label: 'Secure Vault', icon: Lock },
+  { to: '/upgrade', label: 'Upgrade', icon: TrendingUp },
+  { to: '/edition', label: 'Business', icon: Briefcase },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/support', label: 'Support', icon: HelpCircle },
   { to: '/uploads', label: 'Uploads', icon: Upload },
   { to: '/budgets', label: 'Budgets', icon: FolderOpen, small: true },
   { to: '/changelog', label: 'Changelog', icon: ScrollText, small: true },
-];
-
-const businessLinks = [
-  { to: '/business/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/business/sales', label: 'Sales', icon: TrendingUp },
-  { to: '/business/customers', label: 'Customers', icon: Users },
-  { to: '/business/deductions', label: 'Deductions', icon: Briefcase },
-  { to: '/business/staff-pay', label: 'Staff Pay', icon: Banknote },
-  { to: '/business/contingency-fund', label: 'Contingency Fund', icon: ShieldCheck },
-  { to: '/business/upgrade-fund', label: 'Upgrade Fund', icon: ArrowUpCircle },
-  { to: '/business/net-profit', label: 'Net Profit', icon: PieChart },
-  { to: '/settings', label: 'Settings', icon: Settings },
-  { to: '/support', label: 'Support', icon: HelpCircle },
 ];
 
 const adminLinks = [
@@ -156,21 +147,38 @@ export default function Sidebar({ open, onClose }) {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [switching, setSwitching] = useState(false);
+  const { can, loading: accessLoading } = useBusinessAccess();
 
   const appMode = user?.app_mode || 'personal';
+  const businessLinks =
+    appMode === 'business'
+      ? accessLoading
+        ? BUSINESS_NAV_LINKS
+        : filterBusinessNavLinks(can)
+      : [];
   const baseLinks = appMode === 'business' ? businessLinks : personalLinks;
   const links = user?.is_admin ? [...baseLinks, ...adminLinks] : baseLinks;
   const showModeToggle = true; // early access: everyone can switch
 
   const handleModeSwitch = async (mode) => {
     if (mode === appMode || switching) return;
+    if (mode === 'business') {
+      navigate('/edition');
+      return;
+    }
     setSwitching(true);
     try {
-      const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: mode });
+      const { data } = await api.post('/api/v1/business/edition/enter-personal');
       updateUser(data);
-      navigate(mode === 'business' ? '/business/dashboard' : '/dashboard');
+      navigate('/dashboard');
     } catch {
-      // silent fail
+      try {
+        const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'personal' });
+        updateUser(data);
+        navigate('/dashboard');
+      } catch {
+        /* ignore */
+      }
     } finally {
       setSwitching(false);
     }

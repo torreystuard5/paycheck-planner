@@ -71,6 +71,8 @@ class BusinessDeduction(Base):
     receipt_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_mileage: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     miles: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    tax_schedule_c_category: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    is_1099_contractor: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

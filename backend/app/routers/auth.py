@@ -145,6 +145,15 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="Account closed. Contact support.",
         )
 
+    if user.must_reset_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "A password reset is required for your account. "
+                "Check your email for a reset link or use Forgot Password."
+            ),
+        )
+
     # Successful login — update tracking fields
     user.last_login_at = datetime.now(timezone.utc)
     user.failed_login_count = 0
@@ -156,7 +165,6 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
-        must_reset_password=user.must_reset_password,
     )
 
 
@@ -186,6 +194,15 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
             detail="User not found or inactive",
         )
 
+    if user.must_reset_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "A password reset is required for your account. "
+                "Check your email for a reset link or use Forgot Password."
+            ),
+        )
+
     if sync_app_mode_to_subscription(user):
         db.add(user)
         await db.flush()
@@ -207,6 +224,9 @@ async def get_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.services.business_context import accept_pending_team_invites
+
+    await accept_pending_team_invites(db, current_user)
     if sync_app_mode_to_subscription(current_user):
         db.add(current_user)
         await db.flush()
@@ -271,65 +291,62 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=72)
 
 
+class ValidateResetTokenRequest(BaseModel):
+    token: str
+
+
 @router.post("/forgot-password")
 async def forgot_password(
     body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
 ):
     """Send a password reset email. Always returns success to prevent email enumeration."""
-    normalized = normalize_email(body.email)
-    result = await db.execute(select(User).where(User.email == normalized))
-    user = result.scalar_one_or_none()
+    from app.services.password_reset_service import initiate_password_reset_for_email
 
-    if user and user.is_active:
-        token = secrets.token_urlsafe(32)
-        user.reset_token = token
-        user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
-        await db.flush()
-
-        from app.services.email_service import send_password_reset_email
-
-        await send_password_reset_email(
-            to_email=user.email,
-            user_name=user.first_name,
-            reset_token=token,
-        )
-
+    await initiate_password_reset_for_email(
+        db, body.email, require_must_reset=False
+    )
     return {"message": "If an account with that email exists, a reset link has been sent."}
+
+
+@router.post("/validate-reset-token")
+async def validate_reset_token(
+    body: ValidateResetTokenRequest, db: AsyncSession = Depends(get_db)
+):
+    """Check whether a reset token is still valid (used by the reset-password page)."""
+    from app.services.password_reset_service import (
+        assert_reset_token_valid,
+        find_user_by_reset_token,
+    )
+
+    user = await find_user_by_reset_token(db, body.token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset link.",
+        )
+    assert_reset_token_valid(user)
+    return {"valid": True}
 
 
 @router.post("/reset-password")
 async def reset_password(
     body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
 ):
-    """Reset password using a valid token."""
-    result = await db.execute(
-        select(User).where(User.reset_token == body.token)
+    """Reset password using a valid token. Clears token so it cannot be reused."""
+    from app.services.password_reset_service import (
+        assert_reset_token_valid,
+        complete_password_reset,
+        find_user_by_reset_token,
     )
-    user = result.scalar_one_or_none()
 
+    user = await find_user_by_reset_token(db, body.token)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset link.",
         )
-
-    # Check expiration
-    if user.reset_token_expires:
-        expires = user.reset_token_expires
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        if expires < datetime.now(timezone.utc):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Reset link has expired. Please request a new one.",
-            )
-
-    # Update password and clear reset fields
-    user.password_hash = hash_password(body.new_password)
-    user.reset_token = None
-    user.reset_token_expires = None
-    user.must_reset_password = False
-    user.failed_login_count = 0
+    assert_reset_token_valid(user)
+    complete_password_reset(user, body.new_password)
     await db.flush()
 
     return {"message": "Password has been reset successfully. You can now log in."}

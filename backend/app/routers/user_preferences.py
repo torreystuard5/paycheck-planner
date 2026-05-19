@@ -7,8 +7,9 @@ from app.database import get_db
 from app.models.user import User
 from app.models.user_ui_preference import UserUIPreference
 from app.schemas.user import UserResponse
+from app.services.business_access import user_has_business_access
 from app.services.tier_access import (
-    has_business_dashboard_access,
+    can_switch_app_mode,
     has_personal_home_access,
     normalize_plan_tier,
 )
@@ -35,15 +36,23 @@ async def update_app_mode(
             detail="app_mode must be 'personal' or 'business'",
         )
     tier = normalize_plan_tier(current_user.subscription_tier)
-    if body.app_mode == "business" and not has_business_dashboard_access(tier):
+    if body.app_mode == "business" and not user_has_business_access(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your plan does not include Business mode",
+            detail={
+                "code": "business_upgrade_required",
+                "message": "Activate Business from the edition chooser or upgrade your plan.",
+            },
         )
     if body.app_mode == "personal" and not has_personal_home_access(tier):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your plan does not include Personal mode",
+        )
+    if body.app_mode == "personal" and tier == "business" and not can_switch_app_mode(tier):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Business-only plans cannot switch to Personal mode",
         )
     current_user.app_mode = body.app_mode
     db.add(current_user)

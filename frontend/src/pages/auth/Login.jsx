@@ -33,19 +33,19 @@ export default function Login() {
     setErrorType('error');
 
     try {
-      const result = await login(form.email.trim().toLowerCase(), form.password);
-      if (result?.must_reset_password) {
-        // Clear tokens — user must reset via email link
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        setError('A password reset is required for your account. Please check your email for a reset link.');
-        setSubmitting(false);
-        return;
-      }
+      await login(form.email.trim().toLowerCase(), form.password);
       navigate('/dashboard', { replace: true });
     } catch (err) {
       const status = err.response?.status;
-      if (status === 401 || status === 403) {
+      if (status === 403 && err.response?.data?.detail?.toLowerCase?.().includes('password reset')) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        setErrorType('error');
+        setError(
+          err.response?.data?.detail
+            || 'A password reset is required. Check your email or use Forgot Password below.',
+        );
+      } else if (status === 401 || status === 403) {
         setErrorType('error');
         setError(err.response?.data?.detail || 'Invalid email or password. Please try again.');
       } else if (status === 503 || status === 502) {

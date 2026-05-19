@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal, Optional
 from uuid import UUID
 
@@ -105,3 +106,39 @@ class PayPeriodSummaryResponse(BaseModel):
     pay_frequency: Optional[str] = None
     current: Optional[PayPeriodMeta] = None
     next: Optional[PayPeriodMeta] = None
+
+
+class PayPeriodPlanItem(BaseModel):
+    id: UUID
+    name: str
+    item_type: str
+    amount: Decimal
+    full_amount: Optional[Decimal] = None
+    due_date: date
+    occurrence_due_date: date
+    days_until_due: int
+    status: str
+    auto_pay: bool = False
+    is_split: bool = False
+    split_count: int = 1
+    is_paid: bool = False
+    is_overdue: bool = False
+    hidden_overdue: bool = False
+    postpone_until: Optional[str] = None
+    natural_period_start: date
+    effective_period_start: date
+    pulled_forward: bool = False
+    pay_period_start: date
+
+
+class PayPeriodViewResponse(BaseModel):
+    meta: PayPeriodMeta
+    paycheck_amount: Decimal
+    assigned_items: list[PayPeriodPlanItem]
+    total_due: Decimal
+    total_paid: Decimal
+    total_still_owed: Decimal
+    remaining: Decimal
+    paid_count: int
+    item_count: int
+    status: str

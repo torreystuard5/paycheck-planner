@@ -15,6 +15,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
 import UploadDropzone from '../components/uploads/UploadDropzone';
 import { getStatusPill } from '../lib/uploadStatus';
+import ProFeatureGate from '../components/ProFeatureGate';
 
 const DOC_TYPES = ['receipt', 'paystub', 'other'];
 const DOC_TYPE_LABELS = { receipt: 'Receipt', paystub: 'Paystub', other: 'Other' };
@@ -98,6 +99,7 @@ export default function Uploads() {
   }, [toast]);
 
   return (
+    <ProFeatureGate featureKey="receipt_ocr">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -293,5 +295,6 @@ export default function Uploads() {
         )}
       </Modal>
     </div>
+    </ProFeatureGate>
   );
 }

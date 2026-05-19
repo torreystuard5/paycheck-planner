@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Save, User, DollarSign, Download, Loader2, Calendar, Plus, Edit, Trash2, Clock, Briefcase } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -522,6 +522,36 @@ export default function Settings() {
               >
                 <Briefcase className="w-4 h-4" />
                 Business
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Subscription</h2>
+            <p className="text-sm text-gray-600 mb-3">
+              Plan: <strong>{user?.subscription_tier || 'early_access'}</strong>
+              {user?.subscription_tier === 'early_access' && (
+                <span className="text-green-600"> (full access during early access)</span>
+              )}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/upgrade" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                View plans / Upgrade
+              </Link>
+              <button
+                type="button"
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                onClick={async () => {
+                  try {
+                    const { data } = await api.post('/api/v1/billing/portal');
+                    if (data.url) window.location.href = data.url;
+                    else if (data.message) setError(data.message);
+                  } catch (err) {
+                    setError(err.response?.data?.detail || err.response?.data?.message || 'Billing portal unavailable');
+                  }
+                }}
+              >
+                Manage billing
               </button>
             </div>
           </div>

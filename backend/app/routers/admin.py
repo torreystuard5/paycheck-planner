@@ -28,6 +28,7 @@ from app.schemas.admin import (
     AdminHouseholdSummary,
     AdminPasswordResetRequest,
     AdminStatsResponse,
+    AdminBusinessAccessUpdate,
     AdminSubscriptionTierUpdate,
     AdminToggleRequest,
     AdminUserDetailResponse,
@@ -180,7 +181,13 @@ async def list_admin_users(
     per_page: int = Query(50, ge=1, le=200),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
-    filter: str | None = Query(None, pattern="^(all|pro|free|active_30d)$"),
+    filter: str | None = Query(
+        None,
+        pattern=(
+            "^(all|pro|free|active_30d|business_paid|business_trial|"
+            "business_trial_expired|business_granted|business_early)$"
+        ),
+    ),
     search: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -204,6 +211,20 @@ async def list_admin_users(
         base_where.append(
             func.coalesce(User.last_login_at, User.updated_at) >= thirty_days_ago_ts
         )
+    elif filter == "business_paid":
+        base_where.append(User.subscription_tier.in_(("business", "bundle")))
+    elif filter == "business_trial":
+        base_where.append(User.business_trial_started_at.isnot(None))
+        base_where.append(User.business_trial_ends_at > now_ts)
+    elif filter == "business_trial_expired":
+        base_where.append(User.business_trial_consumed.is_(True))
+        base_where.append(User.business_trial_ends_at.isnot(None))
+        base_where.append(User.business_trial_ends_at <= now_ts)
+    elif filter == "business_granted":
+        base_where.append(User.business_access_granted_until.isnot(None))
+        base_where.append(User.business_access_granted_until > now_ts)
+    elif filter == "business_early":
+        base_where.append(User.subscription_tier == "early_access")
     # filter == "all" or None → no extra where clause
 
     if search:
@@ -257,9 +278,12 @@ async def list_admin_users(
             computed_status = "Inactive" if login < seven_days_ago else "Active"
             locked = False
 
+        from app.services.business_access import business_access_state
+
         summary = AdminUserSummary.model_validate(u)
         summary.status = computed_status
         summary.admin_locked = locked
+        summary.business_access_state = business_access_state(u, now=now)
         users_out.append(summary)
 
     return AdminUserListResponse(
@@ -397,6 +421,61 @@ async def update_user_subscription_tier(
         ip_address=_get_client_ip(request),
     )
 
+    await db.flush()
+    await db.refresh(user)
+    return AdminUserDetailResponse.model_validate(user)
+
+
+@router.patch(
+    "/users/{user_id}/business-access",
+    response_model=AdminUserDetailResponse,
+)
+async def update_user_business_access(
+    user_id: UUID,
+    body: AdminBusinessAccessUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.business_access import start_business_trial
+
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if body.clear_trial:
+        user.business_trial_started_at = None
+        user.business_trial_ends_at = None
+        user.business_trial_consumed = False
+    if body.reset_trial:
+        user.business_trial_consumed = False
+        user.business_trial_started_at = None
+        user.business_trial_ends_at = None
+    if body.extend_trial_days:
+        now = datetime.now(timezone.utc)
+        if not user.business_trial_started_at:
+            start_business_trial(user, now=now)
+        else:
+            end = user.business_trial_ends_at or now
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=timezone.utc)
+            user.business_trial_ends_at = end + timedelta(days=body.extend_trial_days)
+    if body.grant_access_until is not None:
+        user.business_access_granted_until = body.grant_access_until
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="updated_business_access",
+        target_type="user",
+        target_id=str(user_id),
+        details=json.dumps(body.model_dump(exclude_none=True)),
+        ip_address=_get_client_ip(request),
+    )
     await db.flush()
     await db.refresh(user)
     return AdminUserDetailResponse.model_validate(user)
@@ -629,11 +708,9 @@ async def admin_set_password_direct(
             detail="User not found",
         )
 
-    user.password_hash = hash_password(body.new_password)
-    user.reset_token = None
-    user.reset_token_expires = None
-    user.must_reset_password = False
-    user.failed_login_count = 0
+    from app.services.password_reset_service import complete_password_reset
+
+    complete_password_reset(user, body.new_password)
 
     log_admin_action(
         db,
@@ -669,11 +746,14 @@ async def admin_reset_password(
             detail="User not found",
         )
 
-    # Generate reset token and set must_reset_password
-    token = secrets.token_urlsafe(32)
-    user.reset_token = token
-    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
-    user.must_reset_password = True
+    from app.services.password_reset_service import (
+        apply_reset_token_to_user,
+        generate_reset_token,
+        send_reset_email,
+    )
+
+    token = generate_reset_token()
+    apply_reset_token_to_user(user, token=token, require_must_reset=True)
 
     log_admin_action(
         db,
@@ -686,16 +766,19 @@ async def admin_reset_password(
     )
     await db.flush()
 
-    # Send reset email (import here to avoid circular imports)
-    from app.services.email_service import send_password_reset_email
-
-    await send_password_reset_email(
-        to_email=user.email,
-        user_name=user.first_name,
-        reset_token=token,
-    )
-
-    return {"message": f"Password reset email sent to {user.email}"}
+    email_sent = await send_reset_email(user, token)
+    if email_sent:
+        return {
+            "message": f"Password reset email sent to {user.email}",
+            "email_sent": True,
+        }
+    return {
+        "message": (
+            f"Reset link created for {user.email}, but the email could not be delivered. "
+            "Check SUPPORT_SMTP_* configuration on the server."
+        ),
+        "email_sent": False,
+    }
 
 
 # ── Audit Log ──────────────────────────────────────────────────────

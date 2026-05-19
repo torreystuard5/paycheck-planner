@@ -41,6 +41,7 @@ class AdminUserSummary(BaseModel):
     account_status: str = "active"
     status: str = "Active"
     admin_locked: bool = False
+    business_access_state: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -82,8 +83,23 @@ class AdminUserDetailResponse(BaseModel):
     admin_notes: str | None = None
     created_at: datetime
     updated_at: datetime
+    app_mode: str | None = "personal"
+    business_trial_started_at: datetime | None = None
+    business_trial_ends_at: datetime | None = None
+    business_trial_consumed: bool = False
+    business_access_granted_until: datetime | None = None
+    subscription_status: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class AdminBusinessAccessUpdate(BaseModel):
+    """Admin grant/extend Business access or trial."""
+
+    extend_trial_days: int | None = Field(None, ge=0, le=365)
+    grant_access_until: datetime | None = None
+    reset_trial: bool = False
+    clear_trial: bool = False
 
 
 class AdminUserStatusUpdate(BaseModel):

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import calendar
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -55,7 +55,8 @@ from app.schemas.business import (
     StaffUpdate,
     StringListResponse,
 )
-from app.utils.security import require_business_mode
+from app.services.business_profit import compute_net_profit
+from app.services.business_context import BusinessContext, get_business_ctx
 
 router = APIRouter(prefix="/business", tags=["Business"])
 
@@ -161,11 +162,11 @@ async def sales_summary(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     d0, d1 = _parse_range(range_key, start_date, end_date)
     q = select(BusinessSale).where(
-        BusinessSale.user_id == user.id,
+        BusinessSale.user_id == ctx.owner_id,
         BusinessSale.is_active.is_(True),
         BusinessSale.sale_date >= d0,
         BusinessSale.sale_date <= d1,
@@ -192,12 +193,12 @@ async def sales_summary(
 @router.get("/sales/category-options", response_model=StringListResponse)
 async def sales_category_options(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessSale.category)
         .where(
-            BusinessSale.user_id == user.id,
+            BusinessSale.user_id == ctx.owner_id,
             BusinessSale.is_active.is_(True),
             BusinessSale.category.isnot(None),
             BusinessSale.category != "",
@@ -216,10 +217,10 @@ async def list_sales(
     category: Optional[str] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     q = select(BusinessSale).where(
-        BusinessSale.user_id == user.id,
+        BusinessSale.user_id == ctx.owner_id,
         BusinessSale.is_active.is_(True),
     )
     if start_date:
@@ -235,7 +236,7 @@ async def list_sales(
             .select_from(BusinessCustomer)
             .where(
                 BusinessCustomer.id == BusinessSale.customer_id,
-                BusinessCustomer.user_id == user.id,
+                BusinessCustomer.user_id == ctx.owner_id,
                 or_(
                     BusinessCustomer.name.ilike(like),
                     BusinessCustomer.company.ilike(like),
@@ -255,7 +256,7 @@ async def list_sales(
     r = await db.execute(q)
     rows = list(r.scalars().all())
     cids = {s.customer_id for s in rows if getattr(s, "customer_id", None)}
-    cmap = await _customer_name_map(db, user.id, cids)
+    cmap = await _customer_name_map(db, ctx.owner_id, cids)
     return [SaleResponse.from_orm_sale(s, cmap.get(s.customer_id)) for s in rows]
 
 
@@ -263,15 +264,17 @@ async def list_sales(
 async def create_sale(
     data: SaleCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_sales")
+
     src = data.source
     cust_name: Optional[str] = None
     if data.customer_id:
         cr = await db.execute(
             select(BusinessCustomer).where(
                 BusinessCustomer.id == data.customer_id,
-                BusinessCustomer.user_id == user.id,
+                BusinessCustomer.user_id == ctx.owner_id,
                 BusinessCustomer.is_active.is_(True),
             )
         )
@@ -282,7 +285,7 @@ async def create_sale(
         if not src:
             src = cust.name
     s = BusinessSale(
-        user_id=user.id,
+        user_id=ctx.owner_id,
         customer_id=data.customer_id,
         sale_date=data.date,
         amount=data.amount,
@@ -302,19 +305,19 @@ async def create_sale(
 async def get_sale(
     sale_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessSale).where(
             BusinessSale.id == sale_id,
-            BusinessSale.user_id == user.id,
+            BusinessSale.user_id == ctx.owner_id,
             BusinessSale.is_active.is_(True),
         )
     )
     s = r.scalar_one_or_none()
     if not s:
         raise HTTPException(status_code=404, detail="Sale not found")
-    cmap = await _customer_name_map(db, user.id, {s.customer_id} if s.customer_id else set())
+    cmap = await _customer_name_map(db, ctx.owner_id, {s.customer_id} if s.customer_id else set())
     return SaleResponse.from_orm_sale(s, cmap.get(s.customer_id))
 
 
@@ -323,12 +326,14 @@ async def update_sale(
     sale_id: UUID,
     data: SaleUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_sales")
+
     r = await db.execute(
         select(BusinessSale).where(
             BusinessSale.id == sale_id,
-            BusinessSale.user_id == user.id,
+            BusinessSale.user_id == ctx.owner_id,
             BusinessSale.is_active.is_(True),
         )
     )
@@ -344,7 +349,7 @@ async def update_sale(
             cr = await db.execute(
                 select(BusinessCustomer).where(
                     BusinessCustomer.id == new_cid,
-                    BusinessCustomer.user_id == user.id,
+                    BusinessCustomer.user_id == ctx.owner_id,
                     BusinessCustomer.is_active.is_(True),
                 )
             )
@@ -355,7 +360,7 @@ async def update_sale(
         setattr(s, k, v)
     await db.flush()
     await db.refresh(s)
-    cmap = await _customer_name_map(db, user.id, {s.customer_id} if s.customer_id else set())
+    cmap = await _customer_name_map(db, ctx.owner_id, {s.customer_id} if s.customer_id else set())
     return SaleResponse.from_orm_sale(s, cmap.get(s.customer_id))
 
 
@@ -363,12 +368,14 @@ async def update_sale(
 async def delete_sale(
     sale_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_sales")
+
     r = await db.execute(
         select(BusinessSale).where(
             BusinessSale.id == sale_id,
-            BusinessSale.user_id == user.id,
+            BusinessSale.user_id == ctx.owner_id,
             BusinessSale.is_active.is_(True),
         )
     )
@@ -385,10 +392,10 @@ async def delete_sale(
 @router.get("/settings", response_model=BusinessSettingsResponse)
 async def get_business_settings(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
-        select(UserUIPreference).where(UserUIPreference.user_id == user.id)
+        select(UserUIPreference).where(UserUIPreference.user_id == ctx.actor.id)
     )
     pref = r.scalar_one_or_none()
     rate = Decimal("0.7000")
@@ -401,14 +408,15 @@ async def get_business_settings(
 async def patch_business_settings(
     data: BusinessSettingsUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require_owner()
     r = await db.execute(
-        select(UserUIPreference).where(UserUIPreference.user_id == user.id)
+        select(UserUIPreference).where(UserUIPreference.user_id == ctx.actor.id)
     )
     pref = r.scalar_one_or_none()
     if not pref:
-        pref = UserUIPreference(user_id=user.id, collapsed_sections=[])
+        pref = UserUIPreference(user_id=ctx.actor.id, collapsed_sections=[])
         db.add(pref)
     if data.mileage_rate_per_mile is not None:
         pref.business_mileage_rate_per_mile = data.mileage_rate_per_mile
@@ -427,10 +435,10 @@ async def patch_business_settings(
 async def list_customers(
     q: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     query = select(BusinessCustomer).where(
-        BusinessCustomer.user_id == user.id,
+        BusinessCustomer.user_id == ctx.owner_id,
         BusinessCustomer.is_active.is_(True),
     )
     if q and q.strip():
@@ -451,10 +459,12 @@ async def list_customers(
 async def create_customer(
     data: CustomerCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_sales")
+
     c = BusinessCustomer(
-        user_id=user.id,
+        user_id=ctx.owner_id,
         name=data.name.strip(),
         email=(data.email or "").strip() or None,
         phone=(data.phone or "").strip() or None,
@@ -472,12 +482,12 @@ async def create_customer(
 async def get_customer(
     customer_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessCustomer).where(
             BusinessCustomer.id == customer_id,
-            BusinessCustomer.user_id == user.id,
+            BusinessCustomer.user_id == ctx.owner_id,
             BusinessCustomer.is_active.is_(True),
         )
     )
@@ -492,12 +502,14 @@ async def update_customer(
     customer_id: UUID,
     data: CustomerUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_sales")
+
     r = await db.execute(
         select(BusinessCustomer).where(
             BusinessCustomer.id == customer_id,
-            BusinessCustomer.user_id == user.id,
+            BusinessCustomer.user_id == ctx.owner_id,
             BusinessCustomer.is_active.is_(True),
         )
     )
@@ -517,12 +529,14 @@ async def update_customer(
 async def delete_customer(
     customer_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_sales")
+
     r = await db.execute(
         select(BusinessCustomer).where(
             BusinessCustomer.id == customer_id,
-            BusinessCustomer.user_id == user.id,
+            BusinessCustomer.user_id == ctx.owner_id,
             BusinessCustomer.is_active.is_(True),
         )
     )
@@ -534,7 +548,7 @@ async def delete_customer(
         .select_from(BusinessSale)
         .where(
             BusinessSale.customer_id == customer_id,
-            BusinessSale.user_id == user.id,
+            BusinessSale.user_id == ctx.owner_id,
             BusinessSale.is_active.is_(True),
         )
     )
@@ -555,12 +569,12 @@ async def deductions_summary(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     d0, d1 = _parse_range(range_key, start_date, end_date)
     r = await db.execute(
         select(BusinessDeduction).where(
-            BusinessDeduction.user_id == user.id,
+            BusinessDeduction.user_id == ctx.owner_id,
             BusinessDeduction.is_active.is_(True),
             BusinessDeduction.deduction_date >= d0,
             BusinessDeduction.deduction_date <= d1,
@@ -585,10 +599,10 @@ async def list_deductions(
     category: Optional[str] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     q = select(BusinessDeduction).where(
-        BusinessDeduction.user_id == user.id,
+        BusinessDeduction.user_id == ctx.owner_id,
         BusinessDeduction.is_active.is_(True),
     )
     if start_date:
@@ -614,12 +628,12 @@ async def list_deductions(
 @router.get("/deductions/vendor-options", response_model=StringListResponse)
 async def deduction_vendor_options(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessDeduction.vendor)
         .where(
-            BusinessDeduction.user_id == user.id,
+            BusinessDeduction.user_id == ctx.owner_id,
             BusinessDeduction.is_active.is_(True),
             BusinessDeduction.vendor.isnot(None),
             BusinessDeduction.vendor != "",
@@ -634,12 +648,12 @@ async def deduction_vendor_options(
 @router.get("/deductions/category-options", response_model=StringListResponse)
 async def deduction_category_options(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessDeduction.category)
         .where(
-            BusinessDeduction.user_id == user.id,
+            BusinessDeduction.user_id == ctx.owner_id,
             BusinessDeduction.is_active.is_(True),
         )
         .distinct()
@@ -653,10 +667,12 @@ async def deduction_category_options(
 async def create_deduction(
     data: DeductionCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_deductions")
+
     d = BusinessDeduction(
-        user_id=user.id,
+        user_id=ctx.owner_id,
         deduction_date=data.date,
         amount=data.amount,
         category=data.category,
@@ -676,12 +692,12 @@ async def create_deduction(
 async def get_deduction(
     deduction_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessDeduction).where(
             BusinessDeduction.id == deduction_id,
-            BusinessDeduction.user_id == user.id,
+            BusinessDeduction.user_id == ctx.owner_id,
             BusinessDeduction.is_active.is_(True),
         )
     )
@@ -696,12 +712,14 @@ async def update_deduction(
     deduction_id: UUID,
     data: DeductionUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_deductions")
+
     r = await db.execute(
         select(BusinessDeduction).where(
             BusinessDeduction.id == deduction_id,
-            BusinessDeduction.user_id == user.id,
+            BusinessDeduction.user_id == ctx.owner_id,
             BusinessDeduction.is_active.is_(True),
         )
     )
@@ -722,12 +740,14 @@ async def update_deduction(
 async def delete_deduction(
     deduction_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_deductions")
+
     r = await db.execute(
         select(BusinessDeduction).where(
             BusinessDeduction.id == deduction_id,
-            BusinessDeduction.user_id == user.id,
+            BusinessDeduction.user_id == ctx.owner_id,
             BusinessDeduction.is_active.is_(True),
         )
     )
@@ -744,12 +764,12 @@ async def delete_deduction(
 @router.get("/staff/role-options", response_model=StringListResponse)
 async def staff_role_options(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessStaff.role)
         .where(
-            BusinessStaff.user_id == user.id,
+            BusinessStaff.user_id == ctx.owner_id,
             BusinessStaff.is_active.is_(True),
             BusinessStaff.role.isnot(None),
             BusinessStaff.role != "",
@@ -764,11 +784,11 @@ async def staff_role_options(
 @router.get("/staff", response_model=list[StaffResponse])
 async def list_staff(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessStaff)
-        .where(BusinessStaff.user_id == user.id, BusinessStaff.is_active.is_(True))
+        .where(BusinessStaff.user_id == ctx.owner_id, BusinessStaff.is_active.is_(True))
         .order_by(BusinessStaff.name)
         .limit(LIST_LIMIT)
     )
@@ -779,10 +799,12 @@ async def list_staff(
 async def create_staff(
     data: StaffCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
+
     st = BusinessStaff(
-        user_id=user.id,
+        user_id=ctx.owner_id,
         name=data.name,
         role=data.role,
         pay_type=data.pay_type,
@@ -801,12 +823,12 @@ async def create_staff(
 async def get_staff(
     staff_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessStaff).where(
             BusinessStaff.id == staff_id,
-            BusinessStaff.user_id == user.id,
+            BusinessStaff.user_id == ctx.owner_id,
             BusinessStaff.is_active.is_(True),
         )
     )
@@ -821,12 +843,14 @@ async def update_staff(
     staff_id: UUID,
     data: StaffUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
+
     r = await db.execute(
         select(BusinessStaff).where(
             BusinessStaff.id == staff_id,
-            BusinessStaff.user_id == user.id,
+            BusinessStaff.user_id == ctx.owner_id,
             BusinessStaff.is_active.is_(True),
         )
     )
@@ -844,12 +868,14 @@ async def update_staff(
 async def delete_staff(
     staff_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
+
     r = await db.execute(
         select(BusinessStaff).where(
             BusinessStaff.id == staff_id,
-            BusinessStaff.user_id == user.id,
+            BusinessStaff.user_id == ctx.owner_id,
         )
     )
     st = r.scalar_one_or_none()
@@ -880,14 +906,14 @@ async def staff_pay_summary(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     d0, d1 = _parse_range(range_key, start_date, end_date)
     r = await db.execute(
         select(BusinessStaffPayRun, BusinessStaff.name)
         .join(BusinessStaff, BusinessStaff.id == BusinessStaffPayRun.staff_id)
         .where(
-            BusinessStaffPayRun.user_id == user.id,
+            BusinessStaffPayRun.user_id == ctx.owner_id,
             BusinessStaffPayRun.is_active.is_(True),
             BusinessStaffPayRun.period_end >= d0,
             BusinessStaffPayRun.period_end <= d1,
@@ -916,19 +942,19 @@ async def list_pay_runs(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     sr = await db.execute(
         select(BusinessStaff).where(
             BusinessStaff.id == staff_id,
-            BusinessStaff.user_id == user.id,
+            BusinessStaff.user_id == ctx.owner_id,
         )
     )
     if not sr.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Staff not found")
     q = select(BusinessStaffPayRun).where(
         BusinessStaffPayRun.staff_id == staff_id,
-        BusinessStaffPayRun.user_id == user.id,
+        BusinessStaffPayRun.user_id == ctx.owner_id,
         BusinessStaffPayRun.is_active.is_(True),
     )
     if start_date:
@@ -949,19 +975,21 @@ async def create_pay_run(
     staff_id: UUID,
     data: PayRunCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
+
     sr = await db.execute(
         select(BusinessStaff).where(
             BusinessStaff.id == staff_id,
-            BusinessStaff.user_id == user.id,
+            BusinessStaff.user_id == ctx.owner_id,
             BusinessStaff.is_active.is_(True),
         )
     )
     if not sr.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Staff not found")
     pr = BusinessStaffPayRun(
-        user_id=user.id,
+        user_id=ctx.owner_id,
         staff_id=staff_id,
         period_start=data.period_start,
         period_end=data.period_end,
@@ -984,13 +1012,15 @@ async def update_pay_run(
     pay_run_id: UUID,
     data: PayRunUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
+
     r = await db.execute(
         select(BusinessStaffPayRun).where(
             BusinessStaffPayRun.id == pay_run_id,
             BusinessStaffPayRun.staff_id == staff_id,
-            BusinessStaffPayRun.user_id == user.id,
+            BusinessStaffPayRun.user_id == ctx.owner_id,
             BusinessStaffPayRun.is_active.is_(True),
         )
     )
@@ -1009,13 +1039,15 @@ async def delete_pay_run(
     staff_id: UUID,
     pay_run_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
+
     r = await db.execute(
         select(BusinessStaffPayRun).where(
             BusinessStaffPayRun.id == pay_run_id,
             BusinessStaffPayRun.staff_id == staff_id,
-            BusinessStaffPayRun.user_id == user.id,
+            BusinessStaffPayRun.user_id == ctx.owner_id,
             BusinessStaffPayRun.is_active.is_(True),
         )
     )
@@ -1033,11 +1065,11 @@ async def delete_pay_run(
 async def list_funds(
     fund_type: Optional[str] = Query(None, pattern="^(contingency|upgrade)$"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
-    await ensure_default_business_funds(db, user.id)
+    await ensure_default_business_funds(db, ctx.owner_id)
     q = select(BusinessFund).where(
-        BusinessFund.user_id == user.id,
+        BusinessFund.user_id == ctx.owner_id,
         BusinessFund.is_active.is_(True),
     )
     if fund_type:
@@ -1051,10 +1083,12 @@ async def list_funds(
 async def create_fund(
     data: FundCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_funds")
+
     f = BusinessFund(
-        user_id=user.id,
+        user_id=ctx.owner_id,
         fund_type=data.fund_type,
         name=data.name,
         target_amount=data.target_amount,
@@ -1072,12 +1106,12 @@ async def create_fund(
 async def get_fund(
     fund_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
         select(BusinessFund).where(
             BusinessFund.id == fund_id,
-            BusinessFund.user_id == user.id,
+            BusinessFund.user_id == ctx.owner_id,
             BusinessFund.is_active.is_(True),
         )
     )
@@ -1092,12 +1126,14 @@ async def update_fund(
     fund_id: UUID,
     data: FundUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_funds")
+
     r = await db.execute(
         select(BusinessFund).where(
             BusinessFund.id == fund_id,
-            BusinessFund.user_id == user.id,
+            BusinessFund.user_id == ctx.owner_id,
             BusinessFund.is_active.is_(True),
         )
     )
@@ -1115,12 +1151,14 @@ async def update_fund(
 async def delete_fund(
     fund_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_funds")
+
     r = await db.execute(
         select(BusinessFund).where(
             BusinessFund.id == fund_id,
-            BusinessFund.user_id == user.id,
+            BusinessFund.user_id == ctx.owner_id,
             BusinessFund.is_active.is_(True),
         )
     )
@@ -1135,12 +1173,12 @@ async def delete_fund(
 async def list_fund_transactions(
     fund_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     fr = await db.execute(
         select(BusinessFund).where(
             BusinessFund.id == fund_id,
-            BusinessFund.user_id == user.id,
+            BusinessFund.user_id == ctx.owner_id,
         )
     )
     if not fr.scalar_one_or_none():
@@ -1149,7 +1187,7 @@ async def list_fund_transactions(
         select(BusinessFundTransaction)
         .where(
             BusinessFundTransaction.fund_id == fund_id,
-            BusinessFundTransaction.user_id == user.id,
+            BusinessFundTransaction.user_id == ctx.owner_id,
             BusinessFundTransaction.is_active.is_(True),
         )
         .order_by(BusinessFundTransaction.tx_date.desc())
@@ -1167,12 +1205,14 @@ async def create_fund_transaction(
     fund_id: UUID,
     data: FundTransactionCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_funds")
+
     fr = await db.execute(
         select(BusinessFund).where(
             BusinessFund.id == fund_id,
-            BusinessFund.user_id == user.id,
+            BusinessFund.user_id == ctx.owner_id,
             BusinessFund.is_active.is_(True),
         )
     )
@@ -1186,7 +1226,7 @@ async def create_fund_transaction(
     else:
         store_amt = amt
     t = BusinessFundTransaction(
-        user_id=user.id,
+        user_id=ctx.owner_id,
         fund_id=fund_id,
         tx_date=data.date,
         amount=store_amt,
@@ -1195,7 +1235,7 @@ async def create_fund_transaction(
     )
     db.add(t)
     await db.flush()
-    await _recalc_fund_balance(db, fund_id, user.id)
+    await _recalc_fund_balance(db, fund_id, ctx.owner_id)
     await db.refresh(t)
     return FundTransactionResponse.from_orm_row(t)
 
@@ -1205,13 +1245,15 @@ async def delete_fund_transaction(
     fund_id: UUID,
     tx_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_funds")
+
     r = await db.execute(
         select(BusinessFundTransaction).where(
             BusinessFundTransaction.id == tx_id,
             BusinessFundTransaction.fund_id == fund_id,
-            BusinessFundTransaction.user_id == user.id,
+            BusinessFundTransaction.user_id == ctx.owner_id,
             BusinessFundTransaction.is_active.is_(True),
         )
     )
@@ -1220,7 +1262,7 @@ async def delete_fund_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
     t.is_active = False
     await db.flush()
-    await _recalc_fund_balance(db, fund_id, user.id)
+    await _recalc_fund_balance(db, fund_id, ctx.owner_id)
 
 
 # ── Net profit & dashboard ───────────────────────────────────────────
@@ -1246,14 +1288,14 @@ async def net_profit(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
     d0, d1 = _parse_range(range_key, start_date, end_date)
 
     async def sum_sales(a: date, b: date) -> Decimal:
         r = await db.execute(
             select(func.coalesce(func.sum(BusinessSale.amount), 0)).where(
-                BusinessSale.user_id == user.id,
+                BusinessSale.user_id == ctx.owner_id,
                 BusinessSale.is_active.is_(True),
                 BusinessSale.sale_date >= a,
                 BusinessSale.sale_date <= b,
@@ -1264,7 +1306,7 @@ async def net_profit(
     async def sum_ded(a: date, b: date) -> Decimal:
         r = await db.execute(
             select(func.coalesce(func.sum(BusinessDeduction.amount), 0)).where(
-                BusinessDeduction.user_id == user.id,
+                BusinessDeduction.user_id == ctx.owner_id,
                 BusinessDeduction.is_active.is_(True),
                 BusinessDeduction.deduction_date >= a,
                 BusinessDeduction.deduction_date <= b,
@@ -1275,7 +1317,7 @@ async def net_profit(
     async def sum_pay(a: date, b: date) -> Decimal:
         r = await db.execute(
             select(func.coalesce(func.sum(BusinessStaffPayRun.net_pay), 0)).where(
-                BusinessStaffPayRun.user_id == user.id,
+                BusinessStaffPayRun.user_id == ctx.owner_id,
                 BusinessStaffPayRun.is_active.is_(True),
                 BusinessStaffPayRun.period_end >= a,
                 BusinessStaffPayRun.period_end <= b,
@@ -1286,7 +1328,7 @@ async def net_profit(
     async def sum_fund_dep(a: date, b: date) -> Decimal:
         r = await db.execute(
             select(func.coalesce(func.sum(BusinessFundTransaction.amount), 0)).where(
-                BusinessFundTransaction.user_id == user.id,
+                BusinessFundTransaction.user_id == ctx.owner_id,
                 BusinessFundTransaction.is_active.is_(True),
                 BusinessFundTransaction.kind == "deposit",
                 BusinessFundTransaction.amount > 0,
@@ -1296,11 +1338,7 @@ async def net_profit(
         )
         return Decimal(str(r.scalar() or 0))
 
-    ts = await sum_sales(d0, d1)
-    td = await sum_ded(d0, d1)
-    tp = await sum_pay(d0, d1)
-    tfc = await sum_fund_dep(d0, d1)
-    net = ts - td - tp
+    totals = await compute_net_profit(db, ctx.owner_id, d0, d1)
 
     monthly: list[MonthlyBreakdownRow] = []
     for ms, me in _month_iter(d0, d1):
@@ -1308,27 +1346,25 @@ async def net_profit(
         b = min(me, d1)
         if a > b:
             continue
-        s = await sum_sales(a, b)
-        dd = await sum_ded(a, b)
-        pp = await sum_pay(a, b)
+        m = await compute_net_profit(db, ctx.owner_id, a, b)
         monthly.append(
             MonthlyBreakdownRow(
                 month=a.strftime("%Y-%m"),
-                sales=s,
-                deductions=dd,
-                staff_pay=pp,
-                net=s - dd - pp,
+                sales=m["total_sales"],
+                deductions=m["total_deductions"],
+                staff_pay=m["total_staff_pay"],
+                net=m["net_profit"],
             )
         )
 
     return NetProfitResponse(
         range_start=d0,
         range_end=d1,
-        total_sales=ts,
-        total_deductions=td,
-        total_staff_pay=tp,
-        total_fund_contributions=tfc,
-        net_profit=net,
+        total_sales=totals["total_sales"],
+        total_deductions=totals["total_deductions"],
+        total_staff_pay=totals["total_staff_pay"],
+        total_fund_contributions=totals["total_fund_contributions"],
+        net_profit=totals["net_profit"],
         monthly=monthly,
     )
 
@@ -1336,16 +1372,16 @@ async def net_profit(
 @router.get("/dashboard", response_model=DashboardResponse)
 async def business_dashboard(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_business_mode),
+    ctx: BusinessContext = Depends(get_business_ctx),
 ):
-    await ensure_default_business_funds(db, user.id)
+    await ensure_default_business_funds(db, ctx.owner_id)
     today = date.today()
     mtd0 = date(today.year, today.month, 1)
 
     async def sum_sales(a: date, b: date) -> Decimal:
         r = await db.execute(
             select(func.coalesce(func.sum(BusinessSale.amount), 0)).where(
-                BusinessSale.user_id == user.id,
+                BusinessSale.user_id == ctx.owner_id,
                 BusinessSale.is_active.is_(True),
                 BusinessSale.sale_date >= a,
                 BusinessSale.sale_date <= b,
@@ -1356,7 +1392,7 @@ async def business_dashboard(
     async def sum_ded(a: date, b: date) -> Decimal:
         r = await db.execute(
             select(func.coalesce(func.sum(BusinessDeduction.amount), 0)).where(
-                BusinessDeduction.user_id == user.id,
+                BusinessDeduction.user_id == ctx.owner_id,
                 BusinessDeduction.is_active.is_(True),
                 BusinessDeduction.deduction_date >= a,
                 BusinessDeduction.deduction_date <= b,
@@ -1367,7 +1403,7 @@ async def business_dashboard(
     async def sum_pay(a: date, b: date) -> Decimal:
         r = await db.execute(
             select(func.coalesce(func.sum(BusinessStaffPayRun.net_pay), 0)).where(
-                BusinessStaffPayRun.user_id == user.id,
+                BusinessStaffPayRun.user_id == ctx.owner_id,
                 BusinessStaffPayRun.is_active.is_(True),
                 BusinessStaffPayRun.period_end >= a,
                 BusinessStaffPayRun.period_end <= b,
@@ -1375,14 +1411,18 @@ async def business_dashboard(
         )
         return Decimal(str(r.scalar() or 0))
 
-    ms = await sum_sales(mtd0, today)
-    md = await sum_ded(mtd0, today)
-    mp = await sum_pay(mtd0, today)
-    mnet = ms - md - mp
+    week0 = today - timedelta(days=today.weekday())
+    ts_today = await sum_sales(today, today)
+    ts_week = await sum_sales(week0, today)
+    profit_mtd = await compute_net_profit(db, ctx.owner_id, mtd0, today)
+    ms = profit_mtd["total_sales"]
+    md = profit_mtd["total_deductions"]
+    mp = profit_mtd["total_staff_pay"]
+    mnet = profit_mtd["net_profit"]
 
     fr = await db.execute(
         select(BusinessFund).where(
-            BusinessFund.user_id == user.id,
+            BusinessFund.user_id == ctx.owner_id,
             BusinessFund.is_active.is_(True),
             BusinessFund.fund_type == "contingency",
         )
@@ -1390,7 +1430,7 @@ async def business_dashboard(
     cf = fr.scalar_one_or_none()
     fr2 = await db.execute(
         select(BusinessFund).where(
-            BusinessFund.user_id == user.id,
+            BusinessFund.user_id == ctx.owner_id,
             BusinessFund.is_active.is_(True),
             BusinessFund.fund_type == "upgrade",
         )
@@ -1399,31 +1439,34 @@ async def business_dashboard(
 
     rs = await db.execute(
         select(BusinessSale)
-        .where(BusinessSale.user_id == user.id, BusinessSale.is_active.is_(True))
+        .where(BusinessSale.user_id == ctx.owner_id, BusinessSale.is_active.is_(True))
         .order_by(BusinessSale.sale_date.desc())
         .limit(5)
     )
     dash_sales = list(rs.scalars().all())
     dcids = {s.customer_id for s in dash_sales if getattr(s, "customer_id", None)}
-    dcmap = await _customer_name_map(db, user.id, dcids)
+    dcmap = await _customer_name_map(db, ctx.owner_id, dcids)
     rd = await db.execute(
         select(BusinessDeduction)
-        .where(BusinessDeduction.user_id == user.id, BusinessDeduction.is_active.is_(True))
+        .where(BusinessDeduction.user_id == ctx.owner_id, BusinessDeduction.is_active.is_(True))
         .order_by(BusinessDeduction.deduction_date.desc())
         .limit(5)
     )
     rp = await db.execute(
         select(BusinessStaffPayRun)
-        .where(BusinessStaffPayRun.user_id == user.id, BusinessStaffPayRun.is_active.is_(True))
+        .where(BusinessStaffPayRun.user_id == ctx.owner_id, BusinessStaffPayRun.is_active.is_(True))
         .order_by(BusinessStaffPayRun.period_end.desc())
         .limit(5)
     )
 
     return DashboardResponse(
+        today_sales=ts_today,
+        week_sales=ts_week,
         mtd_sales=ms,
         mtd_deductions=md,
         mtd_staff_pay=mp,
         mtd_net_profit=mnet,
+        total_deductions_mtd=md,
         contingency_fund=cf,
         upgrade_fund=uf,
         recent_sales=[

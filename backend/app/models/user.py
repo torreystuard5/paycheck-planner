@@ -126,6 +126,35 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Stripe / subscription billing
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    subscription_status: Mapped[str] = mapped_column(
+        String(30), server_default=text("'none'"), nullable=False
+    )
+    trial_ends_at: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    subscription_started_at: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    subscription_ends_at: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    billing_period: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Business Edition trial / admin grant
+    business_trial_started_at: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    business_trial_ends_at: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    business_trial_consumed: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+    business_access_granted_until: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Active budget tracking (Phase 4B)
     current_budget_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

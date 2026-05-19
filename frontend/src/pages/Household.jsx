@@ -8,6 +8,8 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
 import usePolling from '../hooks/usePolling';
 import { formatFriendlyDate } from '../utils/formatDate';
+import ProFeatureGate from '../components/ProFeatureGate';
+import HouseholdFinancialOverview from '../components/HouseholdFinancialOverview';
 
 const fmtCurrency = (val) => {
   const n = Number(val);
@@ -398,6 +400,12 @@ export default function Household() {
           <CheckCircle className="w-4 h-4 shrink-0" />
           {success}
         </div>
+      )}
+
+      {showMoney && (
+        <ProFeatureGate featureKey="household_overview">
+          <HouseholdFinancialOverview />
+        </ProFeatureGate>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

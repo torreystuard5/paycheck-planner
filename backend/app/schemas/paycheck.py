@@ -22,6 +22,11 @@ class PaycheckItem(BaseModel):
     is_overdue: bool = False
     hidden_overdue: bool = False
     postpone_until: Optional[str] = None
+    occurrence_due_date: Optional[date] = None
+    natural_period_start: Optional[date] = None
+    effective_period_start: Optional[date] = None
+    pulled_forward: bool = False
+    pay_period_start: Optional[date] = None
 
 
 class PaycheckPlan(BaseModel):
@@ -31,6 +36,11 @@ class PaycheckPlan(BaseModel):
     total_due: Decimal
     remaining: Decimal
     status: str
+    pay_period_start: Optional[date] = None
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+    is_current: bool = False
+    is_next: bool = False
 
 
 class PaycheckPlanResponse(BaseModel):
@@ -43,3 +53,4 @@ class PaycheckPlanResponse(BaseModel):
     overall_status: str
     current_paycheck_date: Optional[date] = None
     next_paycheck_date: Optional[date] = None
+    budget_id: Optional[UUID] = None

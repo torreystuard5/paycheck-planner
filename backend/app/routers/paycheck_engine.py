@@ -1,278 +1,61 @@
-import json
 from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.bill import Bill
-from app.models.debt import Debt
-from app.models.debt_payment import DebtPayment
-from app.models.income import IncomeSource
-from app.models.paycheck_entry import PaycheckEntry
-from app.models.transaction import Payment
 from app.models.user import User
 from app.schemas.paycheck import PaycheckPlan, PaycheckPlanResponse
-from app.services.paycheck_engine import build_paycheck_plan, generate_pay_dates, get_pay_period_window
+from app.services.pay_period_planner import build_full_paycheck_plan_response
+from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/paycheck-plan", tags=["Paycheck Plan"])
 
 
-async def _fetch_user_data(db: AsyncSession, user: User):
-    """Fetch active income sources, bills, and debts for a user (household-aware).
-
-    For household users, bills are annotated with a `user_share_amount` attribute
-    that reflects the user's portion (split bills divided by member count, single
-    bills assigned to others excluded).
-    """
-    income_result = await db.execute(
-        select(IncomeSource)
-        .where(IncomeSource.user_id == user.id, IncomeSource.is_active.is_(True))
-        .order_by(IncomeSource.created_at)
-    )
-    income_sources = list(income_result.scalars().all())
-
-    if user.household_id:
-        from sqlalchemy import or_
-        bills_result = await db.execute(
-            select(Bill)
-            .where(
-                or_(
-                    Bill.user_id == user.id,
-                    Bill.household_id == user.household_id,
-                ),
-                Bill.is_active.is_(True),
-            )
-        )
-        debts_result = await db.execute(
-            select(Debt)
-            .where(
-                or_(
-                    Debt.user_id == user.id,
-                    Debt.household_id == user.household_id,
-                ),
-                Debt.is_active.is_(True),
-            )
-        )
-    else:
-        bills_result = await db.execute(
-            select(Bill)
-            .where(Bill.user_id == user.id, Bill.is_active.is_(True))
-        )
-        debts_result = await db.execute(
-            select(Debt)
-            .where(Debt.user_id == user.id, Debt.is_active.is_(True))
-        )
-
-    all_bills = list(bills_result.scalars().all())
-    debts = list(debts_result.scalars().all())
-
-    # Compute user share for each bill
-    member_count = 1
-    if user.household_id:
-        count_result = await db.execute(
-            select(func.count()).select_from(User).where(
-                User.household_id == user.household_id
-            )
-        )
-        member_count = max(count_result.scalar() or 1, 1)
-
-    bills = []
-    for bill in all_bills:
-        is_household = bill.household_id is not None
-        amount = Decimal(str(bill.amount or 0))
-
-        if bill.payment_mode == "split" and is_household and member_count > 0:
-            share = (amount / member_count).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
-            bill.user_share_amount = share
-            bill.split_member_count = member_count
-            bills.append(bill)
-        elif bill.payment_mode == "single" and is_household:
-            if bill.assigned_member_id:
-                is_responsible = bill.assigned_member_id == user.id
-            else:
-                is_responsible = bill.user_id == user.id
-            if is_responsible:
-                bill.user_share_amount = amount
-                bill.split_member_count = 1
-                bills.append(bill)
-            # Skip bills assigned to other members
-        else:
-            bill.user_share_amount = amount
-            bill.split_member_count = 1
-            bills.append(bill)
-
-    # Compute user share for each debt (split-aware)
-    filtered_debts = []
-    for debt in debts:
-        amount = Decimal(str(debt.minimum_payment or 0))
-
-        if debt.is_split:
-            # Determine split count from split_members JSON or household member count
-            split_count = 1
-            raw_members = debt.split_members
-            if raw_members:
-                try:
-                    parsed = json.loads(raw_members) if isinstance(raw_members, str) else raw_members
-                    if isinstance(parsed, list) and len(parsed) > 0:
-                        split_count = len(parsed)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            # Fall back to household member count if no explicit split_members
-            if split_count <= 1 and debt.household_id and member_count > 1:
-                split_count = member_count
-
-            if split_count > 1:
-                share = (amount / split_count).quantize(
-                    Decimal("0.01"), rounding=ROUND_HALF_UP
-                )
-                debt.user_share_amount = share
-                debt.split_member_count = split_count
-            else:
-                debt.user_share_amount = amount
-                debt.split_member_count = 1
-        else:
-            debt.user_share_amount = amount
-            debt.split_member_count = 1
-
-        filtered_debts.append(debt)
-
-    # Exclude fully paid-off debts (balance <= 0) from paycheck assignments
-    filtered_debts = [d for d in filtered_debts if Decimal(str(d.balance or 0)) > 0]
-
-    return income_sources, bills, filtered_debts
-
-
-async def _fetch_paycheck_entries(db: AsyncSession, user_id) -> list:
-    result = await db.execute(
-        select(PaycheckEntry)
-        .where(PaycheckEntry.user_id == user_id)
-        .order_by(PaycheckEntry.pay_date.desc())
-    )
-    return list(result.scalars().all())
-
-
-async def _get_paid_debt_ids(db: AsyncSession, user_id) -> set:
-    """Return set of debt IDs that have a DebtPayment for the current month.
-
-    Not filtered by user_id so that household members see each other's
-    debt payments.  The caller already scopes debts to the user/household.
-    """
-    from datetime import date as _date
-    today = _date.today()
-    result = await db.execute(
-        select(DebtPayment.debt_id).where(
-            DebtPayment.period_month == today.month,
-            DebtPayment.period_year == today.year,
-        )
-    )
-    return {row[0] for row in result.all()}
-
-
-async def _get_paid_bill_ids_by_window(
+async def _require_budget_id(
     db: AsyncSession,
-    user_ids: list,
-    bill_ids: list,
-    overall_start: date,
-    overall_end: date,
-) -> dict:
-    """Return {bill_id: [paid_date, ...]} for payments in the overall plan window.
-
-    Fetched ONCE for the entire plan range then partitioned per-period in Python.
-    Scoped to all household member user_ids so both members see each other's payments.
-    """
-    if not bill_ids or not user_ids:
-        return {}
-    result = await db.execute(
-        select(Payment.bill_id, Payment.paid_date).where(
-            Payment.bill_id.in_(bill_ids),
-            Payment.user_id.in_(user_ids),
-            Payment.paid_date.isnot(None),
-            Payment.paid_date >= overall_start,
-            Payment.paid_date <= overall_end,
+    user: User,
+    budget_id: UUID | None,
+) -> UUID:
+    resolved = await resolve_budget_id(user, db, budget_id)
+    if not resolved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Active budget is required. Select or create a budget first.",
         )
-    )
-    mapping: dict = {}
-    for row in result.all():
-        mapping.setdefault(row[0], []).append(row[1])
-    return mapping
+    await validate_budget_ownership(user, db, resolved)
+    return resolved
 
 
 @router.get("", response_model=PaycheckPlanResponse)
 async def get_paycheck_plan(
     periods: int = Query(default=4, ge=1, le=12),
+    budget_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    income_sources, bills, debts = await _fetch_user_data(db, current_user)
-    entries = await _fetch_paycheck_entries(db, current_user.id)
-
-    # Fetch paid debt IDs so the engine can mark debts as paid
-    paid_ids = await _get_paid_debt_ids(db, current_user.id)
-
-    # Build household-aware user_ids for bill payment lookup
-    if current_user.household_id:
-        from app.services.household_service import get_household_members
-        members = await get_household_members(current_user.household_id, db)
-        user_ids = [m.id for m in members]
-    else:
-        user_ids = [current_user.id]
-
-    plan = build_paycheck_plan(
-        user=current_user,
-        income_sources=income_sources,
-        bills=bills,
-        debts=debts,
-        num_periods=periods,
-        paycheck_entries=entries,
-        paid_debt_ids=paid_ids,
-        db=db,
-        user_ids=user_ids,
-        get_paid_bill_ids_fn=_get_paid_bill_ids_by_window,
+    bid = await _require_budget_id(db, current_user, budget_id)
+    plan = await build_full_paycheck_plan_response(
+        db, current_user, bid, periods=periods
     )
-    return await plan
+    return PaycheckPlanResponse(**plan)
 
 
 @router.get("/{paycheck_date}", response_model=PaycheckPlan)
 async def get_single_paycheck(
     paycheck_date: date,
+    budget_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    income_sources, bills, debts = await _fetch_user_data(db, current_user)
-    entries = await _fetch_paycheck_entries(db, current_user.id)
-    paid_ids = await _get_paid_debt_ids(db, current_user.id)
+    bid = await _require_budget_id(db, current_user, budget_id)
+    plan = await build_full_paycheck_plan_response(db, current_user, bid, periods=12)
 
-    if current_user.household_id:
-        from app.services.household_service import get_household_members
-        members = await get_household_members(current_user.household_id, db)
-        user_ids = [m.id for m in members]
-    else:
-        user_ids = [current_user.id]
-
-    plan = build_paycheck_plan(
-        user=current_user,
-        income_sources=income_sources,
-        bills=bills,
-        debts=debts,
-        num_periods=12,
-        paycheck_entries=entries,
-        paid_debt_ids=paid_ids,
-        db=db,
-        user_ids=user_ids,
-        get_paid_bill_ids_fn=_get_paid_bill_ids_by_window,
-    )
-
-    resolved_plan = await plan
-
-    for paycheck in resolved_plan["paychecks"]:
+    for paycheck in plan.get("paychecks") or []:
         if paycheck["paycheck_date"] == paycheck_date:
-            return paycheck
+            return PaycheckPlan(**paycheck)
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,

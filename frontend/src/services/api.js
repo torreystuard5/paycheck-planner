@@ -29,6 +29,25 @@ export function onMaintenanceMode(cb) {
   maintenanceCallback = cb;
 }
 
+// Business trial / upgrade prompts
+let businessGateCallback = null;
+export function onBusinessGate(cb) {
+  businessGateCallback = cb;
+}
+
+function _businessGateDetail(detail) {
+  if (!detail || typeof detail !== 'object') return null;
+  const code = detail.code;
+  if (
+    code === 'business_trial_expired' ||
+    code === 'business_upgrade_required' ||
+    code === 'business_permission_denied'
+  ) {
+    return code;
+  }
+  return null;
+}
+
 /** Clear or set the global maintenance UI flag (e.g. after /auth/me confirms an admin). */
 export function setMaintenanceModeForced(value) {
   if (maintenanceCallback) maintenanceCallback(!!value);
@@ -78,6 +97,11 @@ api.interceptors.response.use(
     ) {
       tosRequiredCallback(error.response.data.version);
       return Promise.reject(error);
+    }
+
+    const bizCode = _businessGateDetail(error.response?.data?.detail);
+    if (error.response?.status === 403 && bizCode && businessGateCallback) {
+      businessGateCallback(bizCode);
     }
 
     if (error.response?.status === 401 && !original._retry) {

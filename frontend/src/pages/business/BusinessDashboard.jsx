@@ -6,8 +6,13 @@ import { formatApiError } from '../../utils/formatApiError';
 import { formatFriendlyDate } from '../../utils/formatDate';
 import CurrencyDisplay from '../../components/CurrencyDisplay';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 
 export default function BusinessDashboard() {
+  const salesWrite = useBusinessWrite('manage_sales');
+  const dedWrite = useBusinessWrite('manage_deductions');
+  const payWrite = useBusinessWrite('manage_staff_pay');
+  const fundWrite = useBusinessWrite('manage_funds');
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -42,7 +47,7 @@ export default function BusinessDashboard() {
           <Briefcase className="w-7 h-7 text-purple-600" />
           Business Dashboard
         </h1>
-        <p className="text-sm text-gray-600 mt-1">Month-to-date snapshot</p>
+        <p className="text-sm text-gray-600 mt-1">Sales, profit, and funds at a glance</p>
       </div>
 
       {error && (
@@ -51,7 +56,9 @@ export default function BusinessDashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">MTD Sales</p>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Today / week / MTD sales</p>
+          <CurrencyDisplay amount={data?.today_sales} className="text-lg font-semibold text-green-700 mt-1 block" />
+          <CurrencyDisplay amount={data?.week_sales} className="text-sm text-green-600 block" />
           <CurrencyDisplay amount={data?.mtd_sales} className="text-2xl font-bold text-green-700 mt-1 block" />
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
@@ -104,18 +111,42 @@ export default function BusinessDashboard() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link to="/business/sales" className="inline-flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
-          <Plus className="w-4 h-4" /> Add Sale
-        </Link>
-        <Link to="/business/deductions" className="inline-flex items-center gap-1.5 px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700">
-          <Plus className="w-4 h-4" /> Add Deduction
-        </Link>
-        <Link to="/business/staff-pay" className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          <Plus className="w-4 h-4" /> Pay Run
-        </Link>
-        <Link to="/business/contingency-fund" className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
-          <Plus className="w-4 h-4" /> Fund Tx
-        </Link>
+        {salesWrite.allowed ? (
+          <Link to="/business/sales" className="inline-flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+            <Plus className="w-4 h-4" /> Add Sale
+          </Link>
+        ) : (
+          <span {...salesWrite.props({ className: 'inline-flex items-center gap-1.5 px-3 py-2 bg-green-600/50 text-white rounded-lg text-sm font-medium cursor-not-allowed' })} title={salesWrite.title}>
+            <Plus className="w-4 h-4" /> Add Sale
+          </span>
+        )}
+        {dedWrite.allowed ? (
+          <Link to="/business/deductions" className="inline-flex items-center gap-1.5 px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700">
+            <Plus className="w-4 h-4" /> Add Deduction
+          </Link>
+        ) : (
+          <span {...dedWrite.props({ className: 'inline-flex items-center gap-1.5 px-3 py-2 bg-orange-600/50 text-white rounded-lg text-sm font-medium cursor-not-allowed' })} title={dedWrite.title}>
+            <Plus className="w-4 h-4" /> Add Deduction
+          </span>
+        )}
+        {payWrite.allowed ? (
+          <Link to="/business/staff-pay" className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            <Plus className="w-4 h-4" /> Pay Run
+          </Link>
+        ) : (
+          <span {...payWrite.props({ className: 'inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600/50 text-white rounded-lg text-sm font-medium cursor-not-allowed' })} title={payWrite.title}>
+            <Plus className="w-4 h-4" /> Pay Run
+          </span>
+        )}
+        {fundWrite.allowed ? (
+          <Link to="/business/contingency-fund" className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
+            <Plus className="w-4 h-4" /> Fund Tx
+          </Link>
+        ) : (
+          <span {...fundWrite.props({ className: 'inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600/50 text-white rounded-lg text-sm font-medium cursor-not-allowed' })} title={fundWrite.title}>
+            <Plus className="w-4 h-4" /> Fund Tx
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

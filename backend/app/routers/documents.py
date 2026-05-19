@@ -2,6 +2,7 @@
 
 import logging
 import os
+from datetime import date
 from typing import Optional
 from uuid import UUID
 
@@ -22,12 +23,18 @@ from app.schemas.document_upload import (
 from app.services.storage.r2_client import R2NotConfiguredError, R2OperationError
 from app.services.storage.r2_provider import get_storage_provider
 from app.utils.budget import resolve_budget_id
-from app.utils.security import get_current_user
+from app.services.ocr_service import run_document_ocr
+from app.utils.security import get_current_user, require_feature
 from app.config import settings
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/documents", tags=["Documents"])
+router = APIRouter(
+    prefix="/documents",
+    tags=["Documents"],
+    dependencies=[Depends(require_feature("receipt_ocr"))],
+)
 
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
@@ -183,9 +190,29 @@ async def finalize_upload(
             detail="Upload not found in storage",
         )
 
-    doc.status = "uploaded"
+    doc.status = "processing"
     if data.file_size is not None:
         doc.file_size = data.file_size
+    await db.flush()
+
+    try:
+        storage = get_storage_provider()
+        download_url = storage.presign_get(doc.object_key, expires_in=600)
+        ocr_result = await run_document_ocr(doc, download_url)
+        doc.ocr_text = ocr_result.text
+        doc.parsed_json = ocr_result.parsed_json
+        if ocr_result.status == "completed":
+            doc.status = "completed"
+        elif ocr_result.status == "failed":
+            doc.status = "failed"
+            doc.error_message = ocr_result.error
+        else:
+            doc.status = "uploaded"
+    except Exception as exc:
+        logger.exception("OCR after finalize failed")
+        doc.status = "uploaded"
+        doc.error_message = str(exc)
+
     await db.flush()
     await db.refresh(doc)
     return doc
@@ -201,8 +228,18 @@ async def list_documents(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List documents for the current user."""
-    query = select(DocumentUpload).where(DocumentUpload.user_id == current_user.id)
+    """List documents for the current user (and household-shared uploads)."""
+    if current_user.household_id:
+        from sqlalchemy import or_
+
+        query = select(DocumentUpload).where(
+            or_(
+                DocumentUpload.user_id == current_user.id,
+                DocumentUpload.household_id == current_user.household_id,
+            )
+        )
+    else:
+        query = select(DocumentUpload).where(DocumentUpload.user_id == current_user.id)
 
     if budget_id is not None:
         query = query.where(DocumentUpload.budget_id == budget_id)
@@ -223,11 +260,18 @@ async def get_document(
     current_user: User = Depends(get_current_user),
 ):
     """Get document details including a short-lived download URL."""
-    result = await db.execute(
-        select(DocumentUpload).where(
-            DocumentUpload.id == document_id,
+    from sqlalchemy import and_, or_
+
+    if current_user.household_id:
+        scope = or_(
             DocumentUpload.user_id == current_user.id,
+            DocumentUpload.household_id == current_user.household_id,
         )
+    else:
+        scope = DocumentUpload.user_id == current_user.id
+
+    result = await db.execute(
+        select(DocumentUpload).where(and_(DocumentUpload.id == document_id, scope))
     )
     doc = result.scalar_one_or_none()
     if not doc:
@@ -258,6 +302,114 @@ async def get_document(
         parsed_json=doc.parsed_json,
         download_url=download_url,
     )
+
+
+class DocumentLinkRequest(BaseModel):
+    entity_type: str = Field(..., pattern="^(bill|debt|tax_deduction)$")
+    entity_id: UUID
+
+
+class CreateBillFromOcrRequest(BaseModel):
+    name: str | None = Field(None, max_length=200)
+    amount: float | None = None
+    due_date: date | None = None
+    budget_id: UUID | None = None
+
+
+@router.post("/{document_id}/link", response_model=DocumentUploadResponse)
+async def link_document(
+    document_id: UUID,
+    body: DocumentLinkRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from sqlalchemy import and_, or_
+
+    if current_user.household_id:
+        scope = or_(
+            DocumentUpload.user_id == current_user.id,
+            DocumentUpload.household_id == current_user.household_id,
+        )
+    else:
+        scope = DocumentUpload.user_id == current_user.id
+
+    result = await db.execute(
+        select(DocumentUpload).where(and_(DocumentUpload.id == document_id, scope))
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    doc.linked_entity_type = body.entity_type
+    doc.linked_entity_id = body.entity_id
+    await db.flush()
+    await db.refresh(doc)
+    return doc
+
+
+@router.post("/{document_id}/create-bill-from-ocr")
+async def create_bill_from_ocr(
+    document_id: UUID,
+    body: CreateBillFromOcrRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from datetime import date as date_type
+    from decimal import Decimal
+
+    from sqlalchemy import and_, or_
+
+    from app.models.bill import Bill
+    from app.utils.budget import resolve_budget_id
+
+    if current_user.household_id:
+        scope = or_(
+            DocumentUpload.user_id == current_user.id,
+            DocumentUpload.household_id == current_user.household_id,
+        )
+    else:
+        scope = DocumentUpload.user_id == current_user.id
+
+    result = await db.execute(
+        select(DocumentUpload).where(and_(DocumentUpload.id == document_id, scope))
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    parsed = doc.parsed_json or {}
+    amount = body.amount
+    if amount is None and parsed.get("amount"):
+        amount = float(parsed["amount"])
+    if amount is None:
+        raise HTTPException(status_code=400, detail="Amount is required")
+
+    due = body.due_date
+    if due is None and parsed.get("due_date"):
+        due = date_type.fromisoformat(str(parsed["due_date"])[:10])
+
+    name = body.name or parsed.get("vendor_name") or doc.original_filename or "New bill"
+    budget_id = await resolve_budget_id(current_user, db, body.budget_id)
+    due_day = due.day if due else 1
+
+    bill = Bill(
+        user_id=current_user.id,
+        household_id=current_user.household_id,
+        name=name[:200],
+        amount=Decimal(str(amount)),
+        frequency="monthly",
+        due_day=due_day,
+        start_date=due,
+        budget_id=budget_id,
+        is_active=True,
+    )
+    db.add(bill)
+    await db.flush()
+    doc.linked_entity_type = "bill"
+    doc.linked_entity_id = bill.id
+    await db.flush()
+    await db.refresh(bill)
+    return {"bill_id": bill.id, "name": bill.name, "amount": str(bill.amount)}
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
