@@ -3,10 +3,13 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
 from app.database import async_session, engine
@@ -333,6 +336,39 @@ app.include_router(business_reports.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 
 
+def _alembic_head_revision() -> str | None:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+    return ScriptDirectory.from_config(cfg).get_current_head()
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.exception("Database error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (
+                "Database error. After a deploy, run `python migrate.py` in the "
+                "Render Shell if login or API calls fail."
+            ),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        raise exc
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
+
 @app.on_event("startup")
 async def seed_default_settings():
     """Ensure default system settings exist."""
@@ -390,7 +426,30 @@ async def service_root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    from app.config import APP_VERSION
+
+    payload: dict = {"status": "healthy", "app_version": APP_VERSION}
+    try:
+        async with async_session() as session:
+            await session.execute(text("SELECT 1"))
+            rev_row = await session.execute(
+                text("SELECT version_num FROM alembic_version LIMIT 1")
+            )
+            current_rev = rev_row.scalar_one_or_none()
+        head_rev = _alembic_head_revision()
+        payload["db"] = "ok"
+        payload["migration_current"] = current_rev
+        payload["migration_head"] = head_rev
+        if head_rev and current_rev != head_rev:
+            payload["status"] = "degraded"
+            payload["migration_warning"] = (
+                "Schema is behind application code. Run `python migrate.py` in Render Shell."
+            )
+    except Exception:
+        logger.exception("Health check DB probe failed")
+        payload["status"] = "degraded"
+        payload["db"] = "error"
+    return payload
 
 
 @app.get("/api/v1/version")

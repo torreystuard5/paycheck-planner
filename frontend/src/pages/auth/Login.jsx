@@ -56,7 +56,11 @@ export default function Login() {
         setError('Something went wrong on our end. Please try again later.');
       } else if (!err.response) {
         setErrorType('warning');
-        setError('Unable to reach the server. Please check your connection and try again.');
+        setError(
+          err.code === 'ERR_NETWORK'
+            ? 'Cannot reach the PayDrift API (network or CORS). If this started after a deploy, an admin may need to run database migrations on Render (`python migrate.py` in Shell) and confirm the API is healthy at /health.'
+            : 'Unable to reach the server. Please check your connection and try again.',
+        );
       } else {
         setErrorType('error');
         setError(err.response?.data?.detail || 'An unexpected error occurred. Please try again.');
