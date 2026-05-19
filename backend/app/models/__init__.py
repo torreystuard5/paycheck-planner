@@ -25,6 +25,7 @@ from app.models.coming_soon import ComingSoon
 from app.models.paycheck_schedule import PaycheckSchedule
 from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.paycheck_entry import PaycheckEntry
+from app.models.pay_period_item_override import PayPeriodItemOverride
 from app.models.system_setting import SystemSetting
 from app.models.broadcast import Broadcast
 from app.models.tax_deduction import TaxDeduction
@@ -71,6 +72,7 @@ __all__ = [
     "PaycheckSchedule",
     "PaycheckChecklist",
     "PaycheckEntry",
+    "PayPeriodItemOverride",
     "SystemSetting",
     "Broadcast",
     "TaxDeduction",
