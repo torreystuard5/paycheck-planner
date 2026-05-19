@@ -58,11 +58,12 @@ async def build_household_financial_overview(
     member_income = []
     combined_income = Decimal("0")
     for m in members:
+        # IncomeSource has budget_id only (no household_id) — do not use apply_household_budget_filter.
         q = select(IncomeSource).where(
             IncomeSource.user_id == m.id,
             IncomeSource.is_active.is_(True),
+            IncomeSource.budget_id == budget_id,
         )
-        q = apply_household_budget_filter(q, IncomeSource, m, budget_id)
         rows = list((await db.execute(q)).scalars().all())
         monthly = sum((_monthly_equiv(r.amount, r.frequency) for r in rows), Decimal("0"))
         combined_income += monthly

@@ -18,7 +18,12 @@ export default function HouseholdFinancialOverview() {
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
-    if (!activeBudget?.id) return;
+    if (!activeBudget?.id) {
+      setLoading(false);
+      setData(null);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -28,7 +33,14 @@ export default function HouseholdFinancialOverview() {
       setData(res.data);
     } catch (err) {
       setData(null);
-      setError(err.response?.data?.detail || 'Could not load household overview.');
+      const detail = err.response?.data?.detail;
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : detail?.message || detail?.code === 'upgrade_required'
+            ? 'Household Financial Overview requires Home Pro.'
+            : 'Could not load household overview.';
+      setError(message);
     } finally {
       setLoading(false);
     }
