@@ -55,11 +55,26 @@ FRONTEND_URL=https://paydrift.netlify.app,http://localhost:5173
 
 ### Migrations
 
-Migrations run **automatically** on every deploy via `start.sh` → `migrate.py` → `alembic upgrade head`.
+**Do not run Alembic in the web startup path on Render.** The API binds to `$PORT` immediately via `start.sh` → `uvicorn` only. Running `alembic upgrade` before Uvicorn causes “No open ports detected” while migrations hold the database.
 
-For manual migration (e.g., first deploy or debugging), open the Render Shell and run:
+After each deploy that includes new migration files, open **Render Shell** for `paydrift-api` and run:
+
 ```bash
 python migrate.py
+```
+
+Or:
+
+```bash
+bash migrate.sh
+```
+
+Run migrations **once** per schema change (or from a one-off job), not on every container restart.
+
+Optional local convenience (not for Render web service):
+
+```bash
+RUN_MIGRATIONS_ON_START=1 bash start.sh
 ```
 
 ### Verify Deployment

@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +9,7 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy import select
 
 from app.config import settings
-from app.database import async_session
+from app.database import async_session, engine
 from app.middleware.request_auth import get_request_user_snapshot
 from app.models.system_setting import SystemSetting
 from app.models.user import User
@@ -54,11 +55,19 @@ from app.routers import (
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await engine.dispose()
+
+
 app = FastAPI(
     title="PayDrift API",
     version="1.0.0",
     description="Budgeting SaaS for paycheck-based financial planning",
     redirect_slashes=False,
+    lifespan=lifespan,
 )
 
 # CORS: FRONTEND_URL (comma-separated) + FRONTEND_ORIGIN (dev default) + production app hosts.
