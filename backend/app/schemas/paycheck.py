@@ -27,6 +27,11 @@ class PaycheckItem(BaseModel):
     effective_period_start: Optional[date] = None
     pulled_forward: bool = False
     pay_period_start: Optional[date] = None
+    is_overridden: bool = False
+    original_pay_period_start: Optional[date] = None
+    override_id: Optional[UUID] = None
+    can_pull_forward: bool = False
+    can_revert_override: bool = False
 
 
 class PaycheckPlan(BaseModel):
@@ -41,6 +46,14 @@ class PaycheckPlan(BaseModel):
     period_end: Optional[date] = None
     is_current: bool = False
     is_next: bool = False
+
+
+class PaycheckUpcomingResponse(BaseModel):
+    budget_id: UUID
+    pay_frequency: Optional[str] = None
+    currency: Optional[str] = None
+    current: Optional[PaycheckPlan] = None
+    upcoming: list[PaycheckPlan] = []
 
 
 class PaycheckPlanResponse(BaseModel):

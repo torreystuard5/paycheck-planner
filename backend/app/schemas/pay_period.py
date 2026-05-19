@@ -45,6 +45,10 @@ class PayPeriodPullForwardCreate(BaseModel):
     item_id: UUID
     occurrence_due_date: date
     budget_id: Optional[UUID] = None
+    target_pay_period_start: Optional[date] = Field(
+        default=None,
+        description="Optional client hint; must match server-resolved current period start.",
+    )
     # Period boundaries are resolved server-side from IncomeSource calendar;
     # clients may omit these on create (Phase 2 will populate).
     natural_period_start: Optional[date] = None
@@ -129,6 +133,11 @@ class PayPeriodPlanItem(BaseModel):
     effective_period_start: date
     pulled_forward: bool = False
     pay_period_start: date
+    is_overridden: bool = False
+    original_pay_period_start: Optional[date] = None
+    override_id: Optional[UUID] = None
+    can_pull_forward: bool = False
+    can_revert_override: bool = False
 
 
 class PayPeriodViewResponse(BaseModel):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
@@ -50,6 +50,8 @@ def _enrich_item(
     natural_period_start: date,
     effective_period_start: date,
     pulled_forward: bool,
+    override_row: PayPeriodItemOverride | None = None,
+    can_pull_forward: bool = False,
 ) -> dict:
     out = dict(item)
     due = _parse_due(item)
@@ -58,6 +60,16 @@ def _enrich_item(
     out["effective_period_start"] = effective_period_start
     out["pulled_forward"] = pulled_forward
     out["pay_period_start"] = effective_period_start
+    out["is_overridden"] = pulled_forward
+    out["original_pay_period_start"] = natural_period_start if pulled_forward else None
+    out["override_id"] = override_row.id if override_row else None
+    out["can_revert_override"] = pulled_forward and override_row is not None
+    out["can_pull_forward"] = (
+        can_pull_forward
+        and not pulled_forward
+        and not bool(item.get("is_paid"))
+        and not bool(item.get("is_overdue"))
+    )
     return out
 
 
@@ -128,6 +140,7 @@ def _apply_effective_lists(
                     natural_period_start=next_start,
                     effective_period_start=current_start,
                     pulled_forward=True,
+                    override_row=omap.get(key),
                 )
             )
 
@@ -142,6 +155,7 @@ def _apply_effective_lists(
                 natural_period_start=next_start,
                 effective_period_start=next_start,
                 pulled_forward=False,
+                can_pull_forward=True,
             )
         )
 
@@ -417,13 +431,24 @@ async def pull_forward(
     )
 
     key = occurrence_key(item_type, item_id, occurrence_due_date)
-    natural_keys = {
-        occurrence_key(i["item_type"], i["id"], _parse_due(i)) for i in natural_next
+    natural_by_key = {
+        occurrence_key(i["item_type"], i["id"], _parse_due(i)): i for i in natural_next
     }
-    if key not in natural_keys:
+    if key not in natural_by_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Item is not assigned to the next pay period for this occurrence.",
+        )
+    target_item = natural_by_key[key]
+    if target_item.get("is_paid"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Paid items cannot be pulled into the current pay period.",
+        )
+    if target_item.get("is_overdue"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Overdue items cannot be pulled forward; they belong in the current period via carry-forward.",
         )
 
     existing = await db.execute(
@@ -487,11 +512,59 @@ async def revert_pull_forward(
     if not user.household_id and row.created_by_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Override not found.")
 
-    row.revoked_at = datetime.now()
+    row.revoked_at = datetime.now(timezone.utc)
     await _clear_checklist_for_occurrence(db, item_type, item_id)
     await db.flush()
     await db.refresh(row)
     return row
+
+
+async def revert_pull_forward_by_id(
+    db: AsyncSession,
+    user: User,
+    budget_id: UUID,
+    override_id: UUID,
+) -> PayPeriodItemOverride:
+    result = await db.execute(
+        select(PayPeriodItemOverride).where(
+            PayPeriodItemOverride.id == override_id,
+            PayPeriodItemOverride.budget_id == budget_id,
+            PayPeriodItemOverride.revoked_at.is_(None),
+            PayPeriodItemOverride.override_type == OVERRIDE_PULL_FORWARD,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Override not found.")
+    return await revert_pull_forward(
+        db,
+        user,
+        budget_id,
+        row.item_type,
+        row.item_id,
+        row.occurrence_due_date,
+    )
+
+
+async def build_upcoming_paycheck_response(
+    db: AsyncSession,
+    user: User,
+    budget_id: UUID,
+    upcoming_count: int = 3,
+) -> dict[str, Any]:
+    """Current paycheck + next N periods with effective assignments."""
+    periods = max(2, 1 + upcoming_count)
+    plan = await build_full_paycheck_plan_response(db, user, budget_id, periods=periods)
+    paychecks = plan.get("paychecks") or []
+    current = paychecks[0] if paychecks else None
+    upcoming = paychecks[1 : 1 + upcoming_count] if len(paychecks) > 1 else []
+    return {
+        "budget_id": budget_id,
+        "pay_frequency": plan.get("pay_frequency"),
+        "currency": plan.get("currency"),
+        "current": current,
+        "upcoming": upcoming,
+    }
 
 
 async def build_full_paycheck_plan_response(

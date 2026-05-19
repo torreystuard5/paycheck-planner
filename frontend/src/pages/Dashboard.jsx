@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import PaycheckPlanItemActions from '../components/PaycheckPlanItemActions';
+import UpcomingPaychecks from '../components/UpcomingPaychecks';
 import usePolling from '../hooks/usePolling';
 import { formatDate, formatPaycheckDate } from '../utils/formatDate';
 
@@ -70,6 +72,7 @@ export default function Dashboard() {
   const [checklistLoading, setChecklistLoading] = useState({});
   const [showHiddenOverdue, setShowHiddenOverdue] = useState(false);
   const [hidingOverdue, setHidingOverdue] = useState({});
+  const [overrideBusyKey, setOverrideBusyKey] = useState(null);
 
   /** Stable key + paid flag: engine is_paid (household source of truth) OR user checklist row. */
   const assignItemKey = useCallback((item) => `${item.item_type}_${item.id || item.item_id}`, []);
@@ -168,8 +171,11 @@ export default function Dashboard() {
       if (savingsRes.status === 'fulfilled') setSavingsGoals(savingsRes.value.data || []);
       if (paymentsRes.status === 'fulfilled') setRecentPayments(paymentsRes.value.data || []);
 
+      const planUrl = bq
+        ? `/api/v1/paycheck-plan?periods=4&${bq}`
+        : '/api/v1/paycheck-plan?periods=4';
       const [planRes, creditRes] = await Promise.allSettled([
-        api.get('/api/v1/paycheck-plan'),
+        api.get(planUrl),
         api.get('/api/v1/debts/credit-efficiency'),
       ]);
 
@@ -234,6 +240,54 @@ export default function Dashboard() {
       setChecklist((prev) => ({ ...prev, [key]: currentState }));
     } finally {
       setChecklistLoading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const overrideItemKey = (item) =>
+    `${item.item_type}_${item.id || item.item_id}_${item.occurrence_due_date || item.due_date}`;
+
+  const handlePullForward = async (item) => {
+    const key = overrideItemKey(item);
+    setOverrideBusyKey(key);
+    try {
+      await api.post('/api/v1/paycheck-plan/overrides', {
+        item_type: item.item_type,
+        item_id: item.id || item.item_id,
+        occurrence_due_date: item.occurrence_due_date || item.due_date,
+        budget_id: activeBudget?.id || undefined,
+        target_pay_period_start: paycheckPlan?.paychecks?.[0]?.pay_period_start
+          || paycheckPlan?.paychecks?.[0]?.paycheck_date,
+      });
+      await fetchDashboardData();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Could not pull item into current paycheck.');
+    } finally {
+      setOverrideBusyKey(null);
+    }
+  };
+
+  const handleRevertOverride = async (item) => {
+    const key = overrideItemKey(item);
+    setOverrideBusyKey(key);
+    try {
+      if (item.override_id) {
+        const bq = activeBudget?.id ? `?budget_id=${activeBudget.id}` : '';
+        await api.delete(`/api/v1/paycheck-plan/overrides/${item.override_id}${bq}`);
+      } else {
+        await api.post('/api/v1/pay-periods/revert-pull-forward', {
+          item_type: item.item_type,
+          item_id: item.id || item.item_id,
+          occurrence_due_date: item.occurrence_due_date || item.due_date,
+          budget_id: activeBudget?.id || undefined,
+        });
+      }
+      await fetchDashboardData();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Could not return item to original paycheck.');
+    } finally {
+      setOverrideBusyKey(null);
     }
   };
 
@@ -500,6 +554,16 @@ export default function Dashboard() {
                                   {item.is_overdue && !isChecked && (
                                     <span className="inline-flex items-center ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">Overdue</span>
                                   )}
+                                  {item.pulled_forward && (
+                                    <span className="inline-flex items-center ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">
+                                      Pulled forward
+                                    </span>
+                                  )}
+                                  {item.pulled_forward && item.original_pay_period_start && (
+                                    <span className="text-[10px] text-gray-400 ml-1">
+                                      from {formatPaycheckDate(item.original_pay_period_start)}
+                                    </span>
+                                  )}
                                   {isSplit && <span className="text-xs text-purple-600 ml-1">(your share)</span>}
                                   {' '}<span className="text-xs text-gray-400">({item.item_type})</span>
                                 </span>
@@ -521,6 +585,13 @@ export default function Dashboard() {
                                     <EyeOff className="w-3.5 h-3.5" />
                                   </button>
                                 )}
+                                <PaycheckPlanItemActions
+                                  item={item}
+                                  busy={overrideBusyKey === overrideItemKey(item)}
+                                  compact
+                                  onPullForward={handlePullForward}
+                                  onRevert={handleRevertOverride}
+                                />
                               </div>
                             );
                           })}
@@ -576,6 +647,14 @@ export default function Dashboard() {
             </div>
           ) : (
             <p className="text-gray-500 text-sm">No paycheck plan configured yet.</p>
+          )}
+          {paycheckPlan?.paychecks?.length > 1 && (
+            <UpcomingPaychecks
+              periods={paycheckPlan.paychecks.slice(1, 4)}
+              overrideBusyKey={overrideBusyKey}
+              onPullForward={handlePullForward}
+              onRevert={handleRevertOverride}
+            />
           )}
         </CollapsibleSection>
 

@@ -19,6 +19,7 @@ from app.services.pay_period_planner import (
     get_period_summary,
     pull_forward,
     revert_pull_forward,
+    revert_pull_forward_by_id,
 )
 from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
@@ -107,4 +108,16 @@ async def pay_period_revert_pull_forward(
         body.item_id,
         body.occurrence_due_date,
     )
+    return PayPeriodItemOverrideOut.from_orm_row(row)
+
+
+@router.delete("/overrides/{override_id}", response_model=PayPeriodItemOverrideOut)
+async def pay_period_delete_override(
+    override_id: UUID,
+    budget_id: UUID | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    bid = await _require_budget_id(db, current_user, budget_id)
+    row = await revert_pull_forward_by_id(db, current_user, bid, override_id)
     return PayPeriodItemOverrideOut.from_orm_row(row)
