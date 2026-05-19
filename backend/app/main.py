@@ -1,16 +1,15 @@
 import logging
 import os
 import time
-from uuid import UUID
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from jose import JWTError, jwt
 from sqlalchemy import select
 
 from app.config import settings
 from app.database import async_session
+from app.middleware.request_auth import get_request_user_snapshot
 from app.models.system_setting import SystemSetting
 from app.models.user import User
 from app.services.tier_access import has_personal_home_access, normalize_plan_tier
@@ -170,37 +169,16 @@ async def tos_check_middleware(request: Request, call_next):
     if path in TOS_EXEMPT_PATHS or path.startswith("/docs") or path.startswith("/redoc") or path == "/openapi.json":
         return await call_next(request)
 
-    auth_header = request.headers.get("authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return await call_next(request)
-
-    token = auth_header.split(" ", 1)[1]
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError:
-        return await call_next(request)
-
-    if payload.get("type") != "access":
-        return await call_next(request)
-
-    user_id = payload.get("sub")
-    if not user_id:
-        return await call_next(request)
-
-    try:
-        uid = UUID(str(user_id))
-    except (ValueError, TypeError):
-        return await call_next(request)
-
-    try:
-        async with async_session() as session:
-            result = await session.execute(select(User.tos_version).where(User.id == uid))
-            tos_version = result.scalar_one_or_none()
+        snap = await get_request_user_snapshot(request)
     except Exception:
         logger.exception("TOS middleware DB lookup failed — allowing request through")
         return await call_next(request)
 
-    if tos_version is None or tos_version < settings.CURRENT_TOS_VERSION:
+    if snap is None:
+        return await call_next(request)
+
+    if snap.tos_version is None or snap.tos_version < settings.CURRENT_TOS_VERSION:
         return JSONResponse(
             status_code=403,
             content={
@@ -220,34 +198,16 @@ async def business_only_personal_api_block(request: Request, call_next):
     if not _blocks_personal_finance_api(path):
         return await call_next(request)
 
-    auth_header = request.headers.get("authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return await call_next(request)
-
-    token = auth_header.split(" ", 1)[1]
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError:
-        return await call_next(request)
-
-    if payload.get("type") != "access":
-        return await call_next(request)
-
-    user_id = payload.get("sub")
-    if not user_id:
-        return await call_next(request)
-
-    try:
-        async with async_session() as session:
-            result = await session.execute(
-                select(User.subscription_tier).where(User.id == UUID(str(user_id)))
-            )
-            raw_tier = result.scalar_one_or_none()
+        snap = await get_request_user_snapshot(request)
     except Exception:
         logger.exception("business_only_personal_api_block: tier lookup failed")
         return await call_next(request)
 
-    if has_personal_home_access(normalize_plan_tier(raw_tier)):
+    if snap is None:
+        return await call_next(request)
+
+    if has_personal_home_access(normalize_plan_tier(snap.subscription_tier)):
         return await call_next(request)
 
     return JSONResponse(
@@ -298,35 +258,15 @@ async def maintenance_mode_middleware(request: Request, call_next):
         return await call_next(request)
 
     # Check if the user is an admin — admins bypass maintenance mode
-    auth_header = request.headers.get("authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header.split(" ", 1)[1]
-        try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        except JWTError:
-            payload = None
-        if payload and payload.get("type") == "access":
-            user_id = payload.get("sub")
-            if user_id:
-                try:
-                    uid = UUID(str(user_id))
-                except (ValueError, TypeError):
-                    uid = None
-                if uid is not None:
-                    try:
-                        async with async_session() as session:
-                            result = await session.execute(
-                                select(User.is_admin).where(User.id == uid)
-                            )
-                            is_admin = result.scalar_one_or_none()
-                            if is_admin:
-                                return await call_next(request)
-                    except Exception:
-                        # DB/mapper errors must not masquerade as maintenance (503).
-                        logger.exception(
-                            "maintenance_mode_middleware: admin is_admin lookup failed — re-raising"
-                        )
-                        raise
+    try:
+        snap = await get_request_user_snapshot(request)
+    except Exception:
+        logger.exception(
+            "maintenance_mode_middleware: admin lookup failed — re-raising"
+        )
+        raise
+    if snap is not None and snap.is_admin:
+        return await call_next(request)
 
     return JSONResponse(
         status_code=503,

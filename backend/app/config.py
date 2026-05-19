@@ -7,6 +7,11 @@ APP_VERSION = "0.9.0"
 
 class Settings(BaseSettings):
     DATABASE_URL: str
+    # Render free Postgres has a low connection cap; keep pool small per worker.
+    DB_POOL_SIZE: int = 3
+    DB_MAX_OVERFLOW: int = 5
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
