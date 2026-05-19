@@ -11,6 +11,7 @@ import PaycheckPlanItemActions from '../components/PaycheckPlanItemActions';
 import UpcomingPaychecks from '../components/UpcomingPaychecks';
 import usePolling from '../hooks/usePolling';
 import { formatDate, formatPaycheckDate } from '../utils/formatDate';
+import { augmentPaycheckPlan } from '../utils/paycheckPlanItems';
 
 const fmtCurrency = (val) => {
   const n = Number(val);
@@ -154,7 +155,8 @@ export default function Dashboard() {
   const fetchDashboardData = useCallback(async () => {
     if (user?.app_mode === 'business') return;
     setError(null);
-    const bq = activeBudget?.id ? `budget_id=${activeBudget.id}` : '';
+    const budgetId = activeBudget?.id || localStorage.getItem('active_budget_id');
+    const bq = budgetId ? `budget_id=${budgetId}` : '';
     const sep = (url) => url.includes('?') ? `${url}&${bq}` : `${url}?${bq}`;
     try {
       const [incomeRes, billsRes, debtsRes, savingsRes, paymentsRes] = await Promise.allSettled([
@@ -180,7 +182,7 @@ export default function Dashboard() {
       ]);
 
       if (planRes.status === 'fulfilled') {
-        const planData = planRes.value.data;
+        const planData = augmentPaycheckPlan(planRes.value.data);
         setPaycheckPlan(planData);
         if (planData?.paychecks?.[0]) {
           const pp = planData.paychecks[0];
@@ -454,6 +456,14 @@ export default function Dashboard() {
               )}
             </div>
           )}
+          {paycheckPlan?.paychecks?.[1] && (
+            <UpcomingPaychecks
+              periods={[paycheckPlan.paychecks[1]]}
+              overrideBusyKey={overrideBusyKey}
+              onPullForward={handlePullForward}
+              onRevert={handleRevertOverride}
+            />
+          )}
           {paycheckPlan && Array.isArray(paycheckPlan.paychecks) && paycheckPlan.paychecks.length > 0 ? (
             <div className="space-y-3">
               {(() => {
@@ -648,9 +658,9 @@ export default function Dashboard() {
           ) : (
             <p className="text-gray-500 text-sm">No paycheck plan configured yet.</p>
           )}
-          {paycheckPlan?.paychecks?.length > 1 && (
+          {paycheckPlan?.paychecks?.length > 2 && (
             <UpcomingPaychecks
-              periods={paycheckPlan.paychecks.slice(1, 4)}
+              periods={paycheckPlan.paychecks.slice(2, 4)}
               overrideBusyKey={overrideBusyKey}
               onPullForward={handlePullForward}
               onRevert={handleRevertOverride}

@@ -18,13 +18,19 @@ export default function UpcomingPaychecks({
   if (!periods.length) return null;
 
   return (
-    <div className="mt-6 pt-6 border-t border-gray-200 space-y-4">
-      <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-gray-500" />
-        Upcoming paychecks
-      </h3>
+    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50/60 p-3 space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-blue-900 flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-blue-600" />
+          Pull into this paycheck
+        </h3>
+        <p className="text-xs text-blue-800/90 mt-1">
+          These items are on your next paycheck. Use the arrow to pay them from this paycheck instead.
+        </p>
+      </div>
       {periods.map((period) => {
         const items = Array.isArray(period.assigned_items) ? period.assigned_items : [];
+        const pullable = items.filter((i) => i.can_pull_forward);
         const label = period.is_next ? 'Next paycheck' : 'Upcoming';
         const itemBusyKey = (item) =>
           `${item.item_type}_${item.id}_${item.occurrence_due_date || item.due_date}`;
@@ -32,7 +38,7 @@ export default function UpcomingPaychecks({
         return (
           <div
             key={String(period.paycheck_date || period.pay_period_start)}
-            className="rounded-lg border border-gray-100 bg-gray-50/80 p-3 space-y-2"
+            className="rounded-lg border border-blue-100 bg-white/80 p-3 space-y-2"
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div>
@@ -47,10 +53,14 @@ export default function UpcomingPaychecks({
               </div>
             </div>
             {items.length === 0 ? (
-              <p className="text-xs text-gray-500">No bills or debts assigned to this period.</p>
+              <p className="text-xs text-gray-600">Nothing assigned to the next paycheck yet.</p>
+            ) : pullable.length === 0 ? (
+              <p className="text-xs text-gray-600">
+                No unpaid items on the next paycheck to pull forward (all paid or already moved).
+              </p>
             ) : (
               <ul className="space-y-1.5">
-                {items.map((item) => {
+                {pullable.map((item) => {
                   const key = `${item.item_type}_${item.id}`;
                   const isBusy = overrideBusyKey === itemBusyKey(item);
                   return (
@@ -83,4 +93,3 @@ export default function UpcomingPaychecks({
     </div>
   );
 }
-

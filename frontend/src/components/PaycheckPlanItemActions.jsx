@@ -10,7 +10,12 @@ export default function PaycheckPlanItemActions({
   onRevert,
   compact = false,
 }) {
-  if (!item?.can_pull_forward && !item?.can_revert_override) {
+  const canRevert = Boolean(
+    item?.can_revert_override || item?.pulled_forward || item?.is_overridden,
+  );
+  const canPull = Boolean(item?.can_pull_forward);
+
+  if (!canPull && !canRevert) {
     return null;
   }
 
@@ -18,7 +23,7 @@ export default function PaycheckPlanItemActions({
     ? 'shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors disabled:opacity-50'
     : 'shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-colors disabled:opacity-50';
 
-  if (item.can_revert_override) {
+  if (canRevert) {
     return (
       <button
         type="button"
