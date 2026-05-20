@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { DollarSign, Users, Loader2 } from 'lucide-react';
+import { DollarSign, Users, Loader2, ChevronDown } from 'lucide-react';
 import api from '../services/api';
 import { useBudget } from '../context/BudgetContext';
 import { formatFriendlyDate } from '../utils/formatDate';
@@ -10,12 +10,15 @@ const fmt = (val) => {
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
+const typeLabel = (item) => (item.item_type === 'debt' ? 'Debt' : 'Bill');
+
 export default function HouseholdFinancialOverview() {
   const { activeBudget, budgetVersion } = useBudget();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('combined');
   const [error, setError] = useState(null);
+  const [collapsedPersons, setCollapsedPersons] = useState([]);
 
   const load = useCallback(async () => {
     if (!activeBudget?.id) {
@@ -50,6 +53,12 @@ export default function HouseholdFinancialOverview() {
     load();
   }, [load, budgetVersion]);
 
+  const togglePerson = (memberId) => {
+    setCollapsedPersons((prev) =>
+      prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId],
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-8 text-gray-500">
@@ -65,7 +74,7 @@ export default function HouseholdFinancialOverview() {
   if (!data) return null;
 
   const tabs = [
-    { key: 'my', label: 'My bills' },
+    { key: 'my', label: 'My bills & debts' },
     { key: 'by_person', label: 'By person' },
     { key: 'combined', label: 'Combined' },
   ];
@@ -83,11 +92,13 @@ export default function HouseholdFinancialOverview() {
           <p className="text-xl font-bold text-green-900 mt-1">{fmt(data.combined_income)}</p>
         </div>
         <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-          <p className="text-xs text-blue-700 font-medium">Combined bills</p>
+          <p className="text-xs text-blue-700 font-medium">Combined bills & debts</p>
           <p className="text-xl font-bold text-blue-900 mt-1">{fmt(data.combined_bills_total)}</p>
         </div>
-        <div className={`rounded-lg p-4 border ${Number(data.combined_remaining) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-          <p className="text-xs font-medium text-gray-700">After bills</p>
+        <div
+          className={`rounded-lg p-4 border ${Number(data.combined_remaining) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}
+        >
+          <p className="text-xs font-medium text-gray-700">After obligations</p>
           <p className="text-xl font-bold mt-1">{fmt(data.combined_remaining)}</p>
         </div>
       </div>
@@ -121,28 +132,58 @@ export default function HouseholdFinancialOverview() {
       </div>
 
       {view === 'my' && (
-        <BillTable items={data.my_bills || []} empty="No bills assigned to you in this budget." />
+        <ObligationTable
+          items={data.my_bills || []}
+          empty="No bills or debts assigned to you in this budget."
+        />
       )}
       {view === 'by_person' && (
-        <div className="space-y-4">
-          {(data.by_person || []).map((g) => (
-            <div key={g.member_id}>
-              <p className="text-sm font-semibold text-gray-800 mb-2">
-                {g.member_name} — {fmt(g.total)} ({fmt(g.paid_total)} paid)
-              </p>
-              <BillTable items={g.bills || []} />
-            </div>
-          ))}
+        <div className="space-y-3">
+          {(data.by_person || []).map((g) => {
+            const isCollapsed = collapsedPersons.includes(g.member_id);
+            return (
+              <div
+                key={g.member_id}
+                className="rounded-lg border border-gray-200 overflow-hidden"
+              >
+                <button
+                  type="button"
+                  onClick={() => togglePerson(g.member_id)}
+                  className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left"
+                >
+                  <span className="text-sm font-semibold text-gray-800">
+                    {g.member_name} — {fmt(g.total)} ({fmt(g.paid_total)} paid)
+                  </span>
+                  <ChevronDown
+                    className={`w-5 h-5 text-gray-400 shrink-0 transition-transform duration-200 ${
+                      isCollapsed ? '-rotate-90' : ''
+                    }`}
+                  />
+                </button>
+                <div
+                  className="overflow-hidden transition-all duration-200 ease-in-out"
+                  style={{ maxHeight: isCollapsed ? '0px' : '4000px', opacity: isCollapsed ? 0 : 1 }}
+                >
+                  <div className="p-3 pt-0">
+                    <ObligationTable items={g.bills || []} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
       {view === 'combined' && (
-        <BillTable items={data.combined_bills_list || []} empty="No household bills in this budget." />
+        <ObligationTable
+          items={data.combined_bills_list || []}
+          empty="No household bills or debts in this budget."
+        />
       )}
     </div>
   );
 }
 
-function BillTable({ items, empty = 'No items.' }) {
+function ObligationTable({ items, empty = 'No items.' }) {
   if (!items.length) {
     return <p className="text-sm text-gray-500">{empty}</p>;
   }
@@ -151,15 +192,24 @@ function BillTable({ items, empty = 'No items.' }) {
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50 text-left text-gray-600">
           <tr>
-            <th className="px-3 py-2">Bill</th>
+            <th className="px-3 py-2">Type</th>
+            <th className="px-3 py-2">Name</th>
             <th className="px-3 py-2">Responsible</th>
             <th className="px-3 py-2">Due</th>
             <th className="px-3 py-2 text-right">Share</th>
           </tr>
         </thead>
         <tbody>
-          {items.map((b) => (
-            <tr key={b.id} className="border-t border-gray-100">
+          {items.map((b) => {
+            const isDebt = b.item_type === 'debt';
+            return (
+            <tr
+              key={`${b.item_type || 'bill'}-${b.id}`}
+              className={`border-t border-gray-100 ${isDebt ? 'bg-purple-50/50' : ''}`}
+            >
+              <td className={`px-3 py-2 ${isDebt ? 'text-purple-700 font-medium' : 'text-gray-500'}`}>
+                {typeLabel(b)}
+              </td>
               <td className="px-3 py-2">{b.name}</td>
               <td className="px-3 py-2 text-gray-600">{b.assigned_member_name || '—'}</td>
               <td className="px-3 py-2 text-gray-600">
@@ -167,11 +217,10 @@ function BillTable({ items, empty = 'No items.' }) {
               </td>
               <td className="px-3 py-2 text-right font-medium">{fmt(b.user_share)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
-
-

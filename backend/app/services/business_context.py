@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -108,14 +109,17 @@ async def load_business_context(db: AsyncSession, actor: User) -> BusinessContex
             permissions=dict(OWNER_PERMISSIONS),
         )
 
-    result = await db.execute(
-        select(BusinessTeamMember).where(
-            BusinessTeamMember.member_user_id == actor.id,
-            BusinessTeamMember.owner_user_id == owner_id,
-            BusinessTeamMember.status == "active",
+    try:
+        result = await db.execute(
+            select(BusinessTeamMember).where(
+                BusinessTeamMember.member_user_id == actor.id,
+                BusinessTeamMember.owner_user_id == owner_id,
+                BusinessTeamMember.status == "active",
+            )
         )
-    )
-    row = result.scalar_one_or_none()
+        row = result.scalar_one_or_none()
+    except (ProgrammingError, DBAPIError):
+        row = None
     if not row:
         return BusinessContext(
             actor=actor,
@@ -133,13 +137,16 @@ async def accept_pending_team_invites(db: AsyncSession, user: User) -> int:
     if not user.email:
         return 0
     email = user.email.lower().strip()
-    result = await db.execute(
-        select(BusinessTeamMember).where(
-            BusinessTeamMember.invited_email == email,
-            BusinessTeamMember.status == "pending",
+    try:
+        result = await db.execute(
+            select(BusinessTeamMember).where(
+                BusinessTeamMember.invited_email == email,
+                BusinessTeamMember.status == "pending",
+            )
         )
-    )
-    rows = result.scalars().all()
+        rows = result.scalars().all()
+    except (ProgrammingError, DBAPIError):
+        return 0
     for row in rows:
         row.member_user_id = user.id
         row.status = "active"

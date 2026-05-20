@@ -1,18 +1,22 @@
-"""Household financial overview — single source for combined income and bill views."""
+"""Household financial overview — combined income, bills, and debts."""
 
 from __future__ import annotations
 
-from decimal import Decimal
+import json
+from calendar import monthrange
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bill import Bill
+from app.models.debt import Debt
+from app.models.debt_payment import DebtPayment
 from app.models.income import IncomeSource
 from app.models.user import User
 from app.services.household_service import get_household_members
-from app.utils.budget import apply_household_budget_filter
 
 
 def _member_name(u: User) -> str:
@@ -43,6 +47,105 @@ def _bill_user_share(bill: Bill, member_count: int, current_user_id: UUID) -> tu
     return (amount if responsible else Decimal("0")), responsible
 
 
+def _debt_next_due(debt: Debt) -> date | None:
+    postpone = getattr(debt, "postpone_until", None)
+    if postpone is not None:
+        if hasattr(postpone, "date"):
+            return postpone.date()
+        return postpone
+    due_day = debt.due_day or 1
+    today = date.today()
+    _, max_day = monthrange(today.year, today.month)
+    clamped = min(int(due_day), max_day)
+    candidate = today.replace(day=clamped)
+    if candidate >= today:
+        return candidate
+    if today.month == 12:
+        y, m = today.year + 1, 1
+    else:
+        y, m = today.year, today.month + 1
+    _, max_day = monthrange(y, m)
+    return date(y, m, min(int(due_day), max_day))
+
+
+def _debt_user_share(
+    debt: Debt, member_count: int, current_user_id: UUID
+) -> tuple[Decimal, bool, Decimal | None]:
+    amount = Decimal(str(debt.minimum_payment or 0))
+    full = amount
+    if debt.is_split:
+        split_count = 1
+        raw = debt.split_members
+        if raw:
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+                if isinstance(parsed, list) and parsed:
+                    split_count = len(parsed)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if split_count <= 1 and debt.household_id and member_count > 1:
+            split_count = member_count
+        if split_count > 1:
+            share = (amount / split_count).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            return share, True, full
+    if debt.household_id and member_count > 0:
+        share = (amount / member_count).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return share, True, full
+    responsible = debt.user_id == current_user_id
+    return (amount if responsible else Decimal("0")), responsible, full if responsible else None
+
+
+def _debt_assignee_ids(debt: Debt, member_ids: list[UUID]) -> list[UUID]:
+    """Which household members own a row in by-person debt lists."""
+    if debt.is_split and debt.split_members:
+        try:
+            parsed = json.loads(debt.split_members) if isinstance(debt.split_members, str) else debt.split_members
+            if isinstance(parsed, list) and parsed:
+                out: list[UUID] = []
+                for raw in parsed:
+                    try:
+                        uid = raw if isinstance(raw, UUID) else UUID(str(raw))
+                    except (TypeError, ValueError):
+                        continue
+                    if uid in member_ids:
+                        out.append(uid)
+                if out:
+                    return out
+        except (json.JSONDecodeError, TypeError):
+            pass
+    if debt.user_id in member_ids:
+        return [debt.user_id]
+    return []
+
+
+def _overview_obligation_filter(model, household_id: UUID, budget_id: UUID, member_ids: list[UUID]):
+    """Household overview: shared items respect budget; each member's personal items always show."""
+    return or_(
+        and_(
+            model.household_id == household_id,
+            or_(model.budget_id == budget_id, model.budget_id.is_(None)),
+        ),
+        and_(model.household_id.is_(None), model.user_id.in_(member_ids)),
+    )
+
+
+async def _paid_debt_ids_this_month(
+    db: AsyncSession,
+    debt_ids: list[UUID],
+) -> set[UUID]:
+    if not debt_ids:
+        return set()
+    today = date.today()
+    result = await db.execute(
+        select(DebtPayment.debt_id).where(
+            DebtPayment.debt_id.in_(debt_ids),
+            DebtPayment.period_month == today.month,
+            DebtPayment.period_year == today.year,
+        )
+    )
+    return {row[0] for row in result.all()}
+
+
 async def build_household_financial_overview(
     db: AsyncSession,
     current_user: User,
@@ -53,12 +156,12 @@ async def build_household_financial_overview(
 
     members = await get_household_members(current_user.household_id, db)
     member_count = len(members) or 1
+    member_ids = [m.id for m in members]
     name_by_id = {m.id: _member_name(m) for m in members}
 
     member_income = []
     combined_income = Decimal("0")
     for m in members:
-        # IncomeSource has budget_id only (no household_id) — do not use apply_household_budget_filter.
         q = select(IncomeSource).where(
             IncomeSource.user_id == m.id,
             IncomeSource.is_active.is_(True),
@@ -89,19 +192,35 @@ async def build_household_financial_overview(
         Bill.is_active.is_(True),
         or_(
             Bill.household_id == current_user.household_id,
-            Bill.user_id.in_([m.id for m in members]),
+            Bill.user_id.in_(member_ids),
         ),
     )
     bill_q = apply_household_budget_filter(bill_q, Bill, current_user, budget_id)
     bills = list((await db.execute(bill_q)).scalars().all())
 
-    def to_line(b: Bill) -> dict:
-        share, responsible = _bill_user_share(b, member_count, current_user.id)
+    debt_q = select(Debt).where(
+        Debt.is_active.is_(True),
+        or_(
+            Debt.household_id == current_user.household_id,
+            Debt.user_id.in_(member_ids),
+        ),
+    )
+    debt_q = apply_household_budget_filter(debt_q, Debt, current_user, budget_id)
+    debts = [
+        d
+        for d in (await db.execute(debt_q)).scalars().all()
+        if Decimal(str(d.balance or 0)) > 0
+    ]
+    paid_debt_ids = await _paid_debt_ids_this_month(db, [d.id for d in debts])
+
+    def bill_line(b: Bill) -> dict:
+        share, _ = _bill_user_share(b, member_count, current_user.id)
         aid = b.assigned_member_id or b.user_id
         due = b.postpone_until or b.start_date
         return {
             "id": b.id,
             "name": b.name,
+            "item_type": "bill",
             "amount": Decimal(str(b.amount or 0)),
             "user_share": share,
             "due_date": due,
@@ -111,29 +230,54 @@ async def build_household_financial_overview(
             "is_household_bill": bool(b.household_id),
         }
 
-    all_lines = []
-    my_bills = []
+    def debt_line(d: Debt) -> dict:
+        share, responsible, full = _debt_user_share(d, member_count, current_user.id)
+        aid = d.user_id
+        return {
+            "id": d.id,
+            "name": d.name,
+            "item_type": "debt",
+            "amount": full or Decimal(str(d.minimum_payment or 0)),
+            "user_share": share,
+            "due_date": _debt_next_due(d),
+            "is_paid": d.id in paid_debt_ids,
+            "assigned_member_id": aid,
+            "assigned_member_name": name_by_id.get(aid),
+            "is_household_bill": bool(d.household_id),
+        }
+
+    all_lines: list[dict] = []
+    my_obligations: list[dict] = []
+
     for b in bills:
-        ln = to_line(b)
+        ln = bill_line(b)
         all_lines.append(ln)
         _, responsible = _bill_user_share(b, member_count, current_user.id)
         if responsible:
-            my_bills.append(ln)
+            my_obligations.append(ln)
+
+    for d in debts:
+        ln = debt_line(d)
+        all_lines.append(ln)
+        _, responsible, _ = _debt_user_share(d, member_count, current_user.id)
+        if responsible:
+            my_obligations.append(ln)
 
     by_person_map: dict[UUID, list] = {m.id: [] for m in members}
     for b in bills:
         aid = b.assigned_member_id or b.user_id
         if aid in by_person_map:
-            by_person_map[aid].append(to_line(b))
+            by_person_map[aid].append(bill_line(b))
+    for d in debts:
+        for aid in _debt_assignee_ids(d, member_ids):
+            if aid in by_person_map:
+                by_person_map[aid].append(debt_line(d))
 
     by_person = []
     for m in members:
         lines = by_person_map.get(m.id, [])
         total = sum((ln["user_share"] for ln in lines), Decimal("0"))
-        paid = sum(
-            (ln["user_share"] for ln in lines if ln["is_paid"]),
-            Decimal("0"),
-        )
+        paid = sum((ln["user_share"] for ln in lines if ln["is_paid"]), Decimal("0"))
         by_person.append(
             {
                 "member_id": m.id,
@@ -144,8 +288,8 @@ async def build_household_financial_overview(
             }
         )
 
-    combined_bills_total = sum((ln["user_share"] for ln in all_lines), Decimal("0"))
-    combined_remaining = combined_income - combined_bills_total
+    combined_obligations_total = sum((ln["user_share"] for ln in all_lines), Decimal("0"))
+    combined_remaining = combined_income - combined_obligations_total
 
     per_person_remaining = []
     income_by_id = {row["member_id"]: row["monthly_income"] for row in member_income}
@@ -167,10 +311,10 @@ async def build_household_financial_overview(
         "budget_id": budget_id,
         "household_id": current_user.household_id,
         "combined_income": combined_income,
-        "combined_bills_total": combined_bills_total,
+        "combined_bills_total": combined_obligations_total,
         "combined_remaining": combined_remaining,
         "member_income": member_income,
-        "my_bills": my_bills,
+        "my_bills": my_obligations,
         "by_person": by_person,
         "combined_bills_list": all_lines,
         "per_person_remaining": per_person_remaining,

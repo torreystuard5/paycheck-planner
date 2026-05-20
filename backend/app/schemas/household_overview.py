@@ -15,13 +15,14 @@ class MemberIncomeLine(BaseModel):
 class BillLine(BaseModel):
     id: UUID
     name: str
+    item_type: str = "bill"
     amount: Decimal
     user_share: Decimal
     due_date: date | None
     is_paid: bool
     assigned_member_id: UUID | None
     assigned_member_name: str | None
-    is_household_bill: bool
+    is_household_bill: bool = False
 
 
 class PersonBillsGroup(BaseModel):

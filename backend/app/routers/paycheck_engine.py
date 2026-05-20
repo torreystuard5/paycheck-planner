@@ -17,6 +17,8 @@ from app.services.pay_period_planner import (
 from app.utils.budget import resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
 
+# Paycheck plan reads/writes use pay_period_planner + pay_period_item_overrides (migration 045).
+# POST/DELETE /overrides here are aliases of /pay-periods/pull-forward and revert endpoints.
 router = APIRouter(prefix="/paycheck-plan", tags=["Paycheck Plan"])
 
 

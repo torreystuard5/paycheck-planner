@@ -7,6 +7,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy import or_, select
+from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -144,13 +145,16 @@ async def resolve_business_owner_user_id(db: AsyncSession, user: User) -> UUID:
     """Owner user id for business data (team members see owner's books)."""
     from app.models.business_team import BusinessTeamMember
 
-    result = await db.execute(
-        select(BusinessTeamMember.owner_user_id).where(
-            BusinessTeamMember.member_user_id == user.id,
-            BusinessTeamMember.status == "active",
+    try:
+        result = await db.execute(
+            select(BusinessTeamMember.owner_user_id).where(
+                BusinessTeamMember.member_user_id == user.id,
+                BusinessTeamMember.status == "active",
+            )
         )
-    )
-    owner_id = result.scalar_one_or_none()
+        owner_id = result.scalar_one_or_none()
+    except (ProgrammingError, DBAPIError):
+        owner_id = None
     return owner_id or user.id
 
 

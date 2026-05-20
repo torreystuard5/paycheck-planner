@@ -29,6 +29,7 @@ from app.models import (  # noqa: F401 — ensure all models are registered
     BusinessStaff,
     BusinessStaffPayRun,
     BusinessDeduction,
+    PayPeriodItemOverride,
 )
 
 config = context.config

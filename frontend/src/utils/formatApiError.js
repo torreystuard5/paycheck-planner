@@ -28,7 +28,10 @@ export function formatApiError(err) {
       .filter(Boolean)
       .join(' ');
   }
-  if (typeof d === 'object' && d.msg) return String(d.msg);
+  if (typeof d === 'object') {
+    if (d.message) return String(d.message);
+    if (d.msg) return String(d.msg);
+  }
   try {
     return JSON.stringify(d);
   } catch {

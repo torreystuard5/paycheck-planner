@@ -147,7 +147,7 @@ export default function Sidebar({ open, onClose }) {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [switching, setSwitching] = useState(false);
-  const { can, loading: accessLoading } = useBusinessAccess();
+  const { can, loading: accessLoading, refresh: refreshBusinessAccess } = useBusinessAccess();
 
   const appMode = user?.app_mode || 'personal';
   const businessLinks =
@@ -162,22 +162,45 @@ export default function Sidebar({ open, onClose }) {
 
   const handleModeSwitch = async (mode) => {
     if (mode === appMode || switching) return;
-    if (mode === 'business') {
-      navigate('/edition');
-      return;
-    }
     setSwitching(true);
     try {
+      if (mode === 'business') {
+        let data;
+        try {
+          ({ data } = await api.post('/api/v1/business/edition/activate', { accept_trial: false }));
+        } catch (err) {
+          const detail = err.response?.data?.detail;
+          const code = typeof detail === 'object' ? detail?.code : null;
+          if (code === 'business_upgrade_required') {
+            ({ data } = await api.post('/api/v1/business/edition/activate', { accept_trial: true }));
+          } else {
+            throw err;
+          }
+        }
+        updateUser(data);
+        await refreshBusinessAccess();
+        navigate('/business/dashboard');
+        onClose();
+        return;
+      }
       const { data } = await api.post('/api/v1/business/edition/enter-personal');
       updateUser(data);
       navigate('/dashboard');
-    } catch {
-      try {
-        const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'personal' });
-        updateUser(data);
-        navigate('/dashboard');
-      } catch {
-        /* ignore */
+      onClose();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      const code = typeof detail === 'object' ? detail?.code : null;
+      if (mode === 'business' && code === 'business_upgrade_required') {
+        navigate('/upgrade');
+      } else if (mode === 'personal') {
+        try {
+          const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'personal' });
+          updateUser(data);
+          navigate('/dashboard');
+          onClose();
+        } catch {
+          /* ignore */
+        }
       }
     } finally {
       setSwitching(false);
