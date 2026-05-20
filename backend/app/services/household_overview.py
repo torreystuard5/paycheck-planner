@@ -9,6 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bill import Bill
@@ -136,14 +137,17 @@ async def _paid_debt_ids_this_month(
     if not debt_ids:
         return set()
     today = date.today()
-    result = await db.execute(
-        select(DebtPayment.debt_id).where(
-            DebtPayment.debt_id.in_(debt_ids),
-            DebtPayment.period_month == today.month,
-            DebtPayment.period_year == today.year,
+    try:
+        result = await db.execute(
+            select(DebtPayment.debt_id).where(
+                DebtPayment.debt_id.in_(debt_ids),
+                DebtPayment.period_month == today.month,
+                DebtPayment.period_year == today.year,
+            )
         )
-    )
-    return {row[0] for row in result.all()}
+        return {row[0] for row in result.all()}
+    except (ProgrammingError, DBAPIError):
+        return set()
 
 
 async def build_household_financial_overview(
@@ -188,24 +192,17 @@ async def build_household_financial_overview(
             }
         )
 
+    hh_id = current_user.household_id
     bill_q = select(Bill).where(
         Bill.is_active.is_(True),
-        or_(
-            Bill.household_id == current_user.household_id,
-            Bill.user_id.in_(member_ids),
-        ),
+        _overview_obligation_filter(Bill, hh_id, budget_id, member_ids),
     )
-    bill_q = apply_household_budget_filter(bill_q, Bill, current_user, budget_id)
     bills = list((await db.execute(bill_q)).scalars().all())
 
     debt_q = select(Debt).where(
         Debt.is_active.is_(True),
-        or_(
-            Debt.household_id == current_user.household_id,
-            Debt.user_id.in_(member_ids),
-        ),
+        _overview_obligation_filter(Debt, hh_id, budget_id, member_ids),
     )
-    debt_q = apply_household_budget_filter(debt_q, Debt, current_user, budget_id)
     debts = [
         d
         for d in (await db.execute(debt_q)).scalars().all()
@@ -219,7 +216,7 @@ async def build_household_financial_overview(
         due = b.postpone_until or b.start_date
         return {
             "id": b.id,
-            "name": b.name,
+            "name": b.name or "Untitled bill",
             "item_type": "bill",
             "amount": Decimal(str(b.amount or 0)),
             "user_share": share,
@@ -235,7 +232,7 @@ async def build_household_financial_overview(
         aid = d.user_id
         return {
             "id": d.id,
-            "name": d.name,
+            "name": d.name or "Untitled debt",
             "item_type": "debt",
             "amount": full or Decimal(str(d.minimum_payment or 0)),
             "user_share": share,

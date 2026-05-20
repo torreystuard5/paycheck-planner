@@ -40,9 +40,13 @@ export default function HouseholdFinancialOverview() {
       const message =
         typeof detail === 'string'
           ? detail
-          : detail?.message || detail?.code === 'upgrade_required'
-            ? 'Household Financial Overview requires Home Pro.'
-            : 'Could not load household overview.';
+          : detail?.message
+            || (detail?.code === 'upgrade_required'
+              ? 'Household Financial Overview requires Home Pro.'
+              : null)
+            || (err.response?.status === 403
+              ? 'You do not have access to the household financial overview.'
+              : 'Could not load household overview.');
       setError(message);
     } finally {
       setLoading(false);
