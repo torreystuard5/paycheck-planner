@@ -354,12 +354,18 @@ async def unmark_debt_paid(
     await db.flush()
     await db.refresh(debt)
 
-    # Remove auto-logged payment records for this debt
+    # Remove auto-logged payment records for this debt, scoped to current month
     try:
+        from calendar import monthrange as _mr
+        _month_start = date(today.year, today.month, 1)
+        _, _last_day = _mr(today.year, today.month)
+        _month_end = date(today.year, today.month, _last_day)
         auto_result = await db.execute(
             select(Payment).where(
                 Payment.debt_id == debt.id,
                 Payment.auto_logged.is_(True),
+                Payment.paid_date >= _month_start,
+                Payment.paid_date <= _month_end,
             )
         )
         for auto_pay in auto_result.scalars().all():

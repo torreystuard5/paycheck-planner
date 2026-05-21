@@ -44,7 +44,7 @@ const fmtCurrency = (val) => {
 
 export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
   const { user } = useAuth();
-  const { activeBudget, budgetVersion } = useBudget();
+  const { activeBudget, budgetVersion, bumpBudgetVersion } = useBudget();
   const toast = useToast();
   const [activeTab, setActiveTab] = useState('Overview');
   const [debts, setDebts] = useState([]);
@@ -288,6 +288,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
     try {
       const res = await api.post(`/api/v1/debts/${debtId}/mark-paid`, { amount: num });
       setDebts((prev) => prev.map((d) => (d.id === debtId ? res.data : d)));
+      bumpBudgetVersion();
     } catch (err) {
       if (err?.response?.status === 409) {
         fetchDebts();
@@ -304,6 +305,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
     try {
       const res = await api.delete(`/api/v1/debts/${debtId}/unmark-paid`);
       setDebts((prev) => prev.map((d) => (d.id === debtId ? res.data : d)));
+      bumpBudgetVersion();
     } catch {
       setError('Failed to undo payment.');
     } finally {

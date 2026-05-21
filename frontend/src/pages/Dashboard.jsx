@@ -49,7 +49,7 @@ function CollapsibleSection({ sectionKey, title, icon: Icon, iconColor, collapse
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { activeBudget, budgetVersion, loading: budgetLoading } = useBudget();
+  const { activeBudget, budgetVersion, bumpBudgetVersion, loading: budgetLoading } = useBudget();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -238,6 +238,7 @@ export default function Dashboard() {
         is_checked: newState,
       });
       await fetchDashboardData();
+      bumpBudgetVersion();
     } catch {
       setChecklist((prev) => ({ ...prev, [key]: currentState }));
     } finally {
