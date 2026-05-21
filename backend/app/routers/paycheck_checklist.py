@@ -88,7 +88,11 @@ async def _sync_debt_payment(
 ):
     """Create or remove a DebtPayment record to stay in sync."""
     today = date.today()
-    # Check for payment by ANY household member (not just current user)
+    # Check for payment by ANY household member (not just current user).
+    # Use scalars().first() instead of scalar_one_or_none() because
+    # household members may each have a DebtPayment row for the same
+    # (debt_id, period_month, period_year), which would cause
+    # MultipleResultsFound and a 500 error.
     existing_result = await db.execute(
         select(DebtPayment).where(
             DebtPayment.debt_id == debt_id,
@@ -96,7 +100,7 @@ async def _sync_debt_payment(
             DebtPayment.period_year == today.year,
         )
     )
-    existing = existing_result.scalar_one_or_none()
+    existing = existing_result.scalars().first()
 
     # Fetch the debt to get the minimum_payment amount
     debt_result = await db.execute(select(Debt).where(Debt.id == debt_id))
@@ -131,10 +135,21 @@ async def _sync_debt_payment(
         except Exception:
             pass
     elif not is_checked and existing:
-        # Restore balance
+        # Restore balance using sum of ALL matching payments (handles
+        # household case where multiple members each have a row).
+        all_result = await db.execute(
+            select(DebtPayment).where(
+                DebtPayment.debt_id == debt_id,
+                DebtPayment.period_month == today.month,
+                DebtPayment.period_year == today.year,
+            )
+        )
+        all_payments = all_result.scalars().all()
+        restore_total = sum(Decimal(str(p.amount)) for p in all_payments)
         current_balance = Decimal(str(debt.balance or 0))
-        debt.balance = current_balance + Decimal(str(existing.amount))
-        await db.delete(existing)
+        debt.balance = current_balance + restore_total
+        for p in all_payments:
+            await db.delete(p)
         # Remove auto-logged payment record
         try:
             auto_result = await db.execute(
