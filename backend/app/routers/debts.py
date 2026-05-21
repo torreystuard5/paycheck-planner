@@ -67,7 +67,9 @@ async def _debt_to_response(
 
     today = date.today()
     # Check if ANY household member has paid this debt for the current period.
-    # This ensures paid status syncs across household members.
+    # Use scalars().first() instead of scalar_one_or_none() because
+    # household members may each have a DebtPayment row for the same
+    # (debt_id, period_month, period_year), causing MultipleResultsFound.
     result = await db.execute(
         select(DebtPayment)
         .where(
@@ -77,7 +79,7 @@ async def _debt_to_response(
         )
         .limit(1)
     )
-    period_payment = result.scalar_one_or_none()
+    period_payment = result.scalars().first()
     resp.is_paid_this_period = period_payment is not None
 
     last_result = await db.execute(
@@ -86,7 +88,7 @@ async def _debt_to_response(
         .order_by(DebtPayment.payment_date.desc())
         .limit(1)
     )
-    last_payment = last_result.scalar_one_or_none()
+    last_payment = last_result.scalars().first()
     resp.last_payment_date = last_payment.payment_date if last_payment else None
 
     # Compute total paid and percent paid for progress bar
@@ -216,15 +218,35 @@ async def mark_debt_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     today = date.today()
-    # Check if ANY household member already paid this debt for the period
-    existing = await db.execute(
+    # Check if ANY household member already paid this debt for the period.
+    # Use scalars().all() to find all rows and self-heal duplicates left by
+    # prior broken transactions.
+    existing_result = await db.execute(
         select(DebtPayment).where(
             DebtPayment.debt_id == debt_id,
             DebtPayment.period_month == today.month,
             DebtPayment.period_year == today.year,
         )
     )
-    if existing.scalar_one_or_none():
+    existing_rows = existing_result.scalars().all()
+
+    # Self-heal: deduplicate rows per (debt_id, user_id, period) — keep the
+    # earliest row for each user_id, delete the rest.
+    if len(existing_rows) > 1:
+        seen: dict[str, object] = {}
+        for row in sorted(existing_rows, key=lambda r: r.created_at or r.payment_date):
+            key = str(row.user_id)
+            if key not in seen:
+                seen[key] = row
+            else:
+                # Duplicate — restore its amount to balance and delete
+                dup_amt = Decimal(str(row.amount))
+                debt.balance = Decimal(str(debt.balance or 0)) + dup_amt
+                await db.delete(row)
+        await db.flush()
+        existing_rows = list(seen.values())
+
+    if existing_rows:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Debt already marked paid for this period",
@@ -305,7 +327,9 @@ async def unmark_debt_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     today = date.today()
-    # Find the payment for this period regardless of which household member made it
+    # Find ALL payments for this period (handles household case where
+    # multiple members may each have a DebtPayment row).
+    # Use scalars().all() to avoid MultipleResultsFound from scalar_one_or_none().
     payment_result = await db.execute(
         select(DebtPayment).where(
             DebtPayment.debt_id == debt_id,
@@ -313,27 +337,28 @@ async def unmark_debt_paid(
             DebtPayment.period_year == today.year,
         )
     )
-    payment = payment_result.scalar_one_or_none()
-    if not payment:
+    all_payments = payment_result.scalars().all()
+    if not all_payments:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No payment found for this period",
         )
 
-    # Add amount back to balance
+    # Restore balance using sum of ALL matching payments
+    restore_total = sum(Decimal(str(p.amount)) for p in all_payments)
     current_balance = Decimal(str(debt.balance or 0))
-    debt.balance = current_balance + Decimal(str(payment.amount))
+    debt.balance = current_balance + restore_total
 
-    await db.delete(payment)
+    for p in all_payments:
+        await db.delete(p)
     await db.flush()
     await db.refresh(debt)
 
-    # Remove auto-logged payment record for this debt
+    # Remove auto-logged payment records for this debt
     try:
         auto_result = await db.execute(
             select(Payment).where(
                 Payment.debt_id == debt.id,
-                Payment.user_id == current_user.id,
                 Payment.auto_logged.is_(True),
             )
         )
