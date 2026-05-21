@@ -53,7 +53,7 @@ export default function BusinessModeRoute() {
   }
 
   if (user.app_mode !== 'business') {
-    return <Navigate to="/edition" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (
