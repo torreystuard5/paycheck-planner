@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Copy, LogOut, Activity, Clock, Settings, CheckCircle, DollarSign, ClipboardList, Trash2 } from 'lucide-react';
+import { Users, UserPlus, Copy, LogOut, Activity, Clock, Settings, CheckCircle, DollarSign, ClipboardList, Trash2, ShoppingCart, Plus, Edit2, X } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -23,8 +23,18 @@ const DEFAULT_CHILD_PERMS = {
   can_view_invite_code: false,
 };
 
+const TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'members', label: 'Members' },
+  { key: 'shared', label: 'Shared Items' },
+  { key: 'shopping', label: 'Shopping List' },
+];
+
+const CATEGORIES = ['Grocery', 'Household', 'Personal', 'Other'];
+
 export default function Household() {
   const { user, updateUser } = useAuth();
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [household, setHousehold] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -45,6 +55,15 @@ export default function Household() {
   const [choreRecurring, setChoreRecurring] = useState('');
   const [permModalMember, setPermModalMember] = useState(null);
   const [permDraft, setPermDraft] = useState({ ...DEFAULT_CHILD_PERMS });
+
+  // Shopping list state
+  const [shoppingItems, setShoppingItems] = useState([]);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemQty, setNewItemQty] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState('');
+  const [editingItem, setEditingItem] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [shoppingFilter, setShoppingFilter] = useState('all');
 
   const fetchHousehold = useCallback(async () => {
     try {
@@ -106,14 +125,24 @@ export default function Household() {
     }
   }, []);
 
+  const fetchShoppingList = useCallback(async () => {
+    try {
+      const res = await api.get('/api/v1/households/shopping-list');
+      setShoppingItems(res.data.items || []);
+    } catch {
+      setShoppingItems([]);
+    }
+  }, []);
+
   const fetchAll = useCallback(async () => {
     await Promise.all([
       fetchHousehold(),
       fetchActivity(),
       fetchHouseholdBills(),
       fetchChores(),
+      fetchShoppingList(),
     ]);
-  }, [fetchHousehold, fetchActivity, fetchHouseholdBills, fetchChores]);
+  }, [fetchHousehold, fetchActivity, fetchHouseholdBills, fetchChores, fetchShoppingList]);
 
   useEffect(() => {
     const init = async () => {
@@ -169,6 +198,7 @@ export default function Household() {
       setHouseholdBills([]);
       setBillBreakdowns({});
       setChores([]);
+      setShoppingItems([]);
       setSuccess('Left household.');
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to leave household.');
@@ -282,6 +312,75 @@ export default function Household() {
     }
   };
 
+  // Shopping list handlers
+  const handleAddShoppingItem = async (e) => {
+    e.preventDefault();
+    if (!newItemName.trim()) return;
+    setError(null);
+    try {
+      const body = { item_name: newItemName.trim() };
+      if (newItemQty.trim()) body.quantity = newItemQty.trim();
+      if (newItemCategory) body.category = newItemCategory;
+      await api.post('/api/v1/households/shopping-list', body);
+      setNewItemName('');
+      setNewItemQty('');
+      setNewItemCategory('');
+      await fetchShoppingList();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to add item.');
+    }
+  };
+
+  const handleToggleShoppingItem = async (item) => {
+    setError(null);
+    try {
+      await api.patch(`/api/v1/households/shopping-list/${item.id}`, {
+        is_completed: !item.is_completed,
+      });
+      await fetchShoppingList();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update item.');
+    }
+  };
+
+  const handleDeleteShoppingItem = async (id) => {
+    setError(null);
+    try {
+      await api.delete(`/api/v1/households/shopping-list/${id}`);
+      await fetchShoppingList();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to delete item.');
+    }
+  };
+
+  const startEditItem = (item) => {
+    setEditingItem(item.id);
+    setEditForm({
+      item_name: item.item_name,
+      quantity: item.quantity || '',
+      category: item.category || '',
+      notes: item.notes || '',
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem || !editForm.item_name?.trim()) return;
+    setError(null);
+    try {
+      await api.patch(`/api/v1/households/shopping-list/${editingItem}`, {
+        item_name: editForm.item_name.trim(),
+        quantity: editForm.quantity || null,
+        category: editForm.category || null,
+        notes: editForm.notes || null,
+      });
+      setEditingItem(null);
+      setEditForm({});
+      await fetchShoppingList();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update item.');
+    }
+  };
+
   const getInitialColor = (name) => {
     const colors = [
       'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500',
@@ -368,13 +467,22 @@ export default function Household() {
     );
   }
 
-  // In household — show full household UI
+  // In household — show tabbed UI
   const isCreator = household.created_by === user?.id;
   const isAdult = (user?.household_member_role || 'adult') === 'adult';
   const childPerms = { ...DEFAULT_CHILD_PERMS, ...(user?.household_child_permissions || {}) };
   const showInvite = isAdult || childPerms.can_view_invite_code;
   const showSharedBills = isAdult || childPerms.can_view_bills;
   const showMoney = isAdult || childPerms.can_view_amounts;
+
+  // Shopping list filtering
+  const filteredShoppingItems = shoppingItems.filter((item) => {
+    if (shoppingFilter === 'active') return !item.is_completed;
+    if (shoppingFilter === 'completed') return item.is_completed;
+    return true;
+  });
+  const activeItems = filteredShoppingItems.filter((i) => !i.is_completed);
+  const completedItems = filteredShoppingItems.filter((i) => i.is_completed);
 
   return (
     <div className="space-y-6">
@@ -402,319 +510,589 @@ export default function Household() {
         </div>
       )}
 
-      {showMoney && (
-        <ProFeatureGate featureKey="household_overview">
-          <HouseholdFinancialOverview />
-        </ProFeatureGate>
-      )}
+      {/* Tabs — matches Settings.jsx pattern */}
+      <div className="border-b border-gray-200 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <nav className="flex gap-1 min-w-max" aria-label="Household tabs">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap min-h-[44px] ${
+                activeTab === tab.key
+                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Members */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Users className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Members</h2>
-          </div>
-          <div className="space-y-3">
-            {(household.members || []).map((member) => (
-              <div key={member.id} className="flex flex-col gap-2 border-b border-gray-50 last:border-0 pb-3 last:pb-0">
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full ${getInitialColor(member.first_name)} flex items-center justify-center text-white text-sm font-medium`}>
-                    {(member.first_name || '?')[0].toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {member.first_name} {member.last_name}
-                      {(member.household_member_role || 'adult') === 'child' && (
-                        <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Child</span>
-                      )}
-                      {(member.household_member_role || 'adult') === 'adult' && (
-                        <span className="ml-2 text-[10px] uppercase tracking-wide text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Adult</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate">{member.email}</p>
-                  </div>
+      {/* ========== OVERVIEW TAB ========== */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          {showMoney && (
+            <ProFeatureGate featureKey="household_overview">
+              <HouseholdFinancialOverview />
+            </ProFeatureGate>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Invite Code */}
+            {showInvite ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <UserPlus className="w-5 h-5 text-green-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">Invite Code</h2>
                 </div>
-                {isAdult && member.id !== household.created_by && (
-                  <div className="flex flex-wrap items-center gap-2 pl-11">
-                    <label className="text-xs text-gray-500">Role</label>
-                    <select
-                      value={member.household_member_role || 'adult'}
-                      onChange={(e) => handleRoleChange(member.id, e.target.value)}
-                      className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white"
-                    >
-                      <option value="adult">Adult</option>
-                      <option value="child">Child</option>
-                    </select>
-                    {(member.household_member_role || 'adult') === 'child' && (
-                      <button
-                        type="button"
-                        onClick={() => openPermModal(member)}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                      >
-                        Permissions
-                      </button>
-                    )}
-                  </div>
-                )}
+                <p className="text-sm text-gray-600 mb-3">Share this code to invite someone.</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-gray-100 px-4 py-2.5 rounded-lg text-lg font-mono font-bold text-gray-900 text-center tracking-widest">
+                    {household.invite_code}
+                  </code>
+                  <button
+                    onClick={handleCopyCode}
+                    className="p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Copy code"
+                  >
+                    {copied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
+                  </button>
+                </div>
+                {copied && <p className="text-xs text-green-600 mt-2">Copied to clipboard!</p>}
               </div>
-            ))}
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col justify-center">
+                <p className="text-sm text-gray-500">Invite code is hidden for your account. Ask a parent or household admin if you need it.</p>
+              </div>
+            )}
+
+            {/* Split Method */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Settings className="w-5 h-5 text-purple-600" />
+                <h2 className="text-lg font-semibold text-gray-900">Split Method</h2>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">How bills are split between members.</p>
+              <select
+                value={household.split_method || 'equal'}
+                onChange={handleSplitMethodChange}
+                disabled={!isCreator || !isAdult}
+                className={`${inputClass} ${(!isCreator || !isAdult) ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+              >
+                <option value="equal">Equal Split</option>
+                <option value="proportional">Proportional To Income</option>
+                <option value="custom">Custom</option>
+              </select>
+              {(!isCreator || !isAdult) && (
+                <p className="text-xs text-gray-400 mt-2">
+                  {!isAdult ? 'Only adults can change split settings.' : 'Only the household creator can change this.'}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Activity Feed */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-600" />
+                <h2 className="text-lg font-semibold text-gray-900">Activity Feed</h2>
+              </div>
+              {lastUpdated && (
+                <span className="text-xs text-gray-400">
+                  Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
+                </span>
+              )}
+            </div>
+
+            {activities.length === 0 ? (
+              <p className="text-sm text-gray-500">No Activity Yet.</p>
+            ) : (
+              <div className="max-h-96 overflow-y-auto space-y-3">
+                {activities.map((item) => (
+                  <div key={item.id} className="flex items-start gap-3">
+                    <div className={`w-8 h-8 rounded-full ${getInitialColor(item.user_first_name)} flex items-center justify-center text-white text-xs font-medium shrink-0`}>
+                      {(item.user_first_name || '?')[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-gray-900">
+                        <span className="font-medium">{item.user_first_name || 'Someone'}</span>
+                        {' '}{item.action}{' '}{item.entity_type.replace(/_/g, ' ')}{' '}
+                        <span className="font-medium">&apos;{item.entity_name}&apos;</span>
+                        {item.details && <span className="text-gray-500"> &mdash; {item.details}</span>}
+                      </p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3 text-gray-400" />
+                        <span className="text-xs text-gray-400">
+                          {item.created_at ? formatDistanceToNow(parseISO(item.created_at), { addSuffix: true }) : ''}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+      )}
 
-        {/* Invite Code */}
-        {showInvite ? (
+      {/* ========== MEMBERS TAB ========== */}
+      {activeTab === 'members' && (
+        <div className="space-y-6">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-4">
-              <UserPlus className="w-5 h-5 text-green-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Invite Code</h2>
+              <Users className="w-5 h-5 text-blue-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Members</h2>
+              <span className="text-xs text-gray-400 ml-auto">{(household.members || []).length} member{(household.members || []).length !== 1 ? 's' : ''}</span>
             </div>
-            <p className="text-sm text-gray-600 mb-3">Share this code to invite someone.</p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-gray-100 px-4 py-2.5 rounded-lg text-lg font-mono font-bold text-gray-900 text-center tracking-widest">
-                {household.invite_code}
-              </code>
-              <button
-                onClick={handleCopyCode}
-                className="p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                title="Copy code"
-              >
-                {copied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
-              </button>
-            </div>
-            {copied && <p className="text-xs text-green-600 mt-2">Copied to clipboard!</p>}
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col justify-center">
-            <p className="text-sm text-gray-500">Invite code is hidden for your account. Ask a parent or household admin if you need it.</p>
-          </div>
-        )}
-
-        {/* Split Method */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Settings className="w-5 h-5 text-purple-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Split Method</h2>
-          </div>
-          <p className="text-sm text-gray-600 mb-3">How bills are split between members.</p>
-          <select
-            value={household.split_method || 'equal'}
-            onChange={handleSplitMethodChange}
-            disabled={!isCreator || !isAdult}
-            className={`${inputClass} ${(!isCreator || !isAdult) ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-          >
-            <option value="equal">Equal Split</option>
-            <option value="proportional">Proportional To Income</option>
-            <option value="custom">Custom</option>
-          </select>
-          {(!isCreator || !isAdult) && (
-            <p className="text-xs text-gray-400 mt-2">
-              {!isAdult ? 'Only adults can change split settings.' : 'Only the household creator can change this.'}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Household Bills Breakdown */}
-      {showSharedBills && householdBills.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <DollarSign className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Shared Bills</h2>
-          </div>
-          <div className="space-y-4">
-            {householdBills.map((bill) => {
-              const bd = billBreakdowns[bill.id];
-              return (
-                <div key={bill.id} className="border border-gray-100 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-900">{bill.name}</h3>
-                      <p className="text-xs text-gray-500">{bill.category || 'Uncategorized'} &middot; Due {bill.next_due_date ? formatFriendlyDate(bill.next_due_date) : (bill.due_day ? `day ${bill.due_day}` : '--')}</p>
+            <div className="space-y-3">
+              {(household.members || []).map((member) => (
+                <div key={member.id} className="flex flex-col gap-2 border-b border-gray-50 last:border-0 pb-3 last:pb-0">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full ${getInitialColor(member.first_name)} flex items-center justify-center text-white text-sm font-medium`}>
+                      {(member.first_name || '?')[0].toUpperCase()}
                     </div>
-                    <span className="text-sm font-bold text-gray-900">
-                      {showMoney ? fmtCurrency(bill.amount) : '—'}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {member.first_name} {member.last_name}
+                        {(member.household_member_role || 'adult') === 'child' && (
+                          <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Child</span>
+                        )}
+                        {(member.household_member_role || 'adult') === 'adult' && (
+                          <span className="ml-2 text-[10px] uppercase tracking-wide text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Adult</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                    </div>
                   </div>
-
-                  {bd ? (
-                    <>
-                      {/* Summary */}
-                      <div className="flex gap-4 mb-3 text-xs">
-                        <span className="text-green-600">Paid: {showMoney ? fmtCurrency(bd.total_paid) : '—'}</span>
-                        <span className="text-amber-600">Remaining: {showMoney ? fmtCurrency(bd.total_remaining) : '—'}</span>
-                      </div>
-                      {/* Per-member */}
-                      <div className="space-y-1.5">
-                        {bd.members?.map((member) => {
-                          const balance = Number(member.balance);
-                          const isPaid = balance <= 0;
-                          return (
-                            <div key={member.member_id} className="flex items-center justify-between text-sm">
-                              <span className="text-gray-700">{member.member_name}</span>
-                              <div className="flex items-center gap-3 text-xs">
-                                <span className="text-gray-500">Share: {showMoney ? fmtCurrency(member.share) : '—'}</span>
-                                <span className="text-gray-500">Paid: {showMoney ? fmtCurrency(member.paid) : '—'}</span>
-                                {isPaid ? (
-                                  <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-0.5 rounded-full font-medium">
-                                    <CheckCircle className="w-3 h-3" />
-                                    Paid
-                                  </span>
-                                ) : (
-                                  <span className="text-amber-600 font-medium">
-                                    {showMoney ? `${fmtCurrency(balance)} due` : 'Due'}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-xs text-gray-400">Loading breakdown...</p>
+                  {isAdult && member.id !== household.created_by && (
+                    <div className="flex flex-wrap items-center gap-2 pl-11">
+                      <label className="text-xs text-gray-500">Role</label>
+                      <select
+                        value={member.household_member_role || 'adult'}
+                        onChange={(e) => handleRoleChange(member.id, e.target.value)}
+                        className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white"
+                      >
+                        <option value="adult">Adult</option>
+                        <option value="child">Child</option>
+                      </select>
+                      {(member.household_member_role || 'adult') === 'child' && (
+                        <button
+                          type="button"
+                          onClick={() => openPermModal(member)}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Permissions
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-              );
-            })}
+              ))}
+            </div>
+          </div>
+
+          {/* Invite Code in Members tab too */}
+          {showInvite && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <UserPlus className="w-5 h-5 text-green-600" />
+                <h2 className="text-lg font-semibold text-gray-900">Invite Code</h2>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">Share this code to invite someone.</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-gray-100 px-4 py-2.5 rounded-lg text-lg font-mono font-bold text-gray-900 text-center tracking-widest">
+                  {household.invite_code}
+                </code>
+                <button
+                  onClick={handleCopyCode}
+                  className="p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Copy code"
+                >
+                  {copied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
+                </button>
+              </div>
+              {copied && <p className="text-xs text-green-600 mt-2">Copied to clipboard!</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========== SHARED ITEMS TAB ========== */}
+      {activeTab === 'shared' && (
+        <div className="space-y-6">
+          {/* Shared Bills */}
+          {showSharedBills && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <DollarSign className="w-5 h-5 text-blue-600" />
+                <h2 className="text-lg font-semibold text-gray-900">Shared Bills</h2>
+              </div>
+              {householdBills.length === 0 ? (
+                <p className="text-sm text-gray-500">No shared bills yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {householdBills.map((bill) => {
+                    const bd = billBreakdowns[bill.id];
+                    return (
+                      <div key={bill.id} className="border border-gray-100 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h3 className="text-sm font-semibold text-gray-900">{bill.name}</h3>
+                            <p className="text-xs text-gray-500">{bill.category || 'Uncategorized'} &middot; Due {bill.next_due_date ? formatFriendlyDate(bill.next_due_date) : (bill.due_day ? `day ${bill.due_day}` : '--')}</p>
+                          </div>
+                          <span className="text-sm font-bold text-gray-900">
+                            {showMoney ? fmtCurrency(bill.amount) : '—'}
+                          </span>
+                        </div>
+
+                        {bd ? (
+                          <>
+                            <div className="flex gap-4 mb-3 text-xs">
+                              <span className="text-green-600">Paid: {showMoney ? fmtCurrency(bd.total_paid) : '—'}</span>
+                              <span className="text-amber-600">Remaining: {showMoney ? fmtCurrency(bd.total_remaining) : '—'}</span>
+                            </div>
+                            <div className="space-y-1.5">
+                              {bd.members?.map((member) => {
+                                const balance = Number(member.balance);
+                                const isPaid = balance <= 0;
+                                return (
+                                  <div key={member.member_id} className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-700">{member.member_name}</span>
+                                    <div className="flex items-center gap-3 text-xs">
+                                      <span className="text-gray-500">Share: {showMoney ? fmtCurrency(member.share) : '—'}</span>
+                                      <span className="text-gray-500">Paid: {showMoney ? fmtCurrency(member.paid) : '—'}</span>
+                                      {isPaid ? (
+                                        <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-0.5 rounded-full font-medium">
+                                          <CheckCircle className="w-3 h-3" />
+                                          Paid
+                                        </span>
+                                      ) : (
+                                        <span className="text-amber-600 font-medium">
+                                          {showMoney ? `${fmtCurrency(balance)} due` : 'Due'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-xs text-gray-400">Loading breakdown...</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Chores */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <ClipboardList className="w-5 h-5 text-teal-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Household Chores</h2>
+            </div>
+            {isAdult && (
+              <form onSubmit={handleCreateChore} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 mb-6 pb-6 border-b border-gray-100">
+                <input
+                  className={`${inputClass} lg:col-span-4`}
+                  placeholder="Chore title"
+                  value={choreTitle}
+                  onChange={(e) => setChoreTitle(e.target.value)}
+                />
+                <input
+                  type="date"
+                  className={`${inputClass} lg:col-span-2`}
+                  value={choreDue}
+                  onChange={(e) => setChoreDue(e.target.value)}
+                />
+                <select
+                  className={`${inputClass} lg:col-span-3`}
+                  value={choreAssign}
+                  onChange={(e) => setChoreAssign(e.target.value)}
+                >
+                  <option value="">Anyone</option>
+                  {(household.members || []).map((m) => (
+                    <option key={m.id} value={m.id}>{m.first_name}</option>
+                  ))}
+                </select>
+                <select
+                  className={`${inputClass} lg:col-span-2`}
+                  value={choreRecurring}
+                  onChange={(e) => setChoreRecurring(e.target.value)}
+                >
+                  <option value="">One-time</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+                <button
+                  type="submit"
+                  className="lg:col-span-1 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
+                >
+                  Add
+                </button>
+              </form>
+            )}
+            {chores.length === 0 ? (
+              <p className="text-sm text-gray-500">No chores yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {chores.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex flex-wrap items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-2 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-900">{c.title}</p>
+                      <p className="text-xs text-gray-500">
+                        {c.due_date ? `Due ${c.due_date}` : 'No due date'}
+                        {c.recurring ? ` · Repeats ${c.recurring}` : ''}
+                        {c.status === 'completed' ? ' · Done' : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {c.status === 'pending' && (isAdult || c.assigned_to === user?.id) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCompleteChore(c.id)}
+                          className="text-xs font-medium text-teal-700 hover:text-teal-900"
+                        >
+                          Mark done
+                        </button>
+                      )}
+                      {isAdult && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteChore(c.id)}
+                          className="p-1 text-gray-400 hover:text-red-600"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
 
-      {/* Chores */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <ClipboardList className="w-5 h-5 text-teal-600" />
-          <h2 className="text-lg font-semibold text-gray-900">Household chores</h2>
-        </div>
-        {isAdult && (
-          <form onSubmit={handleCreateChore} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 mb-6 pb-6 border-b border-gray-100">
-            <input
-              className={`${inputClass} lg:col-span-4`}
-              placeholder="Chore title"
-              value={choreTitle}
-              onChange={(e) => setChoreTitle(e.target.value)}
-            />
-            <input
-              type="date"
-              className={`${inputClass} lg:col-span-2`}
-              value={choreDue}
-              onChange={(e) => setChoreDue(e.target.value)}
-            />
-            <select
-              className={`${inputClass} lg:col-span-3`}
-              value={choreAssign}
-              onChange={(e) => setChoreAssign(e.target.value)}
-            >
-              <option value="">Anyone</option>
-              {(household.members || []).map((m) => (
-                <option key={m.id} value={m.id}>{m.first_name}</option>
-              ))}
-            </select>
-            <select
-              className={`${inputClass} lg:col-span-2`}
-              value={choreRecurring}
-              onChange={(e) => setChoreRecurring(e.target.value)}
-            >
-              <option value="">One-time</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-            <button
-              type="submit"
-              className="lg:col-span-1 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
-            >
-              Add
-            </button>
-          </form>
-        )}
-        {chores.length === 0 ? (
-          <p className="text-sm text-gray-500">No chores yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {chores.map((c) => (
-              <li
-                key={c.id}
-                className="flex flex-wrap items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-2 text-sm"
+      {/* ========== SHOPPING LIST TAB ========== */}
+      {activeTab === 'shopping' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <ShoppingCart className="w-5 h-5 text-emerald-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Shopping List</h2>
+              <span className="text-xs text-gray-400 ml-auto">
+                {shoppingItems.filter((i) => !i.is_completed).length} active
+              </span>
+            </div>
+
+            {/* Quick add */}
+            <form onSubmit={handleAddShoppingItem} className="flex flex-col sm:flex-row gap-2 mb-4 pb-4 border-b border-gray-100">
+              <input
+                className={`${inputClass} sm:flex-1`}
+                placeholder="Add item..."
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+              />
+              <input
+                className={`${inputClass} sm:w-24`}
+                placeholder="Qty"
+                value={newItemQty}
+                onChange={(e) => setNewItemQty(e.target.value)}
+              />
+              <select
+                className={`${inputClass} sm:w-32`}
+                value={newItemCategory}
+                onChange={(e) => setNewItemCategory(e.target.value)}
               >
-                <div>
-                  <p className="font-medium text-gray-900">{c.title}</p>
-                  <p className="text-xs text-gray-500">
-                    {c.due_date ? `Due ${c.due_date}` : 'No due date'}
-                    {c.recurring ? ` · Repeats ${c.recurring}` : ''}
-                    {c.status === 'completed' ? ' · Done' : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {c.status === 'pending' && (isAdult || c.assigned_to === user?.id) && (
-                    <button
-                      type="button"
-                      onClick={() => handleCompleteChore(c.id)}
-                      className="text-xs font-medium text-teal-700 hover:text-teal-900"
-                    >
-                      Mark done
-                    </button>
-                  )}
-                  {isAdult && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteChore(c.id)}
-                      className="p-1 text-gray-400 hover:text-red-600"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                <option value="">Category</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center justify-center gap-1 min-h-[44px]"
+              >
+                <Plus className="w-4 h-4" />
+                Add
+              </button>
+            </form>
 
-      {/* Activity Feed */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Activity Feed</h2>
-          </div>
-          {lastUpdated && (
-            <span className="text-xs text-gray-400">
-              Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
-            </span>
-          )}
-        </div>
+            {/* Filter */}
+            <div className="flex gap-1 mb-4">
+              {['all', 'active', 'completed'].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setShoppingFilter(f)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors min-h-[36px] ${
+                    shoppingFilter === f
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
 
-        {activities.length === 0 ? (
-          <p className="text-sm text-gray-500">No Activity Yet.</p>
-        ) : (
-          <div className="max-h-96 overflow-y-auto space-y-3">
-            {activities.map((item) => (
-              <div key={item.id} className="flex items-start gap-3">
-                <div className={`w-8 h-8 rounded-full ${getInitialColor(item.user_first_name)} flex items-center justify-center text-white text-xs font-medium shrink-0`}>
-                  {(item.user_first_name || '?')[0].toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-gray-900">
-                    <span className="font-medium">{item.user_first_name || 'Someone'}</span>
-                    {' '}{item.action}{' '}{item.entity_type.replace(/_/g, ' ')}{' '}
-                    <span className="font-medium">&apos;{item.entity_name}&apos;</span>
-                    {item.details && <span className="text-gray-500"> &mdash; {item.details}</span>}
-                  </p>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <Clock className="w-3 h-3 text-gray-400" />
-                    <span className="text-xs text-gray-400">
-                      {item.created_at ? formatDistanceToNow(parseISO(item.created_at), { addSuffix: true }) : ''}
-                    </span>
-                  </div>
-                </div>
+            {/* Active items */}
+            {activeItems.length > 0 && (
+              <ul className="space-y-2 mb-4">
+                {activeItems.map((item) => (
+                  <li key={item.id} className="border border-gray-100 rounded-lg px-3 py-2">
+                    {editingItem === item.id ? (
+                      <div className="space-y-2">
+                        <input
+                          className={inputClass}
+                          value={editForm.item_name}
+                          onChange={(e) => setEditForm((f) => ({ ...f, item_name: e.target.value }))}
+                          placeholder="Item name"
+                        />
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            className={`${inputClass} sm:w-24`}
+                            value={editForm.quantity}
+                            onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))}
+                            placeholder="Qty"
+                          />
+                          <select
+                            className={`${inputClass} sm:w-32`}
+                            value={editForm.category}
+                            onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
+                          >
+                            <option value="">Category</option>
+                            {CATEGORIES.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                          <input
+                            className={`${inputClass} sm:flex-1`}
+                            value={editForm.notes}
+                            onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                            placeholder="Notes"
+                          />
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => { setEditingItem(null); setEditForm({}); }}
+                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 rounded-lg text-xs"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveEdit}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleShoppingItem(item)}
+                          className="w-5 h-5 rounded border-2 border-gray-300 hover:border-emerald-500 flex items-center justify-center shrink-0 transition-colors"
+                          title="Mark as purchased"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900">{item.item_name}</p>
+                          <p className="text-xs text-gray-500">
+                            {item.quantity && <span>{item.quantity}</span>}
+                            {item.quantity && item.category && <span> &middot; </span>}
+                            {item.category && <span>{item.category}</span>}
+                            {item.notes && <span className="text-gray-400"> — {item.notes}</span>}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => startEditItem(item)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteShoppingItem(item.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Completed items */}
+            {completedItems.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Completed</p>
+                <ul className="space-y-2">
+                  {completedItems.map((item) => (
+                    <li key={item.id} className="border border-gray-50 rounded-lg px-3 py-2 bg-gray-50/50">
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleShoppingItem(item)}
+                          className="w-5 h-5 rounded border-2 border-emerald-400 bg-emerald-100 flex items-center justify-center shrink-0 transition-colors"
+                          title="Mark as active"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-400 line-through">{item.item_name}</p>
+                          <p className="text-xs text-gray-400">
+                            {item.quantity && <span>{item.quantity}</span>}
+                            {item.quantity && item.category && <span> &middot; </span>}
+                            {item.category && <span>{item.category}</span>}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteShoppingItem(item.id)}
+                          className="p-1.5 text-gray-300 hover:text-red-500 rounded transition-colors shrink-0"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            ))}
+            )}
+
+            {shoppingItems.length === 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">No items yet. Add your first item above.</p>
+            )}
+
+            {shoppingFilter !== 'all' && filteredShoppingItems.length === 0 && shoppingItems.length > 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">
+                No {shoppingFilter} items.
+              </p>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <Modal
         isOpen={!!permModalMember}

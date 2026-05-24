@@ -47,6 +47,7 @@ from app.routers import (
     referrals,
     reminders,
     savings,
+    shopping_list,
     subscriptions,
     support,
     supporter,
@@ -307,6 +308,7 @@ app.include_router(payments.router, prefix="/api/v1")
 app.include_router(paycheck_engine.router, prefix="/api/v1")
 app.include_router(pay_periods.router, prefix="/api/v1")
 app.include_router(paycheck_checklist.router, prefix="/api/v1")
+app.include_router(shopping_list.router, prefix="/api/v1")
 app.include_router(households.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
 app.include_router(reminders.router, prefix="/api/v1")
