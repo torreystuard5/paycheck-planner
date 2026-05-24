@@ -1,14 +1,14 @@
 """Business trial, team members, tax categories, payment request scaffold
 
-Revision ID: 047
-Revises: 046
+Revision ID: 048
+Revises: 047
 """
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-revision = "047"
-down_revision = "046"
+revision = "048"
+down_revision = "047"
 branch_labels = None
 depends_on = None
 

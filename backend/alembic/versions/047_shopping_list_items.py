@@ -1,15 +1,15 @@
 """add shopping_list_items table for household shopping lists
 
-Revision ID: 046
-Revises: 045
+Revision ID: 047
+Revises: 046
 """
 
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "046"
-down_revision = "045"
+revision = "047"
+down_revision = "046"
 branch_labels = None
 depends_on = None
 
