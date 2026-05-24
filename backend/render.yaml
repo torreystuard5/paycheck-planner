@@ -11,6 +11,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     plan: free
+    preDeployCommand: "python migrate.py"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -28,5 +29,5 @@ services:
         value: spsoftwaresolutionsllc@gmail.com
       - key: FRONTEND_URL
         value: https://paydrift.netlify.app
-      # Migrations: run in Render Shell after deploy — python migrate.py
+      # Migrations run automatically via preDeployCommand (python migrate.py).
       # Do not set RUN_MIGRATIONS_ON_START on the web service (blocks port binding).
