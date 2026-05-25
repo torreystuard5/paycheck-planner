@@ -2,6 +2,10 @@
 
 Budgeting SaaS for paycheck-based financial planning. Allocate every dollar of your paycheck to bills, debts, and savings goals before you get paid.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for Conventional Commits, changelog policy, and local tooling (`npm run changelog`, `npm run commitlint`).
+
 ## Tech Stack
 
 - **Backend:** Python 3.11+, FastAPI, SQLAlchemy 2.0 (async), Alembic
