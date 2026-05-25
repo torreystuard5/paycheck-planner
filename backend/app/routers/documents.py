@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +28,11 @@ from app.services.document_scope import document_access_scope, get_document_for_
 from app.services.storage.r2_client import R2NotConfiguredError, R2OperationError
 from app.services.storage.r2_provider import get_storage_provider
 from app.utils.budget import resolve_budget_id
+from app.services.document_upload_flow import (
+    PERSONAL_DOC_TYPES,
+    ingest_document_bytes,
+    normalize_content_type,
+)
 from app.services.ocr_service import run_document_ocr
 from app.utils.security import get_current_user
 from app.config import settings
@@ -240,6 +245,34 @@ async def finalize_upload(
     await db.flush()
     await db.refresh(doc)
     return document_detail_response(doc)
+
+
+@router.post("/upload", response_model=DocumentDetailResponse)
+async def upload_document_file(
+    file: UploadFile = File(...),
+    document_type: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload via API (file → R2 on server). Avoids browser CORS to the bucket."""
+    await _ensure_document_access(db, current_user, document_type)
+    raw = await file.read()
+    filename = file.filename or "upload"
+    content_type = normalize_content_type(file.content_type, filename)
+    budget_id = await resolve_budget_id(current_user, db)
+    return await ingest_document_bytes(
+        db=db,
+        user_id=current_user.id,
+        household_id=getattr(current_user, "household_id", None),
+        budget_id=budget_id,
+        document_type=document_type,
+        filename=filename,
+        content_type=content_type,
+        raw=raw,
+        object_key_prefix=f"uploads/{current_user.id}",
+        allowed_types=PERSONAL_DOC_TYPES,
+        allowed_content_types=ALLOWED_CONTENT_TYPES,
+    )
 
 
 @router.get("", response_model=list[DocumentUploadResponse])

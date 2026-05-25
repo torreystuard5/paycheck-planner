@@ -107,3 +107,20 @@ def get_ocr_provider() -> OcrProvider:
 
 async def run_document_ocr(document: DocumentUpload, signed_get_url: str) -> OcrResult:
     return await get_ocr_provider().process(document, signed_get_url)
+
+
+async def run_document_ocr_bytes(document: DocumentUpload, data: bytes) -> OcrResult:
+    """OCR from in-memory file bytes (server-side upload path)."""
+    try:
+        text = _bytes_to_text(data, document.content_type, document.original_filename)
+        if not text.strip():
+            text = document.original_filename or ""
+        parsed = parse_for_document_type(document.document_type, text)
+        return OcrResult(
+            status="completed",
+            text=text[:50_000] if text else None,
+            parsed_json=parsed,
+        )
+    except Exception as exc:
+        logger.exception("OCR failed for document %s", document.id)
+        return OcrResult(status="failed", error=str(exc))

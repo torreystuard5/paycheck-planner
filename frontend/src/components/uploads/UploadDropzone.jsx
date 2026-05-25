@@ -65,20 +65,17 @@ export default function UploadDropzone({
     }
 
     try {
-      setPhase(PHASES.presigning);
-      // uploadDocument handles presign → R2 PUT → finalize internally
-      // We update phase based on a rough timeline since we use fetch (no granular progress)
-      const phaseTimer = setTimeout(() => setPhase(PHASES.uploading), 500);
-      const finalizeTimer = setTimeout(() => setPhase(PHASES.finalizing), 2000);
-
       const doc = await uploadDocument({
         file,
         documentType,
         scope,
+        onPhase: (p) => {
+          if (p === 'presigning') setPhase(PHASES.presigning);
+          if (p === 'uploading') setPhase(PHASES.uploading);
+          if (p === 'finalizing') setPhase(PHASES.finalizing);
+        },
       });
 
-      clearTimeout(phaseTimer);
-      clearTimeout(finalizeTimer);
       setPhase(PHASES.done);
 
       if (onUploaded) onUploaded(doc);

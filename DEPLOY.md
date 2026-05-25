@@ -55,7 +55,7 @@ FRONTEND_URL=https://paydrift.netlify.app,http://localhost:5173
 
 #### Cloudflare R2 (document uploads)
 
-Receipt, paystub, and business document uploads use **presigned URLs**: the browser PUTs directly to R2, then the API finalizes and runs OCR. Without R2 env vars, `/api/v1/documents/*` returns **503** and `/health` reports `uploads_storage: not_configured`.
+Receipt, paystub, and business document uploads use **`POST /api/v1/documents/upload`** (multipart): the API writes to R2 and runs OCR. This avoids browser CORS to `r2.cloudflarestorage.com`. Legacy presign/finalize endpoints remain for compatibility. Without R2 env vars, `/api/v1/documents/*` returns **503** and `/health` reports `uploads_storage: not_configured`.
 
 | Variable | Value |
 |---|---|
@@ -68,12 +68,14 @@ Receipt, paystub, and business document uploads use **presigned URLs**: the brow
 | `R2_PRESIGNED_URL_TTL` | `900` (seconds) |
 | `R2_MAX_UPLOAD_BYTES` | `15728640` (15 MB; must match frontend `UPLOAD_MAX_BYTES`) |
 
-**R2 bucket CORS** (Cloudflare dashboard → R2 → bucket → Settings → CORS policy). Allow the Netlify app origin to **PUT** (upload) and **GET** (download via presigned URL). Example policy:
+**R2 bucket CORS** is optional for uploads (the app uses API proxy upload). Still configure CORS if you use presigned browser PUT or need direct GET from the bucket. Example policy:
 
 ```json
 [
   {
     "AllowedOrigins": [
+      "https://paydrift.net",
+      "https://www.paydrift.net",
       "https://paydrift.netlify.app",
       "http://localhost:5173"
     ],
@@ -140,7 +142,7 @@ bash start.sh                  # migrate then uvicorn (like Render)
 
 ### Cloudflare R2 (document uploads)
 
-Receipt, paystub, and tax document uploads use **presigned PUT** from the browser directly to R2. Configure on the Render web service:
+Document uploads go through the API (`POST /documents/upload`); configure R2 on the Render web service:
 
 | Variable | Value |
 |---|---|

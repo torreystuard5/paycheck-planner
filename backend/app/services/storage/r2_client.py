@@ -132,6 +132,21 @@ def object_exists(object_key: str) -> bool:
         raise R2OperationError(f"Failed to check object existence: {exc}") from exc
 
 
+def put_object(object_key: str, body: bytes, content_type: str) -> None:
+    """Upload bytes to R2 from the API (avoids browser CORS to the bucket)."""
+    _require_config()
+    client = _get_client()
+    try:
+        client.put_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=object_key,
+            Body=body,
+            ContentType=content_type,
+        )
+    except ClientError as exc:
+        raise R2OperationError(f"Failed to upload object: {exc}") from exc
+
+
 def delete_object(object_key: str) -> None:
     """Delete an object from the bucket."""
     _require_config()

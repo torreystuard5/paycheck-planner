@@ -163,6 +163,14 @@ export function finalizeUpload({ document_id, file_size }) {
   return api.post('/api/v1/documents/finalize', { document_id, file_size });
 }
 
+/** Server-side upload (API → R2). Preferred over presign; no bucket CORS required. */
+export function uploadDocumentFile(file, document_type) {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('document_type', document_type);
+  return api.post('/api/v1/documents/upload', form);
+}
+
 export function listDocuments(params = {}) {
   return api.get('/api/v1/documents', { params });
 }
@@ -195,6 +203,13 @@ export function requestBusinessUploadPresign({ filename, content_type, file_size
 
 export function finalizeBusinessUpload({ document_id, file_size }) {
   return api.post('/api/v1/business/documents/finalize', { document_id, file_size });
+}
+
+export function uploadBusinessDocumentFile(file, document_type) {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('document_type', document_type);
+  return api.post('/api/v1/business/documents/upload', form);
 }
 
 export function listBusinessDocuments(params = {}) {

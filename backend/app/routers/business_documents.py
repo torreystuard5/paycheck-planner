@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,7 @@ from app.schemas.document_upload import (
 )
 from app.services.document_link import validate_business_link_target
 from app.services.document_responses import document_detail_response
+from app.services.document_upload_flow import ingest_document_bytes, normalize_content_type
 from app.services.ocr_service import run_document_ocr
 from app.services.storage.r2_client import R2NotConfiguredError, R2OperationError
 from app.services.storage.r2_provider import get_storage_provider
@@ -180,6 +181,32 @@ async def business_finalize(
     await db.flush()
     await db.refresh(doc)
     return document_detail_response(doc)
+
+
+@router.post("/upload", response_model=DocumentDetailResponse)
+async def business_upload_file(
+    file: UploadFile = File(...),
+    document_type: str = Form(...),
+    ctx: BusinessContext = Depends(get_business_ctx),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload via API (file → R2 on server). Avoids browser CORS to the bucket."""
+    raw = await file.read()
+    filename = file.filename or "upload"
+    content_type = normalize_content_type(file.content_type, filename)
+    return await ingest_document_bytes(
+        db=db,
+        user_id=ctx.owner_id,
+        household_id=None,
+        budget_id=None,
+        document_type=document_type,
+        filename=filename,
+        content_type=content_type,
+        raw=raw,
+        object_key_prefix=f"business/{ctx.owner_id}",
+        allowed_types=BUSINESS_DOC_TYPES,
+        allowed_content_types=ALLOWED_CONTENT_TYPES,
+    )
 
 
 @router.get("", response_model=list[DocumentDetailResponse])
