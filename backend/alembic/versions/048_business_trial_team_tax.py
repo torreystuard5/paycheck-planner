@@ -70,10 +70,14 @@ def upgrade() -> None:
     )
     op.execute("""
         DO $$ BEGIN
-            ALTER TABLE business_team_members
-                ADD CONSTRAINT uq_business_team_owner_member
-                UNIQUE (owner_user_id, member_user_id);
-        EXCEPTION WHEN duplicate_object THEN NULL;
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'uq_business_team_owner_member'
+            ) THEN
+                ALTER TABLE business_team_members
+                    ADD CONSTRAINT uq_business_team_owner_member
+                    UNIQUE (owner_user_id, member_user_id);
+            END IF;
         END $$;
     """)
 
