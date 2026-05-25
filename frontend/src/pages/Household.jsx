@@ -129,8 +129,12 @@ export default function Household() {
     try {
       const res = await api.get('/api/v1/households/shopping-list');
       setShoppingItems(res.data.items || []);
-    } catch {
+    } catch (err) {
       setShoppingItems([]);
+      const detail = err.response?.data?.detail;
+      if (typeof detail === 'string' && detail.includes('Database temporarily unavailable')) {
+        setError(detail);
+      }
     }
   }, []);
 
