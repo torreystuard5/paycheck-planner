@@ -47,8 +47,15 @@ function messageForUploadError(err) {
   if (status === 502) {
     return 'Storage upload failed on the server. Please try again.';
   }
+  if (status === 405) {
+    return (
+      'Upload endpoint rejected the request (HTTP 405). ' +
+      'Confirm Netlify VITE_API_URL is https://paydrift-api.onrender.com (no extra path) and redeploy frontend + backend.'
+    );
+  }
   if (status) {
-    return `Upload failed (HTTP ${status}). If this persists, contact support.`;
+    const url = err?.config?.url || '';
+    return `Upload failed (HTTP ${status})${url ? ` at ${url}` : ''}. If this persists, contact support.`;
   }
   return 'Upload failed. If this persists, contact support.';
 }

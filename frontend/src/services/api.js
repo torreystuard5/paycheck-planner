@@ -13,6 +13,18 @@ const api = axios.create({
   baseURL,
 });
 
+/** Absolute API URL (avoids axios baseURL + path merge dropping `/upload`). */
+export function apiUrl(path) {
+  const root = (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '') || FALLBACK_API_BASE;
+  const suffix = path.startsWith('/') ? path : `/${path}`;
+  return `${root}${suffix}`;
+}
+
+const multipartConfig = {
+  // Let the browser set Content-Type with boundary (required for multipart).
+  headers: { 'Content-Type': undefined },
+};
+
 // TOS required state — shared globally
 let tosRequiredCallback = null;
 export function onTosRequired(cb) {
@@ -168,7 +180,7 @@ export function uploadDocumentFile(file, document_type) {
   const form = new FormData();
   form.append('file', file);
   form.append('document_type', document_type);
-  return api.post('/api/v1/documents/upload', form);
+  return api.post(apiUrl('/api/v1/documents/upload'), form, multipartConfig);
 }
 
 export function listDocuments(params = {}) {
@@ -209,7 +221,7 @@ export function uploadBusinessDocumentFile(file, document_type) {
   const form = new FormData();
   form.append('file', file);
   form.append('document_type', document_type);
-  return api.post('/api/v1/business/documents/upload', form);
+  return api.post(apiUrl('/api/v1/business/documents/upload'), form, multipartConfig);
 }
 
 export function listBusinessDocuments(params = {}) {
