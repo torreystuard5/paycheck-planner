@@ -1,5 +1,9 @@
 FROM python:3.11-slim
 
+# boto3 1.36+ default checksums are incompatible with Cloudflare R2 PutObject
+ENV AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+ENV AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+
 WORKDIR /app
 
 # Tesseract for receipt/paystub OCR (pytesseract)

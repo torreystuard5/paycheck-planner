@@ -45,7 +45,9 @@ function messageForUploadError(err) {
     return typeof detail === 'string' ? detail : 'Invalid file or document type.';
   }
   if (status === 502) {
-    return 'Storage upload failed on the server. Please try again.';
+    return typeof detail === 'string' && detail.length > 0
+      ? detail
+      : 'Storage upload failed on the server. Please try again.';
   }
   if (status === 405) {
     return (

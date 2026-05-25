@@ -91,9 +91,15 @@ Replace origins with your production Netlify URL and local Vite dev URL. CORS is
 
 **Verify after deploy:**
 
-- `GET /health` → `uploads_storage: ok` when all four required R2 vars are set
+- `GET https://paydrift-api.onrender.com/health` → `uploads_storage: ok` **and** `uploads_storage_write: ok` (if `failed`, read `uploads_storage_write_error`)
 - `migration_ok: true` and `document_uploads` present (migration **043**, applied via `start.sh` → `migrate.py`)
 - Pro users: upload on `/uploads` (feature `receipt_ocr`)
+
+**If uploads show “Storage upload failed”:**
+
+1. R2 → **Manage R2 API Tokens** → **Object Read & Write** on bucket `paydrift-uploads`.
+2. Render: `R2_ENDPOINT_URL` = `https://<account_id>.r2.cloudflarestorage.com` (account endpoint, not bucket URL); `R2_BUCKET_NAME` = exact bucket name.
+3. Redeploy Render; recheck `/health` for `uploads_storage_write: ok`.
 
 ### Migrations (automatic)
 

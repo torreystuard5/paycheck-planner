@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.config import settings
@@ -41,6 +42,37 @@ def _require_config() -> None:
 _client = None
 
 
+def _resolve_endpoint_url() -> str:
+    """Account-level S3 API endpoint (not bucket URL, not public r2.dev)."""
+    url = (settings.R2_ENDPOINT_URL or "").strip().rstrip("/")
+    if url:
+        return url
+    account_id = (settings.R2_ACCOUNT_ID or "").strip()
+    if account_id:
+        return f"https://{account_id}.r2.cloudflarestorage.com"
+    raise R2NotConfiguredError(
+        "Uploads are not configured. Set R2_ENDPOINT_URL or R2_ACCOUNT_ID."
+    )
+
+
+def _r2_boto_config() -> Config:
+    """R2-compatible boto3 config (avoids boto3 1.36+ default checksum breaking PutObject)."""
+    kwargs: dict = {"signature_version": "s3v4", "s3": {"addressing_style": "path"}}
+    # botocore 1.36+ — required for Cloudflare R2 PutObject
+    try:
+        return Config(
+            **kwargs,
+            request_checksum_calculation="when_required",
+            response_checksum_validation="when_required",
+        )
+    except TypeError:
+        return Config(**kwargs)
+
+
+def _bucket_name() -> str:
+    return (settings.R2_BUCKET_NAME or "").strip()
+
+
 def _get_client():
     """Lazy-initialise the boto3 S3 client for R2."""
     global _client
@@ -49,10 +81,11 @@ def _get_client():
     _require_config()
     _client = boto3.client(
         "s3",
-        endpoint_url=settings.R2_ENDPOINT_URL,
-        aws_access_key_id=settings.R2_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
+        endpoint_url=_resolve_endpoint_url(),
+        aws_access_key_id=(settings.R2_ACCESS_KEY_ID or "").strip(),
+        aws_secret_access_key=(settings.R2_SECRET_ACCESS_KEY or "").strip(),
         region_name="auto",
+        config=_r2_boto_config(),
     )
     return _client
 
@@ -76,7 +109,7 @@ def generate_presigned_put(
         url = client.generate_presigned_url(
             "put_object",
             Params={
-                "Bucket": settings.R2_BUCKET_NAME,
+                "Bucket": _bucket_name(),
                 "Key": object_key,
                 "ContentType": content_type,
             },
@@ -110,7 +143,7 @@ def generate_presigned_get(
         return client.generate_presigned_url(
             "get_object",
             Params={
-                "Bucket": settings.R2_BUCKET_NAME,
+                "Bucket": _bucket_name(),
                 "Key": object_key,
             },
             ExpiresIn=ttl,
@@ -124,7 +157,7 @@ def object_exists(object_key: str) -> bool:
     _require_config()
     client = _get_client()
     try:
-        client.head_object(Bucket=settings.R2_BUCKET_NAME, Key=object_key)
+        client.head_object(Bucket=_bucket_name(), Key=object_key)
         return True
     except ClientError as exc:
         if exc.response["Error"]["Code"] in ("404", "NoSuchKey"):
@@ -134,17 +167,20 @@ def object_exists(object_key: str) -> bool:
 
 def put_object(object_key: str, body: bytes, content_type: str) -> None:
     """Upload bytes to R2 from the API (avoids browser CORS to the bucket)."""
+    from io import BytesIO
+
     _require_config()
     client = _get_client()
     try:
-        client.put_object(
-            Bucket=settings.R2_BUCKET_NAME,
-            Key=object_key,
-            Body=body,
-            ContentType=content_type,
+        client.upload_fileobj(
+            BytesIO(body),
+            _bucket_name(),
+            object_key,
+            ExtraArgs={"ContentType": content_type},
         )
     except ClientError as exc:
-        raise R2OperationError(f"Failed to upload object: {exc}") from exc
+        code = exc.response.get("Error", {}).get("Code", "ClientError")
+        raise R2OperationError(f"Failed to upload object ({code}): {exc}") from exc
 
 
 def delete_object(object_key: str) -> None:
@@ -152,6 +188,6 @@ def delete_object(object_key: str) -> None:
     _require_config()
     client = _get_client()
     try:
-        client.delete_object(Bucket=settings.R2_BUCKET_NAME, Key=object_key)
+        client.delete_object(Bucket=_bucket_name(), Key=object_key)
     except ClientError as exc:
         raise R2OperationError(f"Failed to delete object: {exc}") from exc

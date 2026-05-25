@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone
@@ -20,6 +21,27 @@ from app.schemas.document_upload import DocumentDetailResponse
 logger = logging.getLogger(__name__)
 
 PERSONAL_DOC_TYPES = frozenset({"paystub", "receipt", "tax", "other"})
+
+
+def _storage_error_detail(exc: R2OperationError) -> str:
+    msg = str(exc)
+    if "AccessDenied" in msg:
+        return (
+            "Storage access denied. In Cloudflare R2, create an API token with "
+            "Object Read & Write on bucket "
+            f"'{(settings.R2_BUCKET_NAME or '').strip()}'."
+        )
+    if "SignatureDoesNotMatch" in msg or "InvalidRequest" in msg:
+        return (
+            "Storage rejected the upload (signature/checksum). Redeploy the API "
+            "or recreate the R2 S3 API token."
+        )
+    if "NoSuchBucket" in msg:
+        return (
+            f"Storage bucket '{(settings.R2_BUCKET_NAME or '').strip()}' was not found. "
+            "Check R2_BUCKET_NAME on Render."
+        )
+    return "Storage upload failed on the server. Please try again."
 
 
 def normalize_content_type(content_type: str | None, filename: str) -> str:
@@ -91,7 +113,7 @@ async def ingest_document_bytes(
     doc.bucket = settings.R2_BUCKET_NAME or ""
 
     try:
-        put_object(object_key, raw, content_type)
+        await asyncio.to_thread(put_object, object_key, raw, content_type)
     except R2NotConfiguredError as exc:
         await db.delete(doc)
         await db.flush()
@@ -103,7 +125,7 @@ async def ingest_document_bytes(
         await db.flush()
         raise HTTPException(
             status_code=502,
-            detail="Storage upload failed. Please try again.",
+            detail=_storage_error_detail(exc),
         ) from exc
 
     doc.status = "processing"
