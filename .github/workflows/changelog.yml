@@ -46,22 +46,22 @@ jobs:
         with:
           version: latest
           config: cliff.toml
-          args: -o CHANGELOG.md.verify
+          args: -o backend/CHANGELOG.md.verify
 
       - name: Compare generated changelog
         run: |
-          if [ ! -f CHANGELOG.md ]; then
-            echo "CHANGELOG.md is missing. Run: npm run changelog"
+          if [ ! -f backend/CHANGELOG.md ]; then
+            echo "backend/CHANGELOG.md is missing. Run: npm run changelog"
             exit 1
           fi
-          if ! diff -u CHANGELOG.md CHANGELOG.md.verify; then
+          if ! diff -u backend/CHANGELOG.md backend/CHANGELOG.md.verify; then
             echo ""
-            echo "CHANGELOG.md is out of date. On your machine run:"
+            echo "backend/CHANGELOG.md is out of date. On your machine run:"
             echo "  npm run changelog"
-            echo "  git add CHANGELOG.md && git commit -m 'docs(changelog): update public release notes'"
+            echo "  git add backend/CHANGELOG.md && git commit -m 'docs(changelog): update public release notes'"
             exit 1
           fi
-          echo "CHANGELOG.md matches git-cliff output."
+          echo "backend/CHANGELOG.md matches git-cliff output."
 
   update-changelog:
     name: Regenerate CHANGELOG.md
@@ -79,15 +79,15 @@ jobs:
         with:
           version: latest
           config: cliff.toml
-          args: -o CHANGELOG.md
+          args: -o backend/CHANGELOG.md
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
+          git add backend/CHANGELOG.md
           if git diff --staged --quiet; then
-            echo "CHANGELOG.md already up to date."
+            echo "backend/CHANGELOG.md already up to date."
             exit 0
           fi
           git commit -m "docs(changelog): regenerate public release notes"

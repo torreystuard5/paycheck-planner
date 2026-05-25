@@ -1,0 +1,42 @@
+[
+  {
+    "date": "2026-04-01",
+    "description": "Calendar view is now live. Household view with combined pay and bills. Personal view for your split (if in household)/personal bills.",
+    "type": "new_feature"
+  },
+  {
+    "date": "2026-03-31",
+    "description": "Bills & Debts now automatically sort to due soonest. (You can change how it's sorted with drop down)",
+    "type": "update"
+  },
+  {
+    "date": "2026-03-27",
+    "description": "Fixed sorting in bills due on dashboard. Now sorts by owed soonest. Bills and debts were sorted by numerical value instead of actual date — fixed.",
+    "type": "fix"
+  },
+  {
+    "date": "2026-03-26",
+    "description": "When you mark a bill as paid in Total Bills, it will now update the dashboard.",
+    "type": "fix"
+  },
+  {
+    "date": "2026-03-26",
+    "description": "Paycheck logging has been fixed.",
+    "type": "fix"
+  },
+  {
+    "date": "2026-03-25",
+    "description": "Support ticket system fixed.",
+    "type": "fix"
+  },
+  {
+    "date": "2026-03-25",
+    "description": "Mobile login was broken — has been fixed.",
+    "type": "fix"
+  },
+  {
+    "date": "2026-03-23",
+    "description": "Credit score renamed to Credit Cards; fixed recommendations display.",
+    "type": "fix"
+  }
+]

@@ -121,9 +121,18 @@ npm run commitlint         # Lint commits since origin/main
 npm run commitlint:last    # Lint latest commit only
 ```
 
-Commit the updated `CHANGELOG.md` with your PR when you add user-facing `feat`/`fix` commits.
+Commit the updated `backend/CHANGELOG.md` with your PR when you add user-facing `feat`/`fix` commits.
 
-**First-time bootstrap:** In GitHub → Actions → **Changelog & commits** → **Run workflow** (workflow_dispatch) to regenerate and commit `CHANGELOG.md`, or run `npm run changelog` locally and commit the file.
+### In-app Changelog (automatic)
+
+The **Changelog** page in the app reads from the `app_updates` table. On every Render deploy, `start.sh` runs:
+
+1. `python migrate.py`
+2. `python -m scripts.sync_public_changelog` — merges `backend/data/changelog_history.json` + `backend/CHANGELOG.md` into `app_updates`
+
+You do **not** need to hand-edit the database after a `feat`/`fix` deploy. Regenerate `backend/CHANGELOG.md` before merge (or use the GitHub workflow), then deploy the backend.
+
+**First-time bootstrap:** Actions → **Changelog & commits** → **Run workflow**, or `npm run changelog` locally and commit `backend/CHANGELOG.md`.
 
 ## CI
 

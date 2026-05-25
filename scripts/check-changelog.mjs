@@ -5,8 +5,8 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 
-const committed = 'CHANGELOG.md';
-const generated = 'CHANGELOG.md.check';
+const committed = 'backend/CHANGELOG.md';
+const generated = 'backend/CHANGELOG.md.check';
 
 if (!existsSync(committed)) {
   console.error(`Missing ${committed}. Run: npm run changelog`);

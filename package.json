@@ -3,7 +3,7 @@
   "private": true,
   "description": "PayDrift monorepo tooling (changelog, commit lint)",
   "scripts": {
-    "changelog": "git-cliff --config cliff.toml -o CHANGELOG.md",
+    "changelog": "git-cliff --config cliff.toml -o backend/CHANGELOG.md",
     "changelog:check": "node scripts/check-changelog.mjs",
     "changelog:unreleased": "git-cliff --config cliff.toml --unreleased",
     "commitlint": "commitlint --from origin/main --to HEAD",

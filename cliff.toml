@@ -20,7 +20,7 @@ body = """
 {% for group in changelog %}
 ### {{ group.title }}
 {% for commit in group.commits %}
-- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | split(pat="\n") | first | trim | upper_first }}
+- {{ commit.timestamp | date(format="%Y-%m-%d") }} — {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | split(pat="\n") | first | trim | upper_first }}
 {% endfor %}
 
 {% endfor %}
