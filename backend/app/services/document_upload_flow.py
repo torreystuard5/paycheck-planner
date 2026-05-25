@@ -33,8 +33,9 @@ def _storage_error_detail(exc: R2OperationError) -> str:
         )
     if "SignatureDoesNotMatch" in msg or "InvalidRequest" in msg:
         return (
-            "Storage rejected the upload (signature/checksum). Redeploy the API "
-            "or recreate the R2 S3 API token."
+            "Storage rejected the upload (signature mismatch). Redeploy the API "
+            "(needs boto3 1.35.99), then recreate the R2 S3 API token and re-paste "
+            "both keys into Render with no extra spaces."
         )
     if "NoSuchBucket" in msg:
         return (
