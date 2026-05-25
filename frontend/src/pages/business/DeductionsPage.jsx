@@ -11,6 +11,8 @@ import EmptyState from '../../components/EmptyState';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useToast } from '../../components/Toast';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
+import UploadDropzone from '../../components/uploads/UploadDropzone';
+import { linkBusinessDocument } from '../../services/api';
 
 const DEFAULT_CATEGORIES = [
   'Mileage', 'Supplies', 'Software', 'Meals & Entertainment', 'Travel', 'Utilities', 'Rent',
@@ -53,6 +55,7 @@ export default function DeductionsPage() {
   const [del, setDel] = useState(null);
   const [vendorOpen, setVendorOpen] = useState(false);
   const [vendorHits, setVendorHits] = useState([]);
+  const [receiptDocId, setReceiptDocId] = useState(null);
   const vTimer = useRef(null);
 
   const mergedCategories = [...DEFAULT_CATEGORIES];
@@ -117,12 +120,14 @@ export default function DeductionsPage() {
 
   const openAdd = () => {
     setEditing(null);
+    setReceiptDocId(null);
     setForm(emptyForm);
     setVendorOpen(false);
     setModal(true);
   };
 
   const openEdit = (r) => {
+    setReceiptDocId(null);
     setEditing(r);
     const cat = r.category || 'Other';
     const preset = DEFAULT_CATEGORIES.find((p) => p.toLowerCase() === cat.toLowerCase()) || mergedCategories.find((p) => p.toLowerCase() === cat.toLowerCase());
@@ -162,14 +167,28 @@ export default function DeductionsPage() {
         is_mileage: form.is_mileage,
         miles: form.miles ? parseFloat(form.miles) : null,
       };
+      let deductionId = editing?.id;
       if (editing) {
         await api.patch(`/api/v1/business/deductions/${editing.id}`, payload);
         toast('Deduction updated.');
       } else {
-        await api.post('/api/v1/business/deductions', payload);
+        const { data } = await api.post('/api/v1/business/deductions', payload);
+        deductionId = data?.id;
         toast('Deduction added.');
       }
+      if (receiptDocId && deductionId) {
+        try {
+          await linkBusinessDocument(receiptDocId, {
+            entity_type: 'business_deduction',
+            entity_id: deductionId,
+          });
+          toast('Receipt linked to deduction.');
+        } catch {
+          toast('Deduction saved but receipt could not be linked.', 'error');
+        }
+      }
       setModal(false);
+      setReceiptDocId(null);
       await load();
     } catch (err) {
       toast(formatApiError(err), 'error');
@@ -357,6 +376,21 @@ export default function DeductionsPage() {
                 ))}
               </div>
             )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Receipt (upload)</label>
+            <p className="text-xs text-gray-500 mb-2">Optional — links to this deduction when you save.</p>
+            <UploadDropzone
+              documentType="receipt"
+              scope="business"
+              compact
+              disabled={write.disabled}
+              onUploaded={(doc) => {
+                setReceiptDocId(doc.id);
+                toast('Receipt ready — save to attach.');
+              }}
+            />
+            {receiptDocId && <p className="text-xs text-green-700 mt-1">Receipt will attach on save.</p>}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>

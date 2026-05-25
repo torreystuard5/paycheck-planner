@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, Camera, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { uploadDocument, UPLOAD_MAX_BYTES, ALLOWED_CONTENT_TYPES } from '../../lib/uploads';
-import { useBudget } from '../../context/BudgetContext';
 
 const PHASES = {
   idle: 'idle',
@@ -26,8 +25,13 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function UploadDropzone({ documentType, onUploaded, disabled, compact }) {
-  const { activeBudget } = useBudget();
+export default function UploadDropzone({
+  documentType,
+  onUploaded,
+  disabled,
+  compact,
+  scope = 'personal',
+}) {
   const [phase, setPhase] = useState(PHASES.idle);
   const [error, setError] = useState(null);
   const [dragOver, setDragOver] = useState(false);
@@ -70,7 +74,7 @@ export default function UploadDropzone({ documentType, onUploaded, disabled, com
       const doc = await uploadDocument({
         file,
         documentType,
-        budgetId: activeBudget?.id,
+        scope,
       });
 
       clearTimeout(phaseTimer);
@@ -85,7 +89,7 @@ export default function UploadDropzone({ documentType, onUploaded, disabled, com
       setError(err.message || 'Upload failed. Please try again.');
       setPhase(PHASES.idle);
     }
-  }, [documentType, activeBudget?.id, onUploaded, validateFile]);
+  }, [documentType, scope, onUploaded, validateFile]);
 
   const handleFileChange = useCallback((e) => {
     const file = e.target.files?.[0];

@@ -1,20 +1,28 @@
 import { useEffect, useState } from 'react';
-import api from '../../services/api';
+import { Link } from 'react-router-dom';
+import api, { listBusinessDocuments } from '../../services/api';
 import CurrencyDisplay from '../../components/CurrencyDisplay';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import UploadDropzone from '../../components/uploads/UploadDropzone';
 
 const YEAR = new Date().getFullYear();
 
 export default function BusinessTaxPrep() {
   const [year, setYear] = useState(YEAR);
   const [data, setData] = useState(null);
+  const [taxDocs, setTaxDocs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    api
-      .get('/api/v1/business/tax-prep/summary', { params: { year } })
-      .then(({ data: d }) => setData(d))
+    Promise.all([
+      api.get('/api/v1/business/tax-prep/summary', { params: { year } }),
+      listBusinessDocuments({ document_type: 'tax' }),
+    ])
+      .then(([summaryRes, docsRes]) => {
+        setData(summaryRes.data);
+        setTaxDocs(Array.isArray(docsRes.data) ? docsRes.data : []);
+      })
       .finally(() => setLoading(false));
   }, [year]);
 
@@ -78,6 +86,37 @@ export default function BusinessTaxPrep() {
           </tbody>
         </table>
       </div>
+
+      <section className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold text-gray-900">Supporting tax documents</h2>
+          <Link to="/business/documents" className="text-sm text-purple-600 hover:underline">
+            All business documents
+          </Link>
+        </div>
+        <UploadDropzone
+          documentType="tax"
+          scope="business"
+          compact
+          onUploaded={() => {
+            listBusinessDocuments({ document_type: 'tax' }).then(({ data: d }) =>
+              setTaxDocs(Array.isArray(d) ? d : [])
+            );
+          }}
+        />
+        {taxDocs.length > 0 ? (
+          <ul className="text-sm divide-y border rounded-lg">
+            {taxDocs.map((doc) => (
+              <li key={doc.id} className="px-3 py-2 flex justify-between gap-2">
+                <span className="truncate">{doc.original_filename || 'Tax document'}</span>
+                <span className="text-gray-500 shrink-0">{doc.status}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-gray-500">No tax documents uploaded yet for this workspace.</p>
+        )}
+      </section>
 
       {data?.contractors_1099?.length > 0 && (
         <section>

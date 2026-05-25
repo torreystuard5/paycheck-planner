@@ -21,6 +21,7 @@ CRITICAL_TABLES = (
     "shopping_list_items",
     "pay_period_item_overrides",
     "business_team_members",
+    "document_uploads",
 )
 
 

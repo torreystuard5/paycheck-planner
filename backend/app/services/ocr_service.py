@@ -1,79 +1,20 @@
-"""OCR for receipt/bill uploads — pluggable provider with Tesseract when available."""
+"""OCR for document uploads — Tesseract + PDF text, type-specific parsers."""
 
 from __future__ import annotations
 
 import io
 import logging
-import re
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
-from typing import Any
 
 import httpx
 
 from app.models.document_upload import DocumentUpload
 from app.services.ocr.base import OcrProvider, OcrResult
-from app.services.ocr.noop_provider import NoopOcrProvider
+from app.services.ocr_parsers import parse_document_text, parse_for_document_type
+
+# Re-export parsers for tests and callers
+from app.services.ocr_parsers import parse_paystub_text, parse_receipt_text, parse_tax_document_text  # noqa: F401
 
 logger = logging.getLogger(__name__)
-
-_AMOUNT_RE = re.compile(
-    r"(?:total|amount due|balance due|due)[:\s]*\$?\s*([\d,]+\.\d{2})",
-    re.IGNORECASE,
-)
-_FALLBACK_AMOUNT_RE = re.compile(r"\$\s*([\d,]+\.\d{2})")
-_DATE_RE = re.compile(
-    r"(?:due|pay by|payment due)[:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
-    re.IGNORECASE,
-)
-_VENDOR_SKIP = re.compile(r"^(total|amount|due|bill|invoice|statement)\b", re.I)
-
-
-def _parse_amount(text: str) -> Decimal | None:
-    for pat in (_AMOUNT_RE, _FALLBACK_AMOUNT_RE):
-        m = pat.search(text)
-        if m:
-            try:
-                return Decimal(m.group(1).replace(",", ""))
-            except InvalidOperation:
-                continue
-    return None
-
-
-def _parse_date(text: str) -> date | None:
-    m = _DATE_RE.search(text)
-    if not m:
-        return None
-    raw = m.group(1).replace("-", "/")
-    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y"):
-        try:
-            return datetime.strptime(raw, fmt).date()
-        except ValueError:
-            continue
-    return None
-
-
-def _parse_vendor(text: str) -> str | None:
-    for line in text.splitlines():
-        line = line.strip()
-        if len(line) < 3 or len(line) > 80:
-            continue
-        if _VENDOR_SKIP.match(line):
-            continue
-        if re.search(r"\d{2}/\d{2}", line):
-            continue
-        return line
-    return None
-
-
-def parse_receipt_text(text: str) -> dict[str, Any]:
-    return {
-        "amount": str(_parse_amount(text)) if _parse_amount(text) is not None else None,
-        "due_date": _parse_date(text).isoformat() if _parse_date(text) else None,
-        "vendor_name": _parse_vendor(text),
-        "account_number": None,
-        "confidence": "medium" if len(text) > 40 else "low",
-    }
 
 
 async def _download_bytes(url: str, max_bytes: int = 10_485_760) -> bytes:
@@ -86,7 +27,21 @@ async def _download_bytes(url: str, max_bytes: int = 10_485_760) -> bytes:
         return data
 
 
-def _image_to_text(data: bytes, content_type: str | None) -> str:
+def _pdf_bytes_to_text(data: bytes) -> str:
+    try:
+        import pdfplumber
+
+        chunks: list[str] = []
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            for page in pdf.pages[:5]:
+                chunks.append(page.extract_text() or "")
+        return "\n".join(chunks)
+    except Exception:
+        logger.warning("pdfplumber failed for PDF OCR", exc_info=True)
+        return ""
+
+
+def _image_bytes_to_text(data: bytes, content_type: str | None) -> str:
     try:
         from PIL import Image
     except ImportError:
@@ -95,7 +50,7 @@ def _image_to_text(data: bytes, content_type: str | None) -> str:
     try:
         import pytesseract
     except ImportError:
-        logger.info("pytesseract not installed — using filename heuristics only")
+        logger.info("pytesseract not installed — OCR text extraction skipped")
         return ""
 
     img = Image.open(io.BytesIO(data))
@@ -104,14 +59,25 @@ def _image_to_text(data: bytes, content_type: str | None) -> str:
     return pytesseract.image_to_string(img) or ""
 
 
+def _bytes_to_text(data: bytes, content_type: str | None, filename: str | None) -> str:
+    is_pdf = (content_type == "application/pdf") or (
+        filename and filename.lower().endswith(".pdf")
+    )
+    if is_pdf:
+        text = _pdf_bytes_to_text(data)
+        if text.strip():
+            return text
+    return _image_bytes_to_text(data, content_type)
+
+
 class TesseractOcrProvider(OcrProvider):
     async def process(self, document: DocumentUpload, signed_get_url: str) -> OcrResult:
         try:
             data = await _download_bytes(signed_get_url)
-            text = _image_to_text(data, document.content_type)
+            text = _bytes_to_text(data, document.content_type, document.original_filename)
             if not text.strip():
                 text = document.original_filename or ""
-            parsed = parse_receipt_text(text)
+            parsed = parse_for_document_type(document.document_type, text)
             return OcrResult(
                 status="completed",
                 text=text[:50_000] if text else None,
@@ -133,7 +99,9 @@ def get_ocr_provider() -> OcrProvider:
 
             _provider = TesseractOcrProvider()
         except ImportError:
-            _provider = TesseractOcrProvider()
+            from app.services.ocr.noop_provider import NoopOcrProvider
+
+            _provider = NoopOcrProvider()
     return _provider
 
 

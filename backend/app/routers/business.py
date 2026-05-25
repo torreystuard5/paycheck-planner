@@ -48,6 +48,7 @@ from app.schemas.business import (
     PayRunUpdate,
     SaleCreate,
     SaleResponse,
+    SaleUpdate,
     SaleSummary,
     StaffCreate,
     StaffPaySummary,

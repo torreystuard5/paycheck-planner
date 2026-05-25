@@ -9,14 +9,21 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
 from app.models.document_upload import DocumentUpload
 from app.models.user import User
-from app.schemas.document_upload import DocumentDetailResponse, DocumentFinalizeRequest, PresignedUploadResponse
+from app.schemas.document_upload import (
+    DocumentDetailResponse,
+    DocumentFinalizeRequest,
+    DocumentUploadResponse,
+    PresignedUploadResponse,
+)
+from app.services.document_link import validate_business_link_target
+from app.services.document_responses import document_detail_response
 from app.services.ocr_service import run_document_ocr
 from app.services.storage.r2_client import R2NotConfiguredError, R2OperationError
 from app.services.storage.r2_provider import get_storage_provider
@@ -30,6 +37,8 @@ ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
     "image/png",
     "image/webp",
+    "image/heic",
+    "image/heif",
     "application/pdf",
 }
 BUSINESS_DOC_TYPES = frozenset(
@@ -44,9 +53,36 @@ class BusinessDocumentUploadRequest(BaseModel):
     document_type: str
 
 
+class BusinessDocumentLinkRequest(BaseModel):
+    entity_type: str = Field(..., pattern="^(business_deduction)$")
+    entity_id: UUID
+
+
 def _extension_from_filename(filename: str) -> str:
     _, ext = os.path.splitext(filename)
     return ext.lower() if ext else ""
+
+
+def _business_scope(ctx: BusinessContext):
+    return and_(
+        DocumentUpload.user_id == ctx.owner_id,
+        DocumentUpload.object_key.like("business/%"),
+    )
+
+
+async def _get_business_doc(
+    document_id: UUID, ctx: BusinessContext, db: AsyncSession
+) -> DocumentUpload:
+    result = await db.execute(
+        select(DocumentUpload).where(
+            DocumentUpload.id == document_id,
+            _business_scope(ctx),
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
 
 
 @router.post("/presign", response_model=PresignedUploadResponse)
@@ -112,15 +148,7 @@ async def business_finalize(
     ctx: BusinessContext = Depends(get_business_ctx),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(DocumentUpload).where(
-            DocumentUpload.id == data.document_id,
-            DocumentUpload.user_id == ctx.owner_id,
-        )
-    )
-    doc = result.scalar_one_or_none()
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc = await _get_business_doc(data.document_id, ctx, db)
     if doc.status not in ("pending_upload",):
         raise HTTPException(status_code=409, detail=f"Cannot finalize status {doc.status}")
 
@@ -151,7 +179,7 @@ async def business_finalize(
 
     await db.flush()
     await db.refresh(doc)
-    return DocumentDetailResponse.model_validate(doc)
+    return document_detail_response(doc)
 
 
 @router.get("", response_model=list[DocumentDetailResponse])
@@ -160,12 +188,55 @@ async def business_list_documents(
     ctx: BusinessContext = Depends(get_business_ctx),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(DocumentUpload).where(
-        DocumentUpload.user_id == ctx.owner_id,
-        DocumentUpload.object_key.like("business/%"),
-    )
+    q = select(DocumentUpload).where(_business_scope(ctx))
     if document_type:
         q = q.where(DocumentUpload.document_type == document_type)
     q = q.order_by(DocumentUpload.created_at.desc()).limit(100)
     rows = (await db.execute(q)).scalars().all()
-    return [DocumentDetailResponse.model_validate(r) for r in rows]
+    return [document_detail_response(r) for r in rows]
+
+
+@router.get("/{document_id}", response_model=DocumentDetailResponse)
+async def business_get_document(
+    document_id: UUID,
+    ctx: BusinessContext = Depends(get_business_ctx),
+    db: AsyncSession = Depends(get_db),
+):
+    doc = await _get_business_doc(document_id, ctx, db)
+    return document_detail_response(doc)
+
+
+@router.post("/{document_id}/link", response_model=DocumentUploadResponse)
+async def business_link_document(
+    document_id: UUID,
+    body: BusinessDocumentLinkRequest,
+    ctx: BusinessContext = Depends(get_business_ctx),
+    db: AsyncSession = Depends(get_db),
+):
+    doc = await _get_business_doc(document_id, ctx, db)
+    await validate_business_link_target(
+        db, ctx.owner_id, body.entity_type, body.entity_id
+    )
+
+    doc.linked_entity_type = body.entity_type
+    doc.linked_entity_id = body.entity_id
+    await db.flush()
+    await db.refresh(doc)
+    return DocumentUploadResponse.model_validate(doc)
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def business_delete_document(
+    document_id: UUID,
+    ctx: BusinessContext = Depends(get_business_ctx),
+    db: AsyncSession = Depends(get_db),
+):
+    doc = await _get_business_doc(document_id, ctx, db)
+    if doc.object_key:
+        try:
+            storage = get_storage_provider()
+            storage.delete_object(doc.object_key)
+        except (R2NotConfiguredError, R2OperationError) as exc:
+            logger.warning("R2 cleanup failed for %s: %s", doc.object_key, exc)
+    await db.delete(doc)
+    await db.flush()

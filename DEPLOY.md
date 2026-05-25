@@ -46,12 +46,52 @@ Set these on the Render web service:
 - The app **automatically converts** it to `postgresql+asyncpg://...` at startup
 - You do **not** need to manually edit the URL
 
-#### CORS
+#### CORS (API)
 
 The `FRONTEND_URL` env var controls which origins are allowed. To allow multiple origins, use a comma-separated list:
 ```
 FRONTEND_URL=https://paydrift.netlify.app,http://localhost:5173
 ```
+
+#### Cloudflare R2 (document uploads)
+
+Receipt, paystub, and business document uploads use **presigned URLs**: the browser PUTs directly to R2, then the API finalizes and runs OCR. Without R2 env vars, `/api/v1/documents/*` returns **503** and `/health` reports `uploads_storage: not_configured`.
+
+| Variable | Value |
+|---|---|
+| `R2_ACCESS_KEY_ID` | R2 API token access key |
+| `R2_SECRET_ACCESS_KEY` | R2 API token secret |
+| `R2_BUCKET_NAME` | Bucket name (e.g. `paydrift-uploads`) |
+| `R2_ENDPOINT_URL` | `https://<account_id>.r2.cloudflarestorage.com` |
+| `R2_ACCOUNT_ID` | Optional — account ID for dashboard links |
+| `R2_PUBLIC_BASE_URL` | Optional — leave blank for private bucket (presigned GET only) |
+| `R2_PRESIGNED_URL_TTL` | `900` (seconds) |
+| `R2_MAX_UPLOAD_BYTES` | `15728640` (15 MB; must match frontend `UPLOAD_MAX_BYTES`) |
+
+**R2 bucket CORS** (Cloudflare dashboard → R2 → bucket → Settings → CORS policy). Allow the Netlify app origin to **PUT** (upload) and **GET** (download via presigned URL). Example policy:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://paydrift.netlify.app",
+      "http://localhost:5173"
+    ],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["Content-Type", "Content-Length", "x-amz-*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Replace origins with your production Netlify URL and local Vite dev URL. CORS is **not** configured in application code — it must be set on the bucket.
+
+**Verify after deploy:**
+
+- `GET /health` → `uploads_storage: ok` when all four required R2 vars are set
+- `migration_ok: true` and `document_uploads` present (migration **043**, applied via `start.sh` → `migrate.py`)
+- Pro users: upload on `/uploads` (feature `receipt_ocr`)
 
 ### Migrations (automatic)
 
@@ -97,6 +137,33 @@ bash start.sh                  # migrate then uvicorn (like Render)
 1. **Redeploy previous Git commit** on Render (instant rollback of app code).
 2. **Schema rollback** only if a new migration misbehaved: Render Shell → `cd` to backend → `alembic downgrade -1` (one revision at a time; never `downgrade base` on production without a backup).
 3. If `migrate.py` fails during deploy, Render keeps the previous release live — fix the migration script and redeploy.
+
+### Cloudflare R2 (document uploads)
+
+Receipt, paystub, and tax document uploads use **presigned PUT** from the browser directly to R2. Configure on the Render web service:
+
+| Variable | Value |
+|---|---|
+| `R2_ACCESS_KEY_ID` | R2 API token access key |
+| `R2_SECRET_ACCESS_KEY` | R2 API token secret |
+| `R2_BUCKET_NAME` | Your bucket name |
+| `R2_ENDPOINT_URL` | e.g. `https://<account_id>.r2.cloudflarestorage.com` |
+
+**Bucket CORS** (Cloudflare dashboard → bucket → CORS policy) must allow your Netlify origin:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://paydrift.netlify.app", "http://localhost:5173"],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Without R2 env vars, upload endpoints return **503** (storage not configured). Migrations through **043** (`document_uploads`) run automatically via `start.sh`.
 
 ### Verify Deployment
 

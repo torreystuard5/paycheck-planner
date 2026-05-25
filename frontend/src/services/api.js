@@ -175,4 +175,46 @@ export function deleteDocument(id) {
   return api.delete(`/api/v1/documents/${id}`);
 }
 
+export function linkDocument(id, { entity_type, entity_id }) {
+  return api.post(`/api/v1/documents/${id}/link`, { entity_type, entity_id });
+}
+
+export function createBillFromOcr(id, body = {}) {
+  return api.post(`/api/v1/documents/${id}/create-bill-from-ocr`, body);
+}
+
+// Business document uploads (same R2 flow, owner-scoped)
+export function requestBusinessUploadPresign({ filename, content_type, file_size, document_type }) {
+  return api.post('/api/v1/business/documents/presign', {
+    filename,
+    content_type,
+    file_size,
+    document_type,
+  });
+}
+
+export function finalizeBusinessUpload({ document_id, file_size }) {
+  return api.post('/api/v1/business/documents/finalize', { document_id, file_size });
+}
+
+export function listBusinessDocuments(params = {}) {
+  return api.get('/api/v1/business/documents', { params });
+}
+
+export function getBusinessDocument(id) {
+  return api.get(`/api/v1/business/documents/${id}`);
+}
+
+export function deleteBusinessDocument(id) {
+  return api.delete(`/api/v1/business/documents/${id}`);
+}
+
+export function linkBusinessDocument(id, { entity_type, entity_id }) {
+  return api.post(`/api/v1/business/documents/${id}/link`, { entity_type, entity_id });
+}
+
+export function confirmPaystubFromDocument(id, body) {
+  return api.post(`/api/v1/documents/${id}/confirm-paystub`, body);
+}
+
 export default api;

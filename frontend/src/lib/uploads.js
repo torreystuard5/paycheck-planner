@@ -1,4 +1,11 @@
-import { requestUploadPresign, finalizeUpload, deleteDocument } from '../services/api';
+import {
+  requestUploadPresign,
+  finalizeUpload,
+  deleteDocument,
+  requestBusinessUploadPresign,
+  finalizeBusinessUpload,
+  deleteBusinessDocument,
+} from '../services/api';
 
 export const UPLOAD_MAX_BYTES = 15 * 1024 * 1024; // 15 MB
 
@@ -7,12 +14,12 @@ export const ALLOWED_CONTENT_TYPES = [
   'image/png',
   'image/webp',
   'image/heic',
+  'image/heif',
   'application/pdf',
 ];
 
 /**
  * Upload a file directly to R2 using the presigned URL.
- * Returns a promise that resolves on 2xx, rejects otherwise.
  */
 export async function uploadFileToR2(file, presignedResponse) {
   const { upload_url, required_headers } = presignedResponse;
@@ -34,11 +41,15 @@ export async function uploadFileToR2(file, presignedResponse) {
 }
 
 /**
- * Full upload orchestration: presign -> PUT to R2 -> finalize.
- * Errors are categorized by phase: 'presign', 'r2_upload', 'finalize'.
+ * Full upload: presign -> PUT to R2 -> finalize.
+ * @param {'personal'|'business'} scope
  */
-export async function uploadDocument({ file, documentType, budgetId, onProgress }) {
-  // 1. Presign
+export async function uploadDocument({ file, documentType, budgetId, scope = 'personal' }) {
+  const isBusiness = scope === 'business';
+  const presignFn = isBusiness ? requestBusinessUploadPresign : requestUploadPresign;
+  const finalizeFn = isBusiness ? finalizeBusinessUpload : finalizeUpload;
+  const deleteFn = isBusiness ? deleteBusinessDocument : deleteDocument;
+
   let presignData;
   try {
     const params = {
@@ -47,7 +58,7 @@ export async function uploadDocument({ file, documentType, budgetId, onProgress 
       file_size: file.size,
       document_type: documentType,
     };
-    const { data } = await requestUploadPresign(params);
+    const { data } = await presignFn(params);
     presignData = data;
   } catch (err) {
     const wrapped = new Error(
@@ -60,13 +71,15 @@ export async function uploadDocument({ file, documentType, budgetId, onProgress 
     throw wrapped;
   }
 
-  // 2. Upload to R2
   try {
     await uploadFileToR2(file, presignData);
   } catch (err) {
-    // Best-effort cleanup of orphaned pending row
     if (presignData?.document_id) {
-      try { await deleteDocument(presignData.document_id); } catch { /* ignore */ }
+      try {
+        await deleteFn(presignData.document_id);
+      } catch {
+        /* ignore */
+      }
     }
     const wrapped = new Error('Upload failed. If this persists, contact support.');
     wrapped.phase = 'r2_upload';
@@ -74,17 +87,19 @@ export async function uploadDocument({ file, documentType, budgetId, onProgress 
     throw wrapped;
   }
 
-  // 3. Finalize
   try {
-    const { data } = await finalizeUpload({
+    const { data } = await finalizeFn({
       document_id: presignData.document_id,
       file_size: file.size,
     });
     return data;
   } catch (err) {
-    // Best-effort cleanup of orphaned pending row
     if (presignData?.document_id) {
-      try { await deleteDocument(presignData.document_id); } catch { /* ignore */ }
+      try {
+        await deleteFn(presignData.document_id);
+      } catch {
+        /* ignore */
+      }
     }
     const wrapped = new Error('Upload completed but confirmation failed. Please try again.');
     wrapped.phase = 'finalize';

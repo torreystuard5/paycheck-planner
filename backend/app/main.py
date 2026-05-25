@@ -72,6 +72,16 @@ async def lifespan(app: FastAPI):
             app.state.migration_ok = status.migration_ok
             app.state.migration_current = status.current
             app.state.migration_head = status.head
+        from app.services.storage.r2_health import r2_config_status
+
+        r2 = r2_config_status()
+        if r2["configured"]:
+            logger.info("[startup] R2 document storage configured (bucket uploads enabled)")
+        else:
+            logger.warning(
+                "[startup] R2 not configured — document uploads return 503. Missing: %s",
+                ", ".join(r2["missing"]),
+            )
     except Exception:
         logger.exception(
             "[startup] Migration/database check failed — verify DATABASE_URL and Postgres"
@@ -146,6 +156,7 @@ _PERSONAL_API_PREFIXES = (
     "/api/v1/calendar",
     "/api/v1/tax",
     "/api/v1/referrals",
+    "/api/v1/documents",
 )
 
 
@@ -450,10 +461,18 @@ async def health_check():
     from app.services.public_changelog import CHANGELOG_PATH
 
     payload["changelog_file"] = "ok" if CHANGELOG_PATH.is_file() else "missing"
+    from app.services.storage.r2_health import r2_config_status
+
+    r2 = r2_config_status()
+    payload["uploads_storage"] = "ok" if r2["configured"] else "not_configured"
+    if not r2["configured"]:
+        payload["uploads_storage_missing"] = r2["missing"]
     try:
         async with async_session() as session:
             status = await build_migration_status(session)
         payload.update(status.to_health_payload())
+        if not r2["configured"] and payload.get("status") == "healthy":
+            payload["status"] = "degraded"
         if payload.get("changelog_file") == "missing":
             payload["status"] = "degraded"
     except Exception:

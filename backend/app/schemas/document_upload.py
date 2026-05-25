@@ -13,7 +13,7 @@ class DocumentUploadRequest(BaseModel):
     filename: str = Field(max_length=255)
     content_type: str
     file_size: int = Field(gt=0)
-    document_type: Literal["paystub", "receipt", "other"]
+    document_type: Literal["paystub", "receipt", "tax", "other"]
 
 
 class PresignedUploadResponse(BaseModel):
@@ -36,7 +36,7 @@ class DocumentFinalizeRequest(BaseModel):
 
 
 class DocumentUploadResponse(BaseModel):
-    """Standard read model — excludes internal storage/OCR fields."""
+    """Standard read model — excludes internal storage keys and raw OCR text."""
 
     id: UUID
     status: str
@@ -46,6 +46,8 @@ class DocumentUploadResponse(BaseModel):
     document_type: str
     linked_entity_type: Optional[str] = None
     linked_entity_id: Optional[UUID] = None
+    parsed_json: Optional[dict] = None
+    error_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -53,7 +55,6 @@ class DocumentUploadResponse(BaseModel):
 
 
 class DocumentDetailResponse(DocumentUploadResponse):
-    """Extended model with OCR data and a short-lived download URL."""
+    """Extended model with a short-lived download URL."""
 
-    parsed_json: Optional[dict] = None
     download_url: Optional[str] = None

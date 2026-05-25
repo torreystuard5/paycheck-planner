@@ -19,6 +19,9 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ProFeatureGate from '../components/ProFeatureGate';
+import UploadDropzone from '../components/uploads/UploadDropzone';
+import { linkDocument } from '../services/api';
+import { formatApiError } from '../utils/formatApiError';
 
 const TAX_CATEGORIES = [
   'Medical',
@@ -108,6 +111,7 @@ export default function TaxPrep() {
   const [form, setForm] = useState({ ...defaultForm, tax_year: currentYear });
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [receiptDocId, setReceiptDocId] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -138,6 +142,7 @@ export default function TaxPrep() {
   // Open add modal
   const openAdd = () => {
     setEditingItem(null);
+    setReceiptDocId(null);
     setForm({ ...defaultForm, tax_year: taxYear });
     setShowModal(true);
   };
@@ -145,6 +150,7 @@ export default function TaxPrep() {
   // Open edit modal
   const openEdit = (item) => {
     setEditingItem(item);
+    setReceiptDocId(null);
     setForm({
       name: item.name,
       amount: String(item.amount),
@@ -169,17 +175,31 @@ export default function TaxPrep() {
         tax_year: parseInt(form.tax_year, 10),
         receipt_note: form.receipt_note || null,
       };
+      let deductionId = editingItem?.id;
       if (editingItem) {
         await api.put(`/api/v1/tax/deductions/${editingItem.id}`, payload);
         toast('Deduction updated');
       } else {
-        await api.post('/api/v1/tax/deductions', payload);
+        const { data } = await api.post('/api/v1/tax/deductions', payload);
+        deductionId = data?.id;
         toast('Deduction added');
       }
+      if (receiptDocId && deductionId) {
+        try {
+          await linkDocument(receiptDocId, {
+            entity_type: 'tax_deduction',
+            entity_id: deductionId,
+          });
+          toast('Receipt attached to deduction');
+        } catch {
+          toast('Deduction saved but receipt could not be linked', 'error');
+        }
+      }
       setShowModal(false);
+      setReceiptDocId(null);
       fetchData();
-    } catch {
-      toast('Failed to save deduction');
+    } catch (err) {
+      toast(formatApiError(err), 'error');
     } finally {
       setSaving(false);
     }
@@ -540,6 +560,23 @@ export default function TaxPrep() {
                 ))}
               </select>
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Receipt document</label>
+            <p className="text-xs text-gray-500 mb-2">
+              Upload a photo or PDF; it will attach when you save this deduction.
+            </p>
+            <UploadDropzone
+              documentType="tax"
+              compact
+              onUploaded={(doc) => {
+                setReceiptDocId(doc.id);
+                toast('Receipt ready — save deduction to attach');
+              }}
+            />
+            {receiptDocId && (
+              <p className="text-xs text-green-700 mt-1">Receipt uploaded and will be linked on save.</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Edit, Trash2, ChevronDown, ChevronUp, DollarSign, Clock, Archive, Calendar } from 'lucide-react';
+import { Edit, Trash2, ChevronDown, ChevronUp, DollarSign, Clock, Archive, Calendar, Upload } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import UploadDropzone from '../components/uploads/UploadDropzone';
+import DocumentDetailDrawer from '../components/uploads/DocumentDetailDrawer';
+import ProFeatureGate from '../components/ProFeatureGate';
 import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
 import { useBudget } from '../context/BudgetContext';
@@ -35,6 +39,7 @@ export default function Income() {
   const [expandedEntryId, setExpandedEntryId] = useState(null);
   const [showArchive, setShowArchive] = useState(false);
   const [firstLoad, setFirstLoad] = useState(true);
+  const [paystubDetailId, setPaystubDetailId] = useState(null);
 
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -187,6 +192,45 @@ export default function Income() {
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+      )}
+
+      <ProFeatureGate featureKey="receipt_ocr">
+        <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Upload className="h-5 w-5 text-blue-600" />
+                Upload paystub
+              </h2>
+              <p className="text-sm text-gray-600">
+                Scan a paystub to pre-fill a paycheck entry, or{' '}
+                <Link to="/uploads" className="text-blue-600 hover:underline">
+                  manage all uploads
+                </Link>
+                .
+              </p>
+            </div>
+          </div>
+          <UploadDropzone
+            documentType="paystub"
+            compact
+            onUploaded={(doc) => {
+              if (doc?.id) setPaystubDetailId(doc.id);
+            }}
+          />
+        </div>
+      </ProFeatureGate>
+
+      {paystubDetailId && (
+        <DocumentDetailDrawer
+          documentId={paystubDetailId}
+          onClose={() => setPaystubDetailId(null)}
+          onUpdated={() => {
+            setPaystubDetailId(null);
+            bumpBudgetVersion();
+            fetchData();
+          }}
+        />
       )}
 
       {/* Monthly income summary */}

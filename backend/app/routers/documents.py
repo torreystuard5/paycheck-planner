@@ -3,6 +3,7 @@
 import logging
 import os
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
@@ -20,27 +21,51 @@ from app.schemas.document_upload import (
     DocumentUploadResponse,
     PresignedUploadResponse,
 )
+from app.schemas.paycheck_entry import PaycheckEntryResponse
+from app.services.document_link import validate_personal_link_target
+from app.services.document_responses import document_detail_response
+from app.services.document_scope import document_access_scope, get_document_for_user
 from app.services.storage.r2_client import R2NotConfiguredError, R2OperationError
 from app.services.storage.r2_provider import get_storage_provider
 from app.utils.budget import resolve_budget_id
 from app.services.ocr_service import run_document_ocr
-from app.utils.security import get_current_user, require_feature
+from app.utils.security import get_current_user
 from app.config import settings
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/documents",
-    tags=["Documents"],
-    dependencies=[Depends(require_feature("receipt_ocr"))],
-)
+router = APIRouter(prefix="/documents", tags=["Documents"])
+
+
+async def _ensure_document_access(
+    db: AsyncSession,
+    current_user: User,
+    document_type: str | None = None,
+) -> None:
+    from app.services.tier_service import user_can_access_feature
+
+    if document_type == "tax":
+        if await user_can_access_feature(db, current_user, "tax_prep"):
+            return
+    if await user_can_access_feature(db, current_user, "receipt_ocr"):
+        return
+    feature = "tax_prep" if document_type == "tax" else "receipt_ocr"
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "upgrade_required",
+            "feature": feature,
+            "message": "This feature requires Home Pro.",
+        },
+    )
 
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
     "image/png",
     "image/webp",
     "image/heic",
+    "image/heif",
     "application/pdf",
 }
 
@@ -61,6 +86,8 @@ async def presign_upload(
     current_user: User = Depends(get_current_user),
 ):
     """Issue a presigned PUT URL for direct-to-R2 upload."""
+    await _ensure_document_access(db, current_user, data.document_type)
+
     # Validate content type
     if data.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
@@ -138,20 +165,17 @@ async def presign_upload(
     )
 
 
-@router.post("/finalize", response_model=DocumentUploadResponse)
+@router.post("/finalize", response_model=DocumentDetailResponse)
 async def finalize_upload(
     data: DocumentFinalizeRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Confirm an upload completed — verify object in R2 and transition status."""
-    result = await db.execute(
-        select(DocumentUpload).where(
-            DocumentUpload.id == data.document_id,
-            DocumentUpload.user_id == current_user.id,
-        )
+    await _ensure_document_access(db, current_user)
+    doc = await get_document_for_user(
+        db, data.document_id, current_user, owner_only=True
     )
-    doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
@@ -215,7 +239,7 @@ async def finalize_upload(
 
     await db.flush()
     await db.refresh(doc)
-    return doc
+    return document_detail_response(doc)
 
 
 @router.get("", response_model=list[DocumentUploadResponse])
@@ -229,17 +253,8 @@ async def list_documents(
     current_user: User = Depends(get_current_user),
 ):
     """List documents for the current user (and household-shared uploads)."""
-    if current_user.household_id:
-        from sqlalchemy import or_
-
-        query = select(DocumentUpload).where(
-            or_(
-                DocumentUpload.user_id == current_user.id,
-                DocumentUpload.household_id == current_user.household_id,
-            )
-        )
-    else:
-        query = select(DocumentUpload).where(DocumentUpload.user_id == current_user.id)
+    await _ensure_document_access(db, current_user)
+    query = select(DocumentUpload).where(document_access_scope(current_user))
 
     if budget_id is not None:
         query = query.where(DocumentUpload.budget_id == budget_id)
@@ -260,53 +275,27 @@ async def get_document(
     current_user: User = Depends(get_current_user),
 ):
     """Get document details including a short-lived download URL."""
-    from sqlalchemy import and_, or_
-
-    if current_user.household_id:
-        scope = or_(
-            DocumentUpload.user_id == current_user.id,
-            DocumentUpload.household_id == current_user.household_id,
-        )
-    else:
-        scope = DocumentUpload.user_id == current_user.id
-
-    result = await db.execute(
-        select(DocumentUpload).where(and_(DocumentUpload.id == document_id, scope))
-    )
-    doc = result.scalar_one_or_none()
+    await _ensure_document_access(db, current_user)
+    doc = await get_document_for_user(db, document_id, current_user)
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-
-    # Generate signed download URL (best-effort — skip if R2 not configured)
-    download_url = None
-    if doc.object_key and doc.status in ("uploaded", "processing", "completed"):
-        try:
-            storage = get_storage_provider()
-            download_url = storage.presign_get(doc.object_key, expires_in=300)
-        except (R2NotConfiguredError, R2OperationError) as exc:
-            logger.warning("Could not generate download URL: %s", exc)
-
-    return DocumentDetailResponse(
-        id=doc.id,
-        status=doc.status,
-        original_filename=doc.original_filename,
-        content_type=doc.content_type,
-        file_size=doc.file_size,
-        document_type=doc.document_type,
-        linked_entity_type=doc.linked_entity_type,
-        linked_entity_id=doc.linked_entity_id,
-        created_at=doc.created_at,
-        updated_at=doc.updated_at,
-        parsed_json=doc.parsed_json,
-        download_url=download_url,
-    )
+    return document_detail_response(doc)
 
 
 class DocumentLinkRequest(BaseModel):
-    entity_type: str = Field(..., pattern="^(bill|debt|tax_deduction)$")
+    entity_type: str = Field(..., pattern="^(bill|debt|tax_deduction|paycheck_entry)$")
     entity_id: UUID
+
+
+class PaystubConfirmFromDocumentRequest(BaseModel):
+    source_name: str = Field(..., max_length=150)
+    pay_date: date
+    net_amount: Decimal = Field(..., max_digits=12, decimal_places=2)
+    gross_amount: Decimal | None = Field(default=None, max_digits=12, decimal_places=2)
+    memo: str | None = Field(default=None, max_length=255)
+    budget_id: UUID | None = None
 
 
 class CreateBillFromOcrRequest(BaseModel):
@@ -323,22 +312,14 @@ async def link_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from sqlalchemy import and_, or_
-
-    if current_user.household_id:
-        scope = or_(
-            DocumentUpload.user_id == current_user.id,
-            DocumentUpload.household_id == current_user.household_id,
-        )
-    else:
-        scope = DocumentUpload.user_id == current_user.id
-
-    result = await db.execute(
-        select(DocumentUpload).where(and_(DocumentUpload.id == document_id, scope))
-    )
-    doc = result.scalar_one_or_none()
+    await _ensure_document_access(db, current_user)
+    doc = await get_document_for_user(db, document_id, current_user)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    await validate_personal_link_target(
+        db, current_user, body.entity_type, body.entity_id
+    )
 
     doc.linked_entity_type = body.entity_type
     doc.linked_entity_id = body.entity_id
@@ -347,7 +328,61 @@ async def link_document(
     return doc
 
 
-@router.post("/{document_id}/create-bill-from-ocr")
+@router.post("/{document_id}/confirm-paystub", response_model=PaycheckEntryResponse)
+async def confirm_paystub_from_document(
+    document_id: UUID,
+    body: PaystubConfirmFromDocumentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a paycheck entry from a paystub document and link the upload."""
+    from app.services.tier_service import user_can_access_feature
+
+    if not await user_can_access_feature(db, current_user, "receipt_ocr"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "upgrade_required", "feature": "receipt_ocr"},
+        )
+    from app.models.paycheck_entry import PaycheckEntry
+    from app.utils.budget import resolve_budget_id
+
+    doc = await get_document_for_user(db, document_id, current_user, owner_only=True)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.document_type != "paystub":
+        raise HTTPException(status_code=400, detail="Document is not a paystub")
+    if doc.linked_entity_type == "paycheck_entry" and doc.linked_entity_id:
+        raise HTTPException(
+            status_code=409,
+            detail="This paystub is already linked to a paycheck entry",
+        )
+
+    budget_id = await resolve_budget_id(current_user, db, body.budget_id)
+    entry = PaycheckEntry(
+        user_id=current_user.id,
+        source_name=body.source_name[:150],
+        pay_date=body.pay_date,
+        gross_amount=body.gross_amount,
+        net_amount=body.net_amount,
+        memo=body.memo,
+        budget_id=budget_id,
+    )
+    db.add(entry)
+    await db.flush()
+    doc.linked_entity_type = "paycheck_entry"
+    doc.linked_entity_id = entry.id
+    await db.flush()
+    await db.refresh(entry)
+    return PaycheckEntryResponse.model_validate(entry)
+
+
+class CreateBillFromOcrResponse(BaseModel):
+    bill_id: UUID
+    name: str
+    amount: str
+
+
+@router.post("/{document_id}/create-bill-from-ocr", response_model=CreateBillFromOcrResponse)
 async def create_bill_from_ocr(
     document_id: UUID,
     body: CreateBillFromOcrRequest,
@@ -357,25 +392,26 @@ async def create_bill_from_ocr(
     from datetime import date as date_type
     from decimal import Decimal
 
-    from sqlalchemy import and_, or_
-
     from app.models.bill import Bill
     from app.utils.budget import resolve_budget_id
+    from app.services.tier_service import user_can_access_feature
 
-    if current_user.household_id:
-        scope = or_(
-            DocumentUpload.user_id == current_user.id,
-            DocumentUpload.household_id == current_user.household_id,
+    if not await user_can_access_feature(db, current_user, "receipt_ocr"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "upgrade_required", "feature": "receipt_ocr"},
         )
-    else:
-        scope = DocumentUpload.user_id == current_user.id
 
-    result = await db.execute(
-        select(DocumentUpload).where(and_(DocumentUpload.id == document_id, scope))
-    )
-    doc = result.scalar_one_or_none()
+    doc = await get_document_for_user(db, document_id, current_user, owner_only=True)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    if doc.document_type not in ("receipt", "other"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only receipt documents can create bills",
+        )
+    if doc.linked_entity_type == "bill" and doc.linked_entity_id:
+        raise HTTPException(status_code=409, detail="Document is already linked to a bill")
 
     parsed = doc.parsed_json or {}
     amount = body.amount
@@ -409,7 +445,11 @@ async def create_bill_from_ocr(
     doc.linked_entity_id = bill.id
     await db.flush()
     await db.refresh(bill)
-    return {"bill_id": bill.id, "name": bill.name, "amount": str(bill.amount)}
+    return CreateBillFromOcrResponse(
+        bill_id=bill.id,
+        name=bill.name,
+        amount=str(bill.amount),
+    )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -419,13 +459,10 @@ async def delete_document(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a document and best-effort remove from R2."""
-    result = await db.execute(
-        select(DocumentUpload).where(
-            DocumentUpload.id == document_id,
-            DocumentUpload.user_id == current_user.id,
-        )
+    await _ensure_document_access(db, current_user)
+    doc = await get_document_for_user(
+        db, document_id, current_user, owner_only=True
     )
-    doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
