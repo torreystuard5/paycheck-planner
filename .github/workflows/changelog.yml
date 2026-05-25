@@ -33,38 +33,68 @@ jobs:
       - name: Lint PR commits
         run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
-  changelog:
+  changelog-main:
+    name: Regenerate and commit changelog (main)
+    if: |
+      github.event_name == 'push' &&
+      !contains(github.event.head_commit.message, 'docs(changelog)')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Regenerate backend/CHANGELOG.md
+        uses: orhun/git-cliff-action@v4
+        with:
+          version: latest
+          config: cliff.toml
+          args: -o backend/CHANGELOG.md
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/CHANGELOG.md
+          if git diff --staged --quiet; then
+            echo "backend/CHANGELOG.md already up to date."
+            exit 0
+          fi
+          git commit -m "docs(changelog): regenerate public release notes"
+          git push
+
+  changelog-verify:
     name: Verify CHANGELOG.md
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install git-cliff
+      - name: Generate expected changelog
         uses: orhun/git-cliff-action@v4
         with:
           version: latest
           config: cliff.toml
           args: -o backend/CHANGELOG.md.verify
 
-      - name: Compare generated changelog
+      - name: Compare with committed file
         run: |
           if [ ! -f backend/CHANGELOG.md ]; then
-            echo "backend/CHANGELOG.md is missing. Run: npm run changelog"
+            echo "Missing backend/CHANGELOG.md — run: npm run changelog"
             exit 1
           fi
           if ! diff -u backend/CHANGELOG.md backend/CHANGELOG.md.verify; then
-            echo ""
-            echo "backend/CHANGELOG.md is out of date. On your machine run:"
-            echo "  npm run changelog"
-            echo "  git add backend/CHANGELOG.md && git commit -m 'docs(changelog): update public release notes'"
+            echo "backend/CHANGELOG.md is out of date. Run: npm run changelog"
             exit 1
           fi
-          echo "backend/CHANGELOG.md matches git-cliff output."
+          echo "CHANGELOG OK"
 
   update-changelog:
-    name: Regenerate CHANGELOG.md
+    name: Regenerate CHANGELOG.md (manual)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -74,7 +104,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install git-cliff
+      - name: Regenerate
         uses: orhun/git-cliff-action@v4
         with:
           version: latest
@@ -87,7 +117,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/CHANGELOG.md
           if git diff --staged --quiet; then
-            echo "backend/CHANGELOG.md already up to date."
+            echo "Already up to date."
             exit 0
           fi
           git commit -m "docs(changelog): regenerate public release notes"

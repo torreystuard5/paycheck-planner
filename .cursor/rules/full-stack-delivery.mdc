@@ -1,0 +1,34 @@
+---
+description: Definition of done for PayDrift features — ship front-to-back in one pass
+alwaysApply: true
+---
+
+# Full-stack delivery (PayDrift)
+
+When implementing a user-facing feature or fix, treat **one coherent delivery** as the bar. Do not stop at backend-only or UI-only unless the user explicitly asked for a spike.
+
+## Production paths
+
+- Backend: `backend/` (Render Docker)
+- Frontend: `frontend/` (Netlify)
+- Do not ship only under `paycheck-planner/` unless mirroring to root in the same change.
+
+## Minimum checklist before considering work "done"
+
+1. **Data** — Model/migration if schema changes; run `python migrate.py` locally; migration is idempotent where prod may be ahead/behind.
+2. **API** — Router + schema + service; registered in `main.py`; errors return JSON (not silent 500 without CORS).
+3. **Frontend** — Page/component wired; route in `App.jsx`; API path matches backend; loading + error states.
+4. **Household/budget scope** — If bills/debts/budget: use existing budget/household filters (`apply_household_budget_filter`, member ids).
+5. **Changelog (user-facing only)** — `feat`/`fix` with a [public scope](../CONTRIBUTING.md); `npm run changelog` updates `backend/CHANGELOG.md`; deploy sync fills `app_updates` via `start.sh`.
+6. **Deploy** — `start.sh` runs migrations + changelog sync; no manual Render Shell steps for schema or changelog.
+7. **Verify** — Hit the API path or run focused tests; confirm the UI tab/route you changed.
+
+## Changelog automation (do not hand-edit DB)
+
+- Source: git commits → `backend/CHANGELOG.md` (git-cliff) → `scripts/sync_public_changelog` → `app_updates` → `/changelog` UI.
+- Historical baseline: `backend/data/changelog_history.json` (do not delete entries).
+- CI enforces commit messages and `backend/CHANGELOG.md` freshness.
+
+## When something is "internal only"
+
+Use `chore`, `ci`, `build`, or forbidden scopes (`admin`, `ops`, `infra`, `internal`, `dev`, `test`) — excluded from public changelog.

@@ -76,6 +76,17 @@ async def lifespan(app: FastAPI):
         logger.exception(
             "[startup] Migration/database check failed — verify DATABASE_URL and Postgres"
         )
+
+    try:
+        from scripts.sync_public_changelog import ChangelogSyncError, sync_changelog
+
+        inserted = await sync_changelog()
+        logger.info("[startup] Changelog sync OK (%s new rows)", inserted)
+    except ChangelogSyncError as exc:
+        logger.error("[startup] Changelog sync skipped: %s", exc)
+    except Exception:
+        logger.exception("[startup] Changelog sync failed unexpectedly")
+
     yield
     await engine.dispose()
 
@@ -436,10 +447,15 @@ async def health_check():
     from app.services.migration_status import build_migration_status
 
     payload: dict = {"app_version": APP_VERSION}
+    from app.services.public_changelog import CHANGELOG_PATH
+
+    payload["changelog_file"] = "ok" if CHANGELOG_PATH.is_file() else "missing"
     try:
         async with async_session() as session:
             status = await build_migration_status(session)
         payload.update(status.to_health_payload())
+        if payload.get("changelog_file") == "missing":
+            payload["status"] = "degraded"
     except Exception:
         logger.exception("Health check DB probe failed")
         payload["status"] = "degraded"

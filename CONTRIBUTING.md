@@ -2,6 +2,18 @@
 
 Thank you for helping improve PayDrift. This document covers how we write commits, what appears in the public changelog, and how automation enforces the policy.
 
+## Definition of done (user-facing work)
+
+A feature or fix is **not done** until all of these are true in the **same delivery** (see also `.cursor/rules/full-stack-delivery.mdc`):
+
+1. **Backend** — API + DB (migration if needed) in `backend/`
+2. **Frontend** — UI route/page wired in `frontend/`
+3. **Deploy path** — `start.sh` migrations + changelog sync; no manual Render Shell steps
+4. **Changelog** — `feat`/`fix` commit(s); `backend/CHANGELOG.md` updated (CI auto-commits on `main` or run `npm run changelog` on PRs)
+5. **Smoke check** — the screen or endpoint you changed actually works
+
+Do not merge “backend only” for a user-visible feature and plan to “hook up the UI later.”
+
 ## Conventional Commits
 
 Every commit on `main` must use [Conventional Commits](https://www.conventionalcommits.org/):
