@@ -58,7 +58,7 @@ export default function Login() {
         setErrorType('warning');
         setError(
           err.code === 'ERR_NETWORK'
-            ? 'Cannot reach the PayDrift API (network or CORS). If this started after a deploy, an admin may need to run database migrations on Render (`python migrate.py` in Shell) and confirm the API is healthy at /health.'
+            ? 'Cannot reach the PayDrift API. Check your connection or try again in a few minutes.'
             : 'Unable to reach the server. Please check your connection and try again.',
         );
       } else {

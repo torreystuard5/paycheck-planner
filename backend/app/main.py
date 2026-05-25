@@ -62,6 +62,20 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.services.migration_status import build_migration_status
+
+    app.state.migration_ok = False
+    try:
+        async with async_session() as session:
+            status = await build_migration_status(session)
+            status.log_startup_summary()
+            app.state.migration_ok = status.migration_ok
+            app.state.migration_current = status.current
+            app.state.migration_head = status.head
+    except Exception:
+        logger.exception(
+            "[startup] Migration/database check failed — verify DATABASE_URL and Postgres"
+        )
     yield
     await engine.dispose()
 
@@ -338,24 +352,14 @@ app.include_router(business_reports.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 
 
-def _alembic_head_revision() -> str | None:
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
-    cfg = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
-    return ScriptDirectory.from_config(cfg).get_current_head()
-
-
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     logger.exception("Database error on %s %s", request.method, request.url.path)
     return JSONResponse(
-        status_code=500,
+        status_code=503,
         content={
-            "detail": (
-                "Database error. After a deploy, run `python migrate.py` in the "
-                "Render Shell if login or API calls fail."
-            ),
+            "detail": "Database temporarily unavailable. Please try again shortly.",
+            "code": "database_unavailable",
         },
     )
 
@@ -429,28 +433,18 @@ async def service_root():
 @app.get("/health")
 async def health_check():
     from app.config import APP_VERSION
+    from app.services.migration_status import build_migration_status
 
-    payload: dict = {"status": "healthy", "app_version": APP_VERSION}
+    payload: dict = {"app_version": APP_VERSION}
     try:
         async with async_session() as session:
-            await session.execute(text("SELECT 1"))
-            rev_row = await session.execute(
-                text("SELECT version_num FROM alembic_version LIMIT 1")
-            )
-            current_rev = rev_row.scalar_one_or_none()
-        head_rev = _alembic_head_revision()
-        payload["db"] = "ok"
-        payload["migration_current"] = current_rev
-        payload["migration_head"] = head_rev
-        if head_rev and current_rev != head_rev:
-            payload["status"] = "degraded"
-            payload["migration_warning"] = (
-                "Schema is behind application code. Run `python migrate.py` in Render Shell."
-            )
+            status = await build_migration_status(session)
+        payload.update(status.to_health_payload())
     except Exception:
         logger.exception("Health check DB probe failed")
         payload["status"] = "degraded"
         payload["db"] = "error"
+        payload["migration_ok"] = False
     return payload
 
 

@@ -11,7 +11,9 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     plan: free
+    # Migrations also run in start.sh before uvicorn (belt-and-suspenders on deploy).
     preDeployCommand: "python migrate.py"
+    dockerCommand: "bash start.sh"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -29,5 +31,3 @@ services:
         value: spsoftwaresolutionsllc@gmail.com
       - key: FRONTEND_URL
         value: https://paydrift.netlify.app
-      # Migrations run automatically via preDeployCommand (python migrate.py).
-      # Do not set RUN_MIGRATIONS_ON_START on the web service (blocks port binding).

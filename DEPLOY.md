@@ -53,34 +53,55 @@ The `FRONTEND_URL` env var controls which origins are allowed. To allow multiple
 FRONTEND_URL=https://paydrift.netlify.app,http://localhost:5173
 ```
 
-### Migrations
+### Migrations (automatic)
 
-**Do not run Alembic in the web startup path on Render.** The API binds to `$PORT` immediately via `start.sh` → `uvicorn` only. Running `alembic upgrade` before Uvicorn causes “No open ports detected” while migrations hold the database.
+Alembic is already configured under `backend/alembic/`. **No manual Render Shell steps** are required for normal deploys.
 
-After each deploy that includes new migration files, open **Render Shell** for `paydrift-api` and run:
-
-```bash
-python migrate.py
-```
-
-Or:
+On every container start, `start.sh` runs:
 
 ```bash
-bash migrate.sh
+python migrate.py   # alembic upgrade head (skips if already at head)
+exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
 ```
 
-Run migrations **once** per schema change (or from a one-off job), not on every container restart.
+`migrate.py` uses a PostgreSQL advisory lock, logs current/head revisions, and **exits non-zero** on failure so the deploy/start aborts instead of serving with a stale schema.
 
-Optional local convenience (not for Render web service):
+Render **Pre-Deploy Command** (optional belt-and-suspenders): `python migrate.py` — see `backend/render.yaml`.
+
+#### Exact Render settings (Docker web service)
+
+| Setting | Value |
+|--------|--------|
+| **Root Directory** | `backend` |
+| **Dockerfile Path** | `./Dockerfile` (or `./backend/Dockerfile` if repo root is service root) |
+| **Docker Context** | `.` (when Root Directory is `backend`) |
+| **Docker Command** | `bash start.sh` |
+| **Pre-Deploy Command** | `python migrate.py` (recommended; same as start.sh migration step) |
+| **Start Command** | *(leave empty — uses Dockerfile `CMD` → `start.sh`)* |
+
+Do **not** rely on manual Shell migration in production.
+
+#### Local commands
 
 ```bash
-RUN_MIGRATIONS_ON_START=1 bash start.sh
+cd backend
+python migrate.py              # apply pending migrations
+alembic current                # show DB revision
+alembic heads                  # show code head (048+)
+alembic upgrade head           # same as migrate.py
+bash start.sh                  # migrate then uvicorn (like Render)
 ```
+
+#### Rollback (non-destructive)
+
+1. **Redeploy previous Git commit** on Render (instant rollback of app code).
+2. **Schema rollback** only if a new migration misbehaved: Render Shell → `cd` to backend → `alembic downgrade -1` (one revision at a time; never `downgrade base` on production without a backup).
+3. If `migrate.py` fails during deploy, Render keeps the previous release live — fix the migration script and redeploy.
 
 ### Verify Deployment
 
 After deploy, check:
-- `https://paydrift-api.onrender.com/health` → `{"status": "healthy"}`
+- `https://paydrift-api.onrender.com/health` → `{"status": "healthy", "migration_ok": true, "migration_current": "048", ...}`
 - `https://paydrift-api.onrender.com/docs` → Swagger UI with all endpoints
 
 ## Frontend (Netlify)
