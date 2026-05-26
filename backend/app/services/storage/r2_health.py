@@ -9,8 +9,9 @@ from app.config import settings
 from app.services.storage.r2_client import (
     R2NotConfiguredError,
     R2OperationError,
+    _put_object_direct,
+    _put_object_presigned_http,
     delete_object,
-    put_object,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,9 +43,24 @@ def r2_write_probe() -> dict:
         return {"ok": False, "error": "not_configured"}
     key = f"_healthcheck/{uuid4()}.txt"
     try:
-        put_object(key, b"ok", "text/plain")
+        method = None
+        last_err: R2OperationError | None = None
+        for label, fn in (
+            ("presigned_http", _put_object_presigned_http),
+            ("put_object", _put_object_direct),
+        ):
+            try:
+                fn(key, b"ok", "text/plain")
+                method = label
+                break
+            except R2OperationError as exc:
+                last_err = exc
+            except Exception as exc:
+                last_err = R2OperationError(str(exc))
+        if method is None:
+            raise last_err or R2OperationError("write probe failed")
         delete_object(key)
-        return {"ok": True}
+        return {"ok": True, "method": method}
     except R2NotConfiguredError as exc:
         return {"ok": False, "error": str(exc)}
     except R2OperationError as exc:

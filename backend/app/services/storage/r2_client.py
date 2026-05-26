@@ -163,9 +163,38 @@ def object_exists(object_key: str) -> bool:
         raise R2OperationError(f"Failed to check object existence: {exc}") from exc
 
 
-def put_object(object_key: str, body: bytes, content_type: str) -> None:
-    """Upload bytes to R2 from the API (avoids browser CORS to the bucket)."""
-    _require_config()
+def _put_object_presigned_http(
+    object_key: str, body: bytes, content_type: str
+) -> None:
+    """PUT via presigned URL + httpx (server-side; no browser CORS)."""
+    import httpx
+
+    client = _get_client()
+    try:
+        url = client.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": _bucket_name(),
+                "Key": object_key,
+                "ContentType": content_type,
+            },
+            ExpiresIn=300,
+        )
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "ClientError")
+        raise R2OperationError(f"Presign failed ({code}): {exc}") from exc
+
+    with httpx.Client(timeout=120.0) as http:
+        resp = http.put(url, content=body, headers={"Content-Type": content_type})
+    if resp.status_code not in (200, 204):
+        snippet = (resp.text or "")[:400]
+        raise R2OperationError(
+            f"Presigned PUT failed (HTTP {resp.status_code}): {snippet}"
+        )
+
+
+def _put_object_direct(object_key: str, body: bytes, content_type: str) -> None:
+    """Direct S3 PutObject (fallback)."""
     client = _get_client()
     try:
         client.put_object(
@@ -176,7 +205,23 @@ def put_object(object_key: str, body: bytes, content_type: str) -> None:
         )
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "ClientError")
-        raise R2OperationError(f"Failed to upload object ({code}): {exc}") from exc
+        raise R2OperationError(f"PutObject failed ({code}): {exc}") from exc
+
+
+def put_object(object_key: str, body: bytes, content_type: str) -> None:
+    """Upload bytes to R2 from the API (avoids browser CORS to the bucket)."""
+    _require_config()
+    errors: list[str] = []
+    for label, fn in (
+        ("presigned_http", _put_object_presigned_http),
+        ("put_object", _put_object_direct),
+    ):
+        try:
+            fn(object_key, body, content_type)
+            return
+        except R2OperationError as exc:
+            errors.append(f"{label}: {exc}")
+    raise R2OperationError(" | ".join(errors))
 
 
 def delete_object(object_key: str) -> None:

@@ -95,11 +95,12 @@ Replace origins with your production Netlify URL and local Vite dev URL. CORS is
 - `migration_ok: true` and `document_uploads` present (migration **043**, applied via `start.sh` → `migrate.py`)
 - Pro users: upload on `/uploads` (feature `receipt_ocr`)
 
-**If uploads show “Storage upload failed”:**
+**If uploads show “Storage upload failed” or `/health` has `SignatureDoesNotMatch`:**
 
-1. R2 → **Manage R2 API Tokens** → **Object Read & Write** on bucket `paydrift-uploads`.
-2. Render: `R2_ENDPOINT_URL` = `https://<account_id>.r2.cloudflarestorage.com` (account endpoint, not bucket URL); `R2_BUCKET_NAME` = exact bucket name.
-3. Redeploy Render; recheck `/health` for `uploads_storage_write: ok`.
+1. **Create a new R2 S3 API token** (not the Cloudflare global “Account API” token): R2 → **Manage R2 API Tokens** → **Create API token** → **Object Read & Write** on `paydrift-uploads` → copy **both** Access Key ID and Secret Access Key immediately.
+2. In Render, **delete** old `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`, paste the new pair (no spaces or line breaks). Save.
+3. **Clear build cache & deploy** the API Docker service (must rebuild for `boto3==1.35.99`).
+4. `GET /health` must show `boto3_version: "1.35.99"`, `uploads_storage_write: "ok"`, and optionally `uploads_storage_write_method: "presigned_http"`.
 
 ### Migrations (automatic)
 

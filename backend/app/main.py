@@ -479,10 +479,18 @@ async def health_check():
     elif r2["configured"]:
         import asyncio
 
+        import boto3
+        import botocore
+
+        payload["boto3_version"] = boto3.__version__
+        payload["botocore_version"] = botocore.__version__
+
         probe = await asyncio.to_thread(r2_write_probe_cached)
         payload["uploads_storage_write"] = "ok" if probe.get("ok") else "failed"
         if not probe.get("ok"):
             payload["uploads_storage_write_error"] = probe.get("error")
+        if probe.get("method"):
+            payload["uploads_storage_write_method"] = probe["method"]
     try:
         async with async_session() as session:
             status = await build_migration_status(session)
