@@ -91,7 +91,6 @@ export async function uploadDocument({
 
   try {
     onPhase?.('uploading');
-    onPhase?.('finalizing');
     const { data } = await uploadFn(file, documentType);
     return data;
   } catch (err) {

@@ -165,15 +165,7 @@ api.interceptors.response.use(
   }
 );
 
-// ── Document upload helpers (Phase 6B) ──
-
-export function requestUploadPresign({ filename, content_type, file_size, document_type }) {
-  return api.post('/api/v1/documents/presign', { filename, content_type, file_size, document_type });
-}
-
-export function finalizeUpload({ document_id, file_size }) {
-  return api.post('/api/v1/documents/finalize', { document_id, file_size });
-}
+// ── Document upload helpers (server-side upload is the primary production path) ──
 
 /** Server-side upload (API → R2). Preferred over presign; no bucket CORS required. */
 export function uploadDocumentFile(file, document_type) {
@@ -204,19 +196,6 @@ export function createBillFromOcr(id, body = {}) {
 }
 
 // Business document uploads (same R2 flow, owner-scoped)
-export function requestBusinessUploadPresign({ filename, content_type, file_size, document_type }) {
-  return api.post('/api/v1/business/documents/presign', {
-    filename,
-    content_type,
-    file_size,
-    document_type,
-  });
-}
-
-export function finalizeBusinessUpload({ document_id, file_size }) {
-  return api.post('/api/v1/business/documents/finalize', { document_id, file_size });
-}
-
 export function uploadBusinessDocumentFile(file, document_type) {
   const form = new FormData();
   form.append('file', file);

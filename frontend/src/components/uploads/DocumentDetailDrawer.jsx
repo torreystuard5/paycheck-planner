@@ -4,7 +4,7 @@ import { FileText, Link2, Receipt, CheckCircle } from 'lucide-react';
 
 import Modal from '../Modal';
 
-import {
+import api, {
 
   getDocument,
 
@@ -114,7 +114,18 @@ export default function DocumentDetailDrawer({
 
   const [billForm, setBillForm] = useState({ name: '', amount: '', due_date: '' });
 
+  const [linkOptions, setLinkOptions] = useState([]);
+  const [selectedLinkId, setSelectedLinkId] = useState('');
+  const [loadingLinkOptions, setLoadingLinkOptions] = useState(false);
+  const [linkOptionError, setLinkOptionError] = useState(null);
 
+  const alreadyLinked = Boolean(doc?.linked_entity_type && doc?.linked_entity_id);
+  const deductionEntityType = scope === "business" ? "business_deduction" : "tax_deduction";
+  const effectiveLinkTarget =
+    linkTarget ||
+    (selectedLinkId
+      ? { entity_type: deductionEntityType, entity_id: selectedLinkId }
+      : null);
 
   const fetchDoc = useCallback(async () => {
 
@@ -168,9 +179,59 @@ export default function DocumentDetailDrawer({
 
 
 
+  useEffect(() => {
+    const loadLinkOptions = async () => {
+      if (!doc || alreadyLinked) {
+        setLinkOptions([]);
+        setSelectedLinkId('');
+        return;
+      }
+
+      if (scope === 'personal' && doc.document_type === 'tax') {
+        setLoadingLinkOptions(true);
+        setLinkOptionError(null);
+        try {
+          const params = {};
+          if (activeBudget?.id) params.budget_id = activeBudget.id;
+          const { data } = await api.get('/api/v1/tax/deductions', { params });
+          const options = Array.isArray(data) ? data : [];
+          setLinkOptions(options);
+          setSelectedLinkId(options[0]?.id || '');
+        } catch (err) {
+          setLinkOptions([]);
+          setSelectedLinkId('');
+          setLinkOptionError(formatApiError(err) || 'Failed to load tax deductions.');
+        } finally {
+          setLoadingLinkOptions(false);
+        }
+        return;
+      }
+
+      if (scope === 'business') {
+        setLoadingLinkOptions(true);
+        setLinkOptionError(null);
+        try {
+          const { data } = await api.get('/api/v1/business/deductions', { params: { limit: 100 } });
+          const options = Array.isArray(data) ? data : [];
+          setLinkOptions(options);
+          setSelectedLinkId(options[0]?.id || '');
+        } catch (err) {
+          setLinkOptions([]);
+          setSelectedLinkId('');
+          setLinkOptionError(formatApiError(err) || 'Failed to load business deductions.');
+        } finally {
+          setLoadingLinkOptions(false);
+        }
+      }
+    };
+
+    void loadLinkOptions();
+  }, [activeBudget?.id, alreadyLinked, doc, scope]);
+
+
   const handleLink = async () => {
 
-    if (!linkTarget?.entity_type || !linkTarget?.entity_id) return;
+    if (!effectiveLinkTarget?.entity_type || !effectiveLinkTarget?.entity_id) return;
 
     setBusy(true);
 
@@ -178,7 +239,7 @@ export default function DocumentDetailDrawer({
 
       const fn = scope === 'business' ? linkBusinessDocument : linkDocument;
 
-      await fn(documentId, linkTarget);
+      await fn(documentId, effectiveLinkTarget);
 
       toast('Document linked');
 
@@ -316,8 +377,6 @@ export default function DocumentDetailDrawer({
 
   const isReceipt = doc?.document_type === 'receipt';
 
-  const alreadyLinked = Boolean(doc?.linked_entity_type && doc?.linked_entity_id);
-
   const linkedLabel =
 
     doc?.linked_entity_type === 'paycheck_entry'
@@ -436,26 +495,47 @@ export default function DocumentDetailDrawer({
 
 
 
-          {linkTarget && !alreadyLinked && (
-
-            <button
-
-              type="button"
-
-              disabled={busy}
-
-              onClick={handleLink}
-
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium min-h-[44px] disabled:opacity-50"
-
-            >
-
-              <Link2 className="h-4 w-4" />
-
-              Link to record
-
-            </button>
-
+          {(scope === 'business' || (scope === 'personal' && doc?.document_type === 'tax')) && !alreadyLinked && (
+            <div className="space-y-3 border-t pt-4">
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  Link document to {scope === 'business' ? 'business deduction' : 'tax deduction'}
+                </p>
+                {loadingLinkOptions ? (
+                  <p className="text-sm text-gray-500 mt-2">Loading deductions…</p>
+                ) : linkOptionError ? (
+                  <p className="text-sm text-red-600 mt-2">{linkOptionError}</p>
+                ) : linkOptions.length > 0 ? (
+                  <div className="space-y-2 mt-3">
+                    <label className="block text-sm text-gray-700">Select deduction</label>
+                    <select
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      value={selectedLinkId}
+                      onChange={(e) => setSelectedLinkId(e.target.value)}
+                    >
+                      {linkOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name || option.vendor || option.description || option.id}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={busy || !effectiveLinkTarget}
+                      onClick={handleLink}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium min-h-[44px] disabled:opacity-50"
+                    >
+                      <Link2 className="h-4 w-4" />
+                      Link to deduction
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 mt-2">
+                    No deductions available. Add one from {scope === 'business' ? 'Business Deductions' : 'Tax Prep'} to attach this document.
+                  </p>
+                )}
+              </div>
+            </div>
           )}
 
 
