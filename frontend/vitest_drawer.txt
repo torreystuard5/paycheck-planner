@@ -1,3 +1,51 @@
 
  RUN  v4.1.7 C:/Users/torre/Projects/Paycheck Planner/frontend
 
+
+<--- Last few GCs --->
+
+[34356:00000214F0747000]   999567 ms: Mark-Compact 4055.8 (4104.6) -> 4036.1 (4104.6) MB, pooled: 0 MB, 1037.22 / 0.00 ms  (average mu = 0.399, current mu = 0.483) allocation failure; scavenge might not succeed
+[34356:00000214F0747000]  1000749 ms: Mark-Compact 4044.3 (4105.1) -> 4036.2 (4093.1) MB, pooled: 13 MB, 1095.76 / 0.00 ms  (average mu = 0.266, current mu = 0.073) allocation failure; scavenge might not succeed
+
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+
+ 1: 00007FF6F11DAE1F node::OnFatalError+1343
+ 2: 00007FF6F1E237B7 v8::Function::NewInstance+423
+ 3: 00007FF6F1C23E77 v8::base::AddressSpaceReservation::AddressSpaceReservation+322071
+ 4: 00007FF6F1C27B84 v8::base::AddressSpaceReservation::AddressSpaceReservation+337700
+ 5: 00007FF6F1C36B1C v8::internal::StrongRootAllocatorBase::deallocate_impl+16604
+ 6: 00007FF6F1C3635B v8::internal::StrongRootAllocatorBase::deallocate_impl+14619
+ 7: 00007FF6F309EBED v8::base::UnsignedDivisionByConstant<unsigned __int64>+2791309
+ 8: 00007FF6F1C21940 v8::base::AddressSpaceReservation::AddressSpaceReservation+312544
+ 9: 00007FF6F1C3C1CA X509_STORE_set_cleanup+5098
+10: 00007FF6F1C48666 uv_timer_set_repeat+20694
+11: 00007FF6F181B6C7 v8::String::Utf8Value::~Utf8Value+143495
+12: 00000214AFE7733A 
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯⎯⎯
+Error: [vitest-pool]: Worker forks emitted error.
+ ❯ EventEmitter.<anonymous> ../../Paycheck%20Planner/frontend/node_modules/vitest/dist/chunks/cli-api.C6CiCDM3.js:3446:22
+ ❯ EventEmitter.emit node:events:508:28
+ ❯ ChildProcess.emitUnexpectedExit ../../Paycheck%20Planner/frontend/node_modules/vitest/dist/chunks/cli-api.C6CiCDM3.js:3013:22
+ ❯ ChildProcess.emit node:events:508:28
+ ❯ Process.ChildProcess._handle.onexit node:internal/child_process:294:12
+
+Caused by: Error: Worker exited unexpectedly
+ ❯ ChildProcess.emitUnexpectedExit ../../Paycheck%20Planner/frontend/node_modules/vitest/dist/chunks/cli-api.C6CiCDM3.js:3012:33
+ ❯ ChildProcess.emit node:events:508:28
+ ❯ Process.ChildProcess._handle.onexit node:internal/child_process:294:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files   (1)
+      Tests   (2)
+     Errors  1 error
+   Start at  18:36:28
+   Duration  1001.01s (transform 76ms, setup 186ms, import 123ms, tests 0ms, environment 970ms)
+

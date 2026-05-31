@@ -35,6 +35,20 @@ def test_parse_paystub_pay_date_from_body():
     assert parsed["pay_date"] == "2026-03-01"
 
 
+def test_parse_paystub_summary_table_maps_current_row():
+    text = (
+        "Pay Period Begin: 05/03/2026   Check Date: 05/22/2026\n"
+        "Hours Worked   Gross Pay   Pre Tax Deductions   Employee Taxes   Post Tax Deductions   Net Pay\n"
+        "Current   59.23   1,449.88   165.83   171.78   65.73   1,046.54\n"
+        "YTD   714.68   18,750.27   1,531.53   2,504.01   758.17   13,956.56\n"
+    )
+    parsed = parse_document_text(text, "paystub")
+    # Current-row Gross/Net and the Check Date — not YTD, not Pay Period Begin.
+    assert parsed["gross_amount"] == "1449.88"
+    assert parsed["net_amount"] == "1046.54"
+    assert parsed["pay_date"] == "2026-05-22"
+
+
 def test_document_scope_helpers_are_callable():
     from uuid import uuid4
 

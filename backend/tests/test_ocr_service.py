@@ -56,3 +56,39 @@ def test_parse_paystub_text_flags_suspicious_cases():
     # The reason must be explained in sanity_errors.
     assert parsed.get("sanity_errors")
     assert "gross_too_large_vs_net" in parsed.get("sanity_errors", []) or "gross_exceeds_max" in parsed.get("sanity_errors", [])
+
+
+# Multi-column pay summary table: Current vs YTD rows. Defaults must come from
+# the Current row and the correct columns, and the Check Date — not YTD values
+# and not the Pay Period Begin date.
+PAY_SUMMARY_STUB = (
+    "ACME PAYROLL SERVICES\n"
+    "Employee: Jane Doe   Employer: Globex Corp\n"
+    "Pay Period Begin: 05/03/2026   Pay Period End: 05/18/2026   Check Date: 05/22/2026\n"
+    "Hours Worked   Gross Pay   Pre Tax Deductions   Employee Taxes   Post Tax Deductions   Net Pay\n"
+    "Current   59.23   1,449.88   165.83   171.78   65.73   1,046.54\n"
+    "YTD   714.68   18,750.27   1,531.53   2,504.01   758.17   13,956.56\n"
+)
+
+
+def test_parse_paystub_summary_table_uses_current_row_and_check_date():
+    parsed = parse_paystub_text(PAY_SUMMARY_STUB)
+
+    # Defaults come from the Current row's Gross Pay / Net Pay columns.
+    assert parsed["gross_amount"] == "1449.88"
+    assert parsed["net_amount"] == "1046.54"
+    # Pay date is the Check Date, not Pay Period Begin (05/03).
+    assert parsed["pay_date"] == "2026-05-22"
+    # Plausible numbers — not flagged.
+    assert parsed["is_suspicious"] is False
+    assert parsed["sanity_errors"] == []
+
+
+def test_parse_paystub_summary_table_never_uses_ytd_or_employee_taxes():
+    parsed = parse_paystub_text(PAY_SUMMARY_STUB)
+
+    # YTD gross / net must never leak into the paycheck defaults.
+    assert parsed["gross_amount"] != "18750.27"
+    assert parsed["net_amount"] != "13956.56"
+    # Employee Taxes (Current 171.78 / YTD 2504.01) must never be used as net.
+    assert parsed["net_amount"] not in {"171.78", "2504.01"}
