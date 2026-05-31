@@ -28,6 +28,9 @@ def test_parse_paystub_text_extracts_net_and_employer():
     assert parsed["gross_amount"] == "3500.00"
     assert parsed["net_amount"] == "2450.00"
     assert parsed["pay_date"] == "2026-03-01"
+    # A normal paystub must not be flagged suspicious.
+    assert parsed["is_suspicious"] is False
+    assert parsed["sanity_errors"] == []
 
 
 def test_parse_document_text_routes_by_type():
@@ -35,3 +38,21 @@ def test_parse_document_text_routes_by_type():
     assert "vendor_name" in receipt
     paystub = parse_document_text("Employer: X\nNet Pay: $100.00", "paystub")
     assert paystub.get("net_amount") == "100.00"
+
+
+def test_parse_paystub_text_flags_suspicious_cases():
+    text = """
+    Employer: TinyCo
+    Pay Date: 01/01/2026
+    Gross Pay: $18,000.00
+    Net Pay: $200.00
+    """
+    parsed = parse_paystub_text(text)
+    # Even when flagged, the parser must still return numeric values so the
+    # user can review and correct them in the confirm drawer.
+    assert parsed["gross_amount"] == "18000.00"
+    assert parsed["net_amount"] == "200.00"
+    assert parsed.get("is_suspicious") is True
+    # The reason must be explained in sanity_errors.
+    assert parsed.get("sanity_errors")
+    assert "gross_too_large_vs_net" in parsed.get("sanity_errors", []) or "gross_exceeds_max" in parsed.get("sanity_errors", [])

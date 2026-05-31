@@ -6,6 +6,9 @@ import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from typing import List
+
+from app.config import settings
 
 _AMOUNT_RE = re.compile(
     r"(?:total|amount due|balance due|due)[:\s]*\$?\s*([\d,]+\.\d{2})",
@@ -59,6 +62,38 @@ def _parse_loose_date(s: str) -> date | None:
         return None
 
 
+def parse_amount_from_text(s: str) -> Decimal | None:
+    """Robustly extract a single monetary amount from free text.
+
+    Returns a Decimal or None. Strips commas and ignores malformed values.
+    """
+    if not s:
+        return None
+    # Try common labelled patterns first
+    for pat in (_AMOUNT_RE, _FALLBACK_AMOUNT_RE):
+        m = pat.search(s)
+        if m:
+            try:
+                return Decimal(m.group(1).replace(",", ""))
+            except InvalidOperation:
+                break
+    # Fallback: find any $amount pattern
+    m = re.search(r"\$\s*([\d,]+\.\d{2})", s)
+    if m:
+        try:
+            return Decimal(m.group(1).replace(",", ""))
+        except InvalidOperation:
+            return None
+    # Last resort: any bare number with two decimals
+    m = re.search(r"([\d,]+\.\d{2})", s)
+    if m:
+        try:
+            return Decimal(m.group(1).replace(",", ""))
+        except InvalidOperation:
+            return None
+    return None
+
+
 def _parse_vendor(text: str) -> str | None:
     for line in text.splitlines():
         line = line.strip()
@@ -94,16 +129,18 @@ def parse_paystub_text(text: str) -> dict[str, Any]:
     dates = re.findall(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b", t)
     pay_date = _parse_loose_date(dates[0]) if dates else None
 
+    # Extract candidate amounts using a robust helper
     money = re.findall(r"\$?\s*([\d,]+\.\d{2})\b", t)
-    amounts: list[Decimal] = []
-    for raw in money[:20]:
+    amounts: List[Decimal] = []
+    for raw in money[:40]:
         try:
             amounts.append(Decimal(raw.replace(",", "")))
         except InvalidOperation:
             continue
 
-    gross = max(amounts) if amounts else None
-    net = amounts[-1] if len(amounts) >= 2 else (amounts[0] if amounts else None)
+    # Prefer explicit labelled gross/net when available; otherwise infer
+    gross = None
+    net = None
 
     net_m = re.search(r"(?:Net\s*Pay|Take\s*Home|Net)\s*[:\s]*\$?\s*([\d,]+\.\d{2})", t, re.I)
     gross_m = re.search(r"(?:Gross\s*Pay|Gross)\s*[:\s]*\$?\s*([\d,]+\.\d{2})", t, re.I)
@@ -127,6 +164,35 @@ def parse_paystub_text(text: str) -> dict[str, Any]:
             taxes = None
 
     confident = bool(net_m or gross_m)
+    # If still missing, try to infer from positional amounts
+    if gross is None and amounts:
+        gross = max(amounts)
+    if net is None and amounts:
+        net = amounts[-1] if len(amounts) >= 2 else (amounts[0] if amounts else None)
+
+    sanity_errors: List[str] = []
+    # Perform sanity checks using configured thresholds
+    try:
+        if gross is not None and net is not None:
+            if gross < net:
+                sanity_errors.append("gross_less_than_net")
+            # Avoid division by zero
+            if net == 0:
+                sanity_errors.append("net_is_zero")
+            else:
+                ratio = float(gross / net)
+                if ratio > float(settings.PAYSTUB_GROSS_NET_RATIO):
+                    sanity_errors.append("gross_too_large_vs_net")
+        if gross is not None and float(gross) > float(settings.PAYSTUB_MAX_PLAUSIBLE_GROSS):
+            sanity_errors.append("gross_exceeds_max")
+        if net is not None and float(net) <= 0:
+            sanity_errors.append("net_nonpositive")
+    except Exception:
+        # Non-fatal — don't crash parsing on unexpected numeric issues
+        pass
+
+    is_suspicious = bool(sanity_errors)
+
     return {
         "employer_name": employer,
         "pay_date": pay_date.isoformat() if pay_date else None,
@@ -134,6 +200,8 @@ def parse_paystub_text(text: str) -> dict[str, Any]:
         "net_amount": str(net) if net is not None else None,
         "taxes_withheld": str(taxes) if taxes is not None else None,
         "confidence": "high" if confident else ("medium" if len(t) > 40 else "low"),
+        "is_suspicious": is_suspicious,
+        "sanity_errors": sanity_errors,
     }
 
 

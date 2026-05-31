@@ -1,0 +1,10 @@
+
+ RUN  v4.1.7 C:/Users/torre/Projects/Paycheck Planner/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  18:36:00
+   Duration  1.49s (transform 38ms, setup 195ms, import 76ms, tests 93ms, environment 965ms)
+
+EXIT=0

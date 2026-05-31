@@ -28,6 +28,8 @@ import DateInput from '../DateInput';
 
 import { formatApiError } from '../../utils/formatApiError';
 
+import PaystubSuspiciousWarning from './PaystubSuspiciousWarning';
+
 
 
 function applyParsedToForms(data, setPaystubForm, setBillForm) {
@@ -229,6 +231,7 @@ export default function DocumentDetailDrawer({
   }, [activeBudget?.id, alreadyLinked, doc, scope]);
 
 
+
   const handleLink = async () => {
 
     if (!effectiveLinkTarget?.entity_type || !effectiveLinkTarget?.entity_id) return;
@@ -258,7 +261,6 @@ export default function DocumentDetailDrawer({
     }
 
   };
-
 
 
   const handleCreateBill = async () => {
@@ -475,7 +477,11 @@ export default function DocumentDetailDrawer({
 
               {Object.entries(parsed).map(([k, v]) =>
 
-                v != null && k !== 'confidence' && k !== 'document_kind' ? (
+                v != null &&
+                k !== 'confidence' &&
+                k !== 'document_kind' &&
+                k !== 'is_suspicious' &&
+                k !== 'sanity_errors' ? (
 
                   <div key={k} className="flex justify-between gap-2">
 
@@ -621,6 +627,11 @@ export default function DocumentDetailDrawer({
                 <FileText className="h-4 w-4" /> Add to income (paycheck entry)
 
               </p>
+
+              <PaystubSuspiciousWarning
+                isSuspicious={parsed?.is_suspicious}
+                sanityErrors={parsed?.sanity_errors}
+              />
 
               <input
 

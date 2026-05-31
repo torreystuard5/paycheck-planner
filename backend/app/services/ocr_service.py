@@ -78,6 +78,12 @@ class TesseractOcrProvider(OcrProvider):
             if not text.strip():
                 text = document.original_filename or ""
             parsed = parse_for_document_type(document.document_type, text)
+            # Log suspicious paystub parses with minimal non-PII details
+            try:
+                if isinstance(parsed, dict) and parsed.get('is_suspicious'):
+                    logger.warning('Suspicious paystub parse for document %s: gross=%s net=%s rules=%s', document.id, parsed.get('gross_amount'), parsed.get('net_amount'), parsed.get('sanity_errors'))
+            except Exception:
+                pass
             return OcrResult(
                 status="completed",
                 text=text[:50_000] if text else None,
@@ -116,6 +122,11 @@ async def run_document_ocr_bytes(document: DocumentUpload, data: bytes) -> OcrRe
         if not text.strip():
             text = document.original_filename or ""
         parsed = parse_for_document_type(document.document_type, text)
+        try:
+            if isinstance(parsed, dict) and parsed.get('is_suspicious'):
+                logger.warning('Suspicious paystub parse for document %s: gross=%s net=%s rules=%s', document.id, parsed.get('gross_amount'), parsed.get('net_amount'), parsed.get('sanity_errors'))
+        except Exception:
+            pass
         return OcrResult(
             status="completed",
             text=text[:50_000] if text else None,

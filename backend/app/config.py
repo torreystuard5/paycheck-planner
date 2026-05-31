@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str | None = None
     STRIPE_WEBHOOK_SECRET: str | None = None
 
+    # Paystub OCR sanity thresholds
+    # Any gross above this is considered implausible and will be flagged.
+    PAYSTUB_MAX_PLAUSIBLE_GROSS: float = 100_000.0
+    # If gross/net ratio exceeds this, flag as suspicious (e.g., gross >> net).
+    PAYSTUB_GROSS_NET_RATIO: float = 10.0
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @model_validator(mode="after")
