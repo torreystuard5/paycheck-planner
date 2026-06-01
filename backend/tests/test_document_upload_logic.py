@@ -49,6 +49,17 @@ def test_parse_paystub_summary_table_maps_current_row():
     assert parsed["pay_date"] == "2026-05-22"
 
 
+def test_parse_paystub_header_table_company_and_check_date():
+    text = (
+        "Name  Company  Employee ID  Pay Period Begin  Pay Period End  Check Date  Check Number\n"
+        "Torrey Stuard  Vanderbilt University Medical Center  0150776  05/03/2026  05/16/2026  05/22/2026  000123\n"
+    )
+    parsed = parse_document_text(text, "paystub")
+    # Employer from the Company column; pay date from the Check Date column.
+    assert parsed["employer_name"] == "Vanderbilt University Medical Center"
+    assert parsed["pay_date"] == "2026-05-22"
+
+
 def test_document_scope_helpers_are_callable():
     from uuid import uuid4
 

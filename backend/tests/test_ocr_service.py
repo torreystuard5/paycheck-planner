@@ -92,3 +92,37 @@ def test_parse_paystub_summary_table_never_uses_ytd_or_employee_taxes():
     assert parsed["net_amount"] != "13956.56"
     # Employee Taxes (Current 171.78 / YTD 2504.01) must never be used as net.
     assert parsed["net_amount"] not in {"171.78", "2504.01"}
+
+
+# Full header section (label row + data row) over the summary table. Employer
+# must come from the Company column and pay date from the Check Date column —
+# not the header label row and not Pay Period Begin (05/03).
+HEADER_TABLE_STUB = (
+    "Name  Company  Employee ID  Pay Period Begin  Pay Period End  Check Date  Check Number\n"
+    "Torrey Stuard  Vanderbilt University Medical Center  0150776  05/03/2026  05/16/2026  05/22/2026  000123\n"
+    "\n"
+    "Hours Worked  Gross Pay  Pre Tax Deductions  Employee Taxes  Post Tax Deductions  Net Pay\n"
+    "Current  59.23  1,449.88  165.83  171.78  65.73  1,046.54\n"
+    "YTD  714.68  18,750.27  1,531.53  2,504.01  758.17  13,956.56\n"
+)
+
+
+def test_parse_paystub_header_table_maps_company_and_check_date():
+    parsed = parse_paystub_text(HEADER_TABLE_STUB)
+
+    # Employer comes from the Company column, pay date from the Check Date column.
+    assert parsed["employer_name"] == "Vanderbilt University Medical Center"
+    assert parsed["pay_date"] == "2026-05-22"
+    # gross/net still come from the Current row and are unchanged.
+    assert parsed["gross_amount"] == "1449.88"
+    assert parsed["net_amount"] == "1046.54"
+    assert parsed["is_suspicious"] is False
+
+
+def test_parse_paystub_header_table_ignores_label_row_and_period_begin():
+    parsed = parse_paystub_text(HEADER_TABLE_STUB)
+
+    # The previously-wrong values must not appear.
+    assert "Employee ID" not in (parsed["employer_name"] or "")
+    assert "Pay Period" not in (parsed["employer_name"] or "")
+    assert parsed["pay_date"] != "2026-05-03"

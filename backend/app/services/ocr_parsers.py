@@ -216,16 +216,81 @@ def _parse_pay_summary_table(text: str) -> dict[str, Any] | None:
     return result
 
 
+# Header-section labels we care about. Each must match a whole table cell so a
+# plain "Employer: X" line (one cell, with the value attached) never matches.
+_HEADER_LABELS = {
+    "company": re.compile(r"company|employer(?:\s*name)?", re.I),
+    "check_date": re.compile(r"check\s*date", re.I),
+}
+
+
+def _split_cells(line: str) -> list[str]:
+    """Split a layout-preserved table line into cells on runs of 2+ spaces."""
+    return [c for c in re.split(r"\s{2,}", line.strip()) if c]
+
+
+def _label_index(cells: list[str], key: str) -> int | None:
+    pat = _HEADER_LABELS[key]
+    for i, cell in enumerate(cells):
+        if pat.fullmatch(cell.strip()):
+            return i
+    return None
+
+
+def _parse_header_table(text: str) -> dict[str, Any] | None:
+    """Map the paystub header's label row to the data row beneath it.
+
+    Looks for a row whose cells include both a Company and a Check Date label,
+    then reads the matching cells from the next data row. Returns ``None`` when
+    no such header is present (so simple "Employer: X" stubs are handled by the
+    caller's label regex instead). When the header is found but the data row's
+    columns don't line up, returns a dict with ``None`` values so the caller
+    won't fall back to the label-row-grabbing regex.
+    """
+    if not text:
+        return None
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        cells = _split_cells(line)
+        if len(cells) < 2:
+            continue
+        company_idx = _label_index(cells, "company")
+        check_idx = _label_index(cells, "check_date")
+        if company_idx is None or check_idx is None:
+            continue
+
+        data_cells: list[str] = []
+        for nxt in lines[i + 1:]:
+            if nxt.strip():
+                data_cells = _split_cells(nxt)
+                break
+        if len(data_cells) != len(cells):
+            return {"company": None, "check_date": None}
+
+        company = data_cells[company_idx].strip()[:200] or None
+        check_date = _parse_loose_date(data_cells[check_idx].strip())
+        return {"company": company, "check_date": check_date}
+    return None
+
+
 def parse_paystub_text(text: str) -> dict[str, Any]:
     t = text or ""
-    employer = None
-    m = re.search(r"(?:Employer|Company|Employer Name)\s*[:\s]+\s*(.+?)(?:\n|$)", t, re.I)
-    if m:
-        employer = m.group(1).strip()[:200]
 
-    # Prefer the explicit Check Date; only then fall back to the first date,
-    # which on many stubs is the Pay Period Begin date.
-    pay_date = _extract_check_date(t)
+    # Header section: a label row (Name, Company, ..., Check Date, Check Number)
+    # over a data row. Map Company -> employer and Check Date -> pay date.
+    header = _parse_header_table(t)
+
+    employer = header.get("company") if header else None
+    if employer is None and header is None:
+        m = re.search(r"(?:Employer|Company|Employer Name)\s*[:\s]+\s*(.+?)(?:\n|$)", t, re.I)
+        if m:
+            employer = m.group(1).strip()[:200]
+
+    # Pay date priority: the header's Check Date column, then an inline
+    # "Check Date:" label, then the first date (often Pay Period Begin).
+    pay_date = header.get("check_date") if header else None
+    if pay_date is None:
+        pay_date = _extract_check_date(t)
     if pay_date is None:
         dates = re.findall(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b", t)
         pay_date = _parse_loose_date(dates[0]) if dates else None
