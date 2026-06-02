@@ -60,6 +60,29 @@ def test_parse_paystub_header_table_company_and_check_date():
     assert parsed["pay_date"] == "2026-05-22"
 
 
+def test_parse_paystub_single_space_header_company_and_check_date():
+    text = (
+        "Name Company Employee ID Pay Period Begin Pay Period End Check Date Check Number\n"
+        "Torrey Stuard Vanderbilt University Medical Center 0150776 05/03/2026 05/16/2026 05/22/2026 000123\n"
+    )
+    parsed = parse_document_text(text, "paystub")
+    assert parsed["employer_name"] == "Vanderbilt University Medical Center"
+    assert parsed["pay_date"] == "2026-05-22"
+    assert parsed["pay_date"] != "2026-05-03"
+
+
+def test_parse_paystub_split_label_row_vanderbilt():
+    text = (
+        "Name Company Employee ID\n"
+        "Pay Period Begin Pay Period End Check Date Check Number\n"
+        "Torrey Stuard Vanderbilt University Medical Center 0150776 05/03/2026 05/16/2026 05/22/2026 000123\n"
+    )
+    parsed = parse_document_text(text, "paystub")
+    assert parsed["employer_name"] == "Vanderbilt University Medical Center"
+    assert parsed["pay_date"] == "2026-05-22"
+    assert "Employee ID" not in (parsed["employer_name"] or "")
+
+
 def test_document_scope_helpers_are_callable():
     from uuid import uuid4
 
