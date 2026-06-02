@@ -12,6 +12,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bill import Bill
+from app.models.bill_cycle_payment import BillCyclePayment
 from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
 from app.models.income import IncomeSource
@@ -183,6 +184,21 @@ async def get_paid_bill_map(
 ) -> dict[UUID, list[Any]]:
     if not bill_ids or not user_ids:
         return {}
+
+    cycle_result = await db.execute(
+        select(BillCyclePayment.bill_id, BillCyclePayment.due_date, BillCyclePayment.paid_date).where(
+            BillCyclePayment.bill_id.in_(bill_ids),
+            BillCyclePayment.due_date >= overall_start,
+            BillCyclePayment.due_date <= overall_end,
+            BillCyclePayment.is_paid.is_(True),
+        )
+    )
+    mapping: dict[UUID, list[Any]] = {}
+    for bill_id, due_date, paid_date in cycle_result.all():
+        mapping.setdefault(bill_id, []).append(
+            {"due_date": due_date, "paid_date": paid_date, "source": "bill_cycle_payments"}
+        )
+
     result = await db.execute(
         select(Payment.bill_id, Payment.paid_date).where(
             Payment.bill_id.in_(bill_ids),
@@ -192,7 +208,6 @@ async def get_paid_bill_map(
             Payment.paid_date <= overall_end,
         )
     )
-    mapping: dict[UUID, list[Any]] = {}
     for row in result.all():
         mapping.setdefault(row[0], []).append(row[1])
     return mapping

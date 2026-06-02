@@ -58,6 +58,7 @@ class BillPostponeRequest(BaseModel):
 class BillPayRequest(BaseModel):
     paid_amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=10, decimal_places=2)
     paid_date: Optional[datetime] = None
+    occurrence_due_date: Optional[date] = None
 
 
 class BillResponse(BaseModel):
@@ -92,6 +93,10 @@ class BillResponse(BaseModel):
     user_share: Optional[Decimal] = None
     is_user_responsible: bool = True
     member_count: Optional[int] = None
+    occurrence_due_date: Optional[date] = None
+    cycle_paid_date: Optional[datetime] = None
+    cycle_paid_amount: Optional[Decimal] = None
+    cycle_amount_due: Optional[Decimal] = None
 
     model_config = {"from_attributes": True}
 
@@ -121,6 +126,21 @@ class HouseholdBillBreakdownsResponse(BaseModel):
     """Keyed by bill id string for JSON object stability."""
 
     breakdowns: dict[str, BillBreakdownResponse]
+
+
+class BillCycleGroup(BaseModel):
+    label: str
+    period_start: date
+    period_end: date
+    total_due: Decimal
+    total_paid: Decimal
+    item_count: int
+    paid_count: int
+    bills: list[BillResponse]
+
+
+class BillCycleGroupsResponse(BaseModel):
+    groups: list[BillCycleGroup]
 
 
 class BillHistoryEntry(BaseModel):

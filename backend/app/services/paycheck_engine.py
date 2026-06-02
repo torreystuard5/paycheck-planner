@@ -224,6 +224,11 @@ def _due_dates_in_window(
     For monthly items this is at most one date.  For weekly/biweekly items we
     use *day_of_week* and *start_date* to walk the correct cadence.
     """
+    if frequency == "one_time":
+        if start_date and window_start <= start_date <= window_end:
+            return [start_date]
+        return []
+
     # ── Weekly / biweekly: walk by week cadence ──────────────────
     if frequency in ("weekly", "biweekly") and day_of_week is not None:
         step_days = 7 if frequency == "weekly" else 14
@@ -246,19 +251,46 @@ def _due_dates_in_window(
             candidate += timedelta(days=step_days)
         return candidates
 
-    # ── Monthly / other: iterate months ──────────────────────────
+    # ── Monthly / semi-monthly / longer cycles: iterate months ───
+    due_days = [due_day]
+    months_step = 1
+    if frequency == "semi_monthly":
+        secondary_day = min(due_day + 15, 31) if due_day <= 15 else max(due_day - 15, 1)
+        due_days = sorted({due_day, secondary_day})
+    elif frequency == "quarterly":
+        months_step = 3
+    elif frequency in ("annual", "yearly"):
+        months_step = 12
+
+    cycle_anchor = start_date
+    if months_step > 1 and cycle_anchor is None:
+        anchor_month = ((window_start.month - 1) // 3) * 3 + 1 if frequency == "quarterly" else window_start.month
+        cycle_anchor = _actual_due_date(due_day, window_start.year, anchor_month)
+
     candidates = []
     y, m = window_start.year, window_start.month
     end_y, end_m = window_end.year, window_end.month
     while (y, m) <= (end_y, end_m):
-        d = _actual_due_date(due_day, y, m)
-        if window_start <= d <= window_end:
-            candidates.append(d)
+        if cycle_anchor and months_step > 1:
+            month_delta = (y - cycle_anchor.year) * 12 + (m - cycle_anchor.month)
+            if month_delta < 0 or month_delta % months_step != 0:
+                if m == 12:
+                    y, m = y + 1, 1
+                else:
+                    m += 1
+                continue
+
+        for day in due_days:
+            d = _actual_due_date(day, y, m)
+            if start_date and d < start_date:
+                continue
+            if window_start <= d <= window_end:
+                candidates.append(d)
         if m == 12:
             y, m = y + 1, 1
         else:
             m += 1
-    return candidates
+    return sorted(set(candidates))
 
 
 def assign_bills_to_paycheck(
@@ -316,10 +348,20 @@ def assign_bills_to_paycheck(
             # This replaces the old approach of trusting the global Bill.is_paid flag.
             paid_for_period = False
             if paid_bill_map is not None and bill.id in paid_bill_map:
-                for pd in paid_bill_map[bill.id]:
+                for paid_marker in paid_bill_map[bill.id]:
                     try:
-                        pd_date = pd.date() if isinstance(pd, datetime) else (
-                            pd if isinstance(pd, date) else date.fromisoformat(str(pd)[:10])
+                        if isinstance(paid_marker, dict):
+                            marker_due = paid_marker.get("due_date")
+                            marker_due_date = marker_due.date() if isinstance(marker_due, datetime) else (
+                                marker_due if isinstance(marker_due, date) else date.fromisoformat(str(marker_due)[:10])
+                            )
+                            if marker_due_date == due_dt:
+                                paid_for_period = True
+                                break
+                            continue
+
+                        pd_date = paid_marker.date() if isinstance(paid_marker, datetime) else (
+                            paid_marker if isinstance(paid_marker, date) else date.fromisoformat(str(paid_marker)[:10])
                         )
                         if window_start <= pd_date <= window_end:
                             paid_for_period = True

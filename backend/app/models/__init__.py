@@ -5,6 +5,7 @@ from app.models.household import Household
 from app.models.household_chore import HouseholdChore
 from app.models.income import IncomeSource
 from app.models.bill import Bill
+from app.models.bill_cycle_payment import BillCyclePayment
 from app.models.bill_history import BillHistory
 from app.models.bill_member_payment import BillMemberPayment
 from app.models.debt import Debt
@@ -56,6 +57,7 @@ __all__ = [
     "HouseholdChore",
     "IncomeSource",
     "Bill",
+    "BillCyclePayment",
     "BillHistory",
     "BillMemberPayment",
     "Debt",

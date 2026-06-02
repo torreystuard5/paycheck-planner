@@ -63,6 +63,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
   const { activeBudget, budgetVersion } = useBudget();
   const toast = useToast();
   const [bills, setBills] = useState([]);
+  const [cycleGroups, setCycleGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
@@ -147,8 +148,16 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
       queryParams.set('sort_by', sortBy);
       queryParams.set('sort_order', sortOrder);
       if (activeBudget?.id) queryParams.set('budget_id', activeBudget.id);
-      const res = await api.get(`/api/v1/bills?${queryParams.toString()}`);
+      const cycleParams = new URLSearchParams();
+      if (statusFilter) cycleParams.set('status', statusFilter);
+      cycleParams.set('months', '6');
+      if (activeBudget?.id) cycleParams.set('budget_id', activeBudget.id);
+      const [res, cycleRes] = await Promise.all([
+        api.get(`/api/v1/bills?${queryParams.toString()}`),
+        api.get(`/api/v1/bills/cycles?${cycleParams.toString()}`),
+      ]);
       setBills(Array.isArray(res.data) ? res.data : []);
+      setCycleGroups(Array.isArray(cycleRes.data?.groups) ? cycleRes.data.groups : []);
       setLastUpdated(new Date());
     } catch {
       // silent poll failure
@@ -175,8 +184,16 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
       queryParams.set('sort_by', sortBy);
       queryParams.set('sort_order', sortOrder);
       if (activeBudget?.id) queryParams.set('budget_id', activeBudget.id);
-      const res = await api.get(`/api/v1/bills?${queryParams.toString()}`);
+      const cycleParams = new URLSearchParams();
+      if (statusFilter) cycleParams.set('status', statusFilter);
+      cycleParams.set('months', '6');
+      if (activeBudget?.id) cycleParams.set('budget_id', activeBudget.id);
+      const [res, cycleRes] = await Promise.all([
+        api.get(`/api/v1/bills?${queryParams.toString()}`),
+        api.get(`/api/v1/bills/cycles?${cycleParams.toString()}`),
+      ]);
       setBills(Array.isArray(res.data) ? res.data : []);
+      setCycleGroups(Array.isArray(cycleRes.data?.groups) ? cycleRes.data.groups : []);
     } catch {
       setError('Failed to load bills.');
     } finally {
@@ -250,6 +267,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
       await api.patch(`/api/v1/bills/${bill.id}/pay`, {
         paid_amount: displayAmount,
         paid_date: new Date().toISOString(),
+        occurrence_due_date: bill.occurrence_due_date || bill.next_due_date,
       });
       fetchBills();
       toast(`${bill.name} marked as paid`);
@@ -267,6 +285,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
       const payload = {};
       if (payForm.paid_amount) payload.paid_amount = parseFloat(payForm.paid_amount);
       if (payForm.paid_date) payload.paid_date = new Date(payForm.paid_date).toISOString();
+      payload.occurrence_due_date = payTarget.occurrence_due_date || payTarget.next_due_date;
       await api.patch(`/api/v1/bills/${payTarget.id}/pay`, payload);
       setShowPayModal(false);
       setPayTarget(null);
@@ -282,7 +301,9 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
 
   const handleUnpay = async (bill) => {
     try {
-      await api.patch(`/api/v1/bills/${bill.id}/unpay`);
+      const dueDate = bill.occurrence_due_date || bill.next_due_date;
+      const suffix = dueDate ? `?occurrence_due_date=${encodeURIComponent(dueDate)}` : '';
+      await api.patch(`/api/v1/bills/${bill.id}/unpay${suffix}`);
       fetchBills();
       toast(`${bill.name} marked as unpaid`);
     } catch (err) {
@@ -604,6 +625,21 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
   ];
 
   const payPeriodGroups = groupBillsByPayPeriod(filtered);
+  const visibleCycleGroups = cycleGroups
+    .map((group) => {
+      const groupBills = (group.bills || []).filter((b) => {
+        const matchSearch = !search || b.name?.toLowerCase().includes(search.toLowerCase());
+        const matchCategory = !filterCategory || b.category === filterCategory;
+        return matchSearch && matchCategory;
+      });
+      return {
+        ...group,
+        bills: groupBills,
+        total_due: groupBills.reduce((sum, b) => sum + (Number(b.payment_mode === 'split' && b.is_household_bill ? (b.user_share ?? b.amount) : b.amount) || 0), 0),
+        total_paid: groupBills.filter((b) => b.is_paid).reduce((sum, b) => sum + (Number(b.payment_mode === 'split' && b.is_household_bill ? (b.user_share ?? b.amount) : b.amount) || 0), 0),
+      };
+    })
+    .filter((group) => group.bills.length > 0);
 
   // Render a single bill card
   const renderBillCard = (bill) => {
@@ -1025,8 +1061,29 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && visibleCycleGroups.length === 0 ? (
         <EmptyState icon={FileText} title="No Bills Found" message="Add a bill to get started tracking your expenses." actionLabel="Add Bill" onAction={openAdd} />
+      ) : visibleCycleGroups.length > 0 ? (
+        <div className="space-y-6">
+          {visibleCycleGroups.map((group) => (
+            <section key={group.period_start || group.label}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-3 px-1">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800">{group.label}</h3>
+                  <p className="text-xs text-gray-500">
+                    {group.bills.filter((b) => b.is_paid).length}/{group.bills.length} paid
+                  </p>
+                </div>
+                <span className="text-sm font-medium text-gray-600">
+                  {fmtCurrency(group.total_paid)} paid of {fmtCurrency(group.total_due)}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {group.bills.map(renderBillCard)}
+              </div>
+            </section>
+          ))}
+        </div>
       ) : payPeriodGroups ? (
         /* Pay period grouped view */
         <div className="space-y-6">
