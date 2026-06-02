@@ -1,6 +1,8 @@
 import json
+import calendar
 import logging
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.bill import Bill
+from app.models.bill_cycle_payment import BillCyclePayment
 from app.models.bill_history import BillHistory
 from app.models.bill_member_payment import BillMemberPayment
 from app.models.paycheck_checklist import PaycheckChecklist
@@ -18,6 +21,8 @@ from app.models.user import User
 from app.schemas.bill import (
     BillBreakdownResponse,
     BillCreate,
+    BillCycleGroup,
+    BillCycleGroupsResponse,
     BillHistoryEntry,
     BillHistoryResponse,
     BillPayRequest,
@@ -27,6 +32,13 @@ from app.schemas.bill import (
     HouseholdBillBreakdownsResponse,
     MemberPaymentRequest,
     MemberShareResponse,
+)
+from app.services.bill_cycles import (
+    get_cycle_payments,
+    mark_bill_cycle_paid,
+    mark_bill_cycle_unpaid,
+    next_due_date_for_bill,
+    occurrence_dates_for_bill,
 )
 from app.services.household_billing import batch_household_breakdown_dicts, get_bill_breakdown
 from app.services.household_service import log_activity, resolve_valid_household_id
@@ -53,92 +65,15 @@ DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
 
 def _compute_next_due_date(bill: Bill) -> date | None:
     """Compute the next due date for a bill based on its frequency."""
-    today = date.today()
-    freq = bill.frequency or "monthly"
-
-    if freq == "one_time":
-        if bill.start_date:
-            return bill.start_date if bill.start_date >= today else None
-        return None
-
-    if freq in ("weekly", "biweekly"):
-        dow = bill.day_of_week
-        if dow is None:
-            return None
-        # Find next occurrence of this day-of-week
-        days_ahead = dow - today.weekday()
-        if days_ahead < 0:
-            days_ahead += 7
-        next_date = today + timedelta(days=days_ahead)
-
-        if freq == "biweekly" and bill.start_date:
-            # Ensure we're on the correct biweekly cadence
-            anchor = bill.start_date
-            delta_days = (next_date - anchor).days
-            weeks_diff = delta_days // 7
-            if weeks_diff % 2 != 0:
-                next_date += timedelta(days=7)
-        return next_date
-
-    if freq == "monthly":
-        due_day = bill.due_day or 1
-        try:
-            candidate = today.replace(day=min(due_day, 28))
-        except ValueError:
-            candidate = today.replace(day=28)
-        if candidate < today:
-            month = candidate.month + 1
-            year = candidate.year
-            if month > 12:
-                month = 1
-                year += 1
-            try:
-                candidate = candidate.replace(year=year, month=month, day=min(due_day, 28))
-            except ValueError:
-                candidate = candidate.replace(year=year, month=month, day=28)
-        return candidate
-
-    if freq == "quarterly":
-        due_day = bill.due_day or 1
-        current_quarter_month = ((today.month - 1) // 3) * 3 + 1
-        for offset in [0, 3, 6, 9]:
-            m = current_quarter_month + offset
-            y = today.year
-            if m > 12:
-                m -= 12
-                y += 1
-            try:
-                candidate = date(y, m, min(due_day, 28))
-            except ValueError:
-                candidate = date(y, m, 28)
-            if candidate >= today:
-                return candidate
-        return None
-
-    if freq in ("annual", "yearly"):
-        due_day = bill.due_day or 1
-        if bill.start_date:
-            m = bill.start_date.month
-        else:
-            m = today.month
-        try:
-            candidate = date(today.year, m, min(due_day, 28))
-        except ValueError:
-            candidate = date(today.year, m, 28)
-        if candidate < today:
-            try:
-                candidate = date(today.year + 1, m, min(due_day, 28))
-            except ValueError:
-                candidate = date(today.year + 1, m, 28)
-        return candidate
-
-    return None
+    return next_due_date_for_bill(bill)
 
 
 def _bill_to_response(
     bill: Bill,
     current_user_id: UUID | None = None,
     household_member_count: int = 1,
+    occurrence_due_date: date | None = None,
+    cycle_payment: BillCyclePayment | None = None,
 ) -> BillResponse:
     """Convert a Bill ORM object to BillResponse with computed user share."""
     assigned_name = None
@@ -169,6 +104,9 @@ def _bill_to_response(
         user_share = amount
         is_user_responsible = True
 
+    next_due_date = occurrence_due_date or _compute_next_due_date(bill)
+    cycle_is_paid = bool(cycle_payment and cycle_payment.is_paid)
+
     return BillResponse(
         id=bill.id,
         user_id=bill.user_id,
@@ -180,9 +118,9 @@ def _bill_to_response(
         category=bill.category,
         auto_pay=bill.auto_pay,
         reminder_days=bill.reminder_days,
-        is_paid=bill.is_paid,
-        paid_date=bill.paid_date,
-        paid_amount=bill.paid_amount,
+        is_paid=cycle_is_paid,
+        paid_date=cycle_payment.paid_date if cycle_payment else None,
+        paid_amount=cycle_payment.amount_paid if cycle_payment else None,
         is_active=bill.is_active,
         is_tax_deductible=bill.is_tax_deductible,
         tax_category=bill.tax_category,
@@ -192,7 +130,7 @@ def _bill_to_response(
         assigned_member_name=assigned_name,
         day_of_week=bill.day_of_week,
         start_date=bill.start_date,
-        next_due_date=_compute_next_due_date(bill),
+        next_due_date=next_due_date,
         created_at=bill.created_at,
         updated_at=bill.updated_at,
         budget_id=bill.budget_id,
@@ -200,6 +138,10 @@ def _bill_to_response(
         user_share=user_share,
         is_user_responsible=is_user_responsible,
         member_count=member_count if is_household else None,
+        occurrence_due_date=next_due_date,
+        cycle_paid_date=cycle_payment.paid_date if cycle_payment else None,
+        cycle_paid_amount=cycle_payment.amount_paid if cycle_payment else None,
+        cycle_amount_due=cycle_payment.amount_due if cycle_payment else amount,
     )
 
 
@@ -212,6 +154,38 @@ async def log_bill_action(db: AsyncSession, bill_id, bill_name, user_id, action_
         details=json.dumps(details) if details else None,
     )
     db.add(entry)
+
+
+async def _bill_responses_for_current_cycle(
+    db: AsyncSession,
+    bills: list[Bill],
+    current_user: User,
+) -> list[BillResponse]:
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    due_dates_by_bill: dict[UUID, date] = {}
+    for bill in bills:
+        due_date = _compute_next_due_date(bill)
+        if due_date:
+            due_dates_by_bill[bill.id] = due_date
+
+    payments: dict[tuple[UUID, date], BillCyclePayment] = {}
+    if due_dates_by_bill:
+        start_date = min(due_dates_by_bill.values())
+        end_date = max(due_dates_by_bill.values())
+        payments = await get_cycle_payments(db, list(due_dates_by_bill.keys()), start_date, end_date)
+
+    return [
+        _bill_to_response(
+            bill,
+            current_user.id,
+            member_count,
+            occurrence_due_date=due_dates_by_bill.get(bill.id),
+            cycle_payment=payments.get((bill.id, due_dates_by_bill[bill.id]))
+            if bill.id in due_dates_by_bill
+            else None,
+        )
+        for bill in bills
+    ]
 
 
 @router.post("", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
@@ -304,10 +278,6 @@ async def list_bills(
     query = apply_household_budget_filter(query, Bill, current_user, budget_id)
     if active_only:
         query = query.where(Bill.is_active.is_(True))
-    if status == "paid":
-        query = query.where(Bill.is_paid.is_(True))
-    elif status == "unpaid":
-        query = query.where(Bill.is_paid.is_(False))
     query = query.options(selectinload(Bill.assigned_member))
 
     # Apply sorting
@@ -318,8 +288,11 @@ async def list_bills(
         # Sort in Python by computed next_due_date (calendar-correct)
         result = await db.execute(query.order_by(Bill.created_at.desc()))
         bills = result.scalars().all()
-        member_count = await _get_household_member_count(db, current_user.household_id)
-        responses = [_bill_to_response(b, current_user.id, member_count) for b in bills]
+        responses = await _bill_responses_for_current_cycle(db, list(bills), current_user)
+        if status == "paid":
+            responses = [r for r in responses if r.is_paid]
+        elif status == "unpaid":
+            responses = [r for r in responses if not r.is_paid]
         far_future = date(9999, 12, 31)
         responses.sort(
             key=lambda r: r.next_due_date or far_future,
@@ -331,8 +304,12 @@ async def list_bills(
     query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
     result = await db.execute(query)
     bills = result.scalars().all()
-    member_count = await _get_household_member_count(db, current_user.household_id)
-    return [_bill_to_response(b, current_user.id, member_count) for b in bills]
+    responses = await _bill_responses_for_current_cycle(db, list(bills), current_user)
+    if status == "paid":
+        responses = [r for r in responses if r.is_paid]
+    elif status == "unpaid":
+        responses = [r for r in responses if not r.is_paid]
+    return responses
 
 
 @router.get("/history", response_model=BillHistoryResponse)
@@ -448,6 +425,82 @@ async def list_household_bill_breakdowns(
             continue
 
     return HouseholdBillBreakdownsResponse(breakdowns=out)
+
+
+@router.get("/cycles", response_model=BillCycleGroupsResponse)
+async def list_bill_cycles(
+    months: int = Query(default=6, ge=1, le=24),
+    status: str | None = Query(default=None, pattern="^(paid|unpaid)$"),
+    budget_id: UUID | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Future bill occurrences grouped by cycle month.
+
+    The recurring bill row is the template; each item in this response is a
+    specific upcoming due date with its own paid state.
+    """
+    today = date.today()
+    end_month = today.month - 1 + months
+    end_date = date(today.year + end_month // 12, end_month % 12 + 1, 1) - timedelta(days=1)
+
+    if current_user.household_id:
+        member_result = await db.execute(
+            select(User.id).where(User.household_id == current_user.household_id)
+        )
+        household_member_ids = [row[0] for row in member_result.all()]
+        query = select(Bill).where(Bill.user_id.in_(household_member_ids))
+    else:
+        query = select(Bill).where(Bill.user_id == current_user.id)
+    query = apply_household_budget_filter(query, Bill, current_user, budget_id)
+    query = query.where(Bill.is_active.is_(True)).options(selectinload(Bill.assigned_member))
+
+    result = await db.execute(query)
+    bills = list(result.scalars().all())
+    member_count = await _get_household_member_count(db, current_user.household_id)
+    payments = await get_cycle_payments(db, [b.id for b in bills], today, end_date)
+
+    grouped: dict[tuple[int, int], list[BillResponse]] = {}
+    for bill in bills:
+        for due_date in occurrence_dates_for_bill(bill, today, end_date):
+            payment = payments.get((bill.id, due_date))
+            response = _bill_to_response(
+                bill,
+                current_user.id,
+                member_count,
+                occurrence_due_date=due_date,
+                cycle_payment=payment,
+            )
+            if status == "paid" and not response.is_paid:
+                continue
+            if status == "unpaid" and response.is_paid:
+                continue
+            grouped.setdefault((due_date.year, due_date.month), []).append(response)
+
+    groups: list[BillCycleGroup] = []
+    for (year, month), responses in sorted(grouped.items()):
+        period_start = date(year, month, 1)
+        period_end = date(year, month, calendar.monthrange(year, month)[1])
+        responses.sort(key=lambda b: (b.occurrence_due_date or period_end, b.name or ""))
+        total_due = sum((Decimal(str(b.user_share or b.amount or 0)) for b in responses), Decimal("0"))
+        total_paid = sum(
+            (Decimal(str(b.user_share or b.amount or 0)) for b in responses if b.is_paid),
+            Decimal("0"),
+        )
+        groups.append(
+            BillCycleGroup(
+                label=period_start.strftime("%B %Y"),
+                period_start=period_start,
+                period_end=period_end,
+                total_due=total_due,
+                total_paid=total_paid,
+                item_count=len(responses),
+                paid_count=sum(1 for b in responses if b.is_paid),
+                bills=responses,
+            )
+        )
+
+    return BillCycleGroupsResponse(groups=groups)
 
 
 @router.get("/{bill_id}", response_model=BillResponse)
@@ -737,6 +790,7 @@ async def pay_bill(
     bill_id: UUID,
     data: BillPayRequest | None = None,
     source: str | None = Query(default=None),
+    occurrence_due_date: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -759,16 +813,27 @@ async def pay_bill(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
-    bill.is_paid = True
-    bill.paid_date = (data.paid_date if data and data.paid_date else datetime.now(timezone.utc))
-    bill.paid_amount = (data.paid_amount if data and data.paid_amount else bill.amount)
+    due_date = occurrence_due_date or (data.occurrence_due_date if data else None) or _compute_next_due_date(bill)
+    if not due_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to determine which bill cycle to mark paid.",
+        )
 
-    await db.flush()
+    cycle_payment = await mark_bill_cycle_paid(
+        db=db,
+        bill=bill,
+        user=current_user,
+        due_date=due_date,
+        amount_paid=data.paid_amount if data and data.paid_amount else None,
+        paid_date=data.paid_date if data and data.paid_date else None,
+        source=source,
+    )
     await db.refresh(bill)
 
     await log_bill_action(
         db, bill.id, bill.name, current_user.id, "payment_recorded",
-        {"amount": str(bill.paid_amount)},
+        {"amount": str(cycle_payment.amount_paid), "due_date": str(due_date)},
     )
 
     if current_user.household_id:
@@ -779,7 +844,7 @@ async def pay_bill(
                 action="paid",
                 entity_type="bill",
                 entity_name=bill.name or "Untitled",
-                details=f"${bill.paid_amount}",
+                details=f"${cycle_payment.amount_paid}",
                 db=db,
             )
         except Exception:
@@ -790,10 +855,11 @@ async def pay_bill(
         auto_payment = Payment(
             user_id=current_user.id,
             bill_id=bill.id,
-            amount=bill.paid_amount or bill.amount,
-            paid_date=bill.paid_date or datetime.now(timezone.utc),
+            amount=cycle_payment.amount_paid or bill.amount,
+            paid_date=(cycle_payment.paid_date.date() if cycle_payment.paid_date else due_date),
             source=source or "bills_page",
             auto_logged=True,
+            budget_id=bill.budget_id,
         )
         db.add(auto_payment)
         await db.flush()
@@ -801,7 +867,13 @@ async def pay_bill(
         pass
 
     member_count = await _get_household_member_count(db, current_user.household_id)
-    return _bill_to_response(bill, current_user.id, member_count)
+    return _bill_to_response(
+        bill,
+        current_user.id,
+        member_count,
+        occurrence_due_date=due_date,
+        cycle_payment=cycle_payment,
+    )
 
 
 @router.patch("/{bill_id}/hide-overdue", response_model=BillResponse)
@@ -875,6 +947,7 @@ async def unhide_overdue_bill(
 @router.patch("/{bill_id}/unpay", response_model=BillResponse)
 async def unpay_bill(
     bill_id: UUID,
+    occurrence_due_date: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -897,9 +970,13 @@ async def unpay_bill(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
-    bill.is_paid = False
-    bill.paid_date = None
-    bill.paid_amount = None
+    due_date = occurrence_due_date or _compute_next_due_date(bill)
+    if not due_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to determine which bill cycle to mark unpaid.",
+        )
+    await mark_bill_cycle_unpaid(db, bill, due_date, current_user.id)
 
     # Dashboard merges paycheck checklist with plan items; stale checked rows
     # would keep showing "paid" for this user after Bills unpay clears Bill.is_paid.
@@ -910,11 +987,10 @@ async def unpay_bill(
         )
     )
 
-    await db.flush()
     await db.refresh(bill)
 
     await log_bill_action(
-        db, bill.id, bill.name, current_user.id, "payment_undone", None,
+        db, bill.id, bill.name, current_user.id, "payment_undone", {"due_date": str(due_date)},
     )
 
     if current_user.household_id:
@@ -947,7 +1023,7 @@ async def unpay_bill(
         pass
 
     member_count = await _get_household_member_count(db, current_user.household_id)
-    return _bill_to_response(bill, current_user.id, member_count)
+    return _bill_to_response(bill, current_user.id, member_count, occurrence_due_date=due_date)
 
 
 @router.patch("/{bill_id}/postpone", response_model=BillResponse)

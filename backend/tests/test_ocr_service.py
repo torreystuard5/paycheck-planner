@@ -126,3 +126,82 @@ def test_parse_paystub_header_table_ignores_label_row_and_period_begin():
     assert "Employee ID" not in (parsed["employer_name"] or "")
     assert "Pay Period" not in (parsed["employer_name"] or "")
     assert parsed["pay_date"] != "2026-05-03"
+
+
+# Exact pdfplumber text from Paystub 5 31 26.pdf (single-space header row).
+VANDERBILT_PDF_STUB = (
+    "Vanderbilt University Medical Center 1161 21ST AVE S., SUITE D3300 MCN Nashville, TN 37232 +1 (615) 3437000\n"
+    "Torrey Stuard 4145 highway 48 N Charlotte, TN 37036\n"
+    "Name Company Employee ID Pay Period Begin Pay Period End Check Date Check Number\n"
+    "Torrey Stuard Vanderbilt University Medical Center 0150776 05/03/2026 05/16/2026 05/22/2026\n"
+    "Hours Worked Gross Pay Pre Tax Deductions Employee Taxes Post Tax Deductions Net Pay\n"
+    "Current 59.23 1,449.88 165.83 171.78 65.73 1,046.54\n"
+    "YTD 714.68 18,750.27 1,531.53  2,504.01 758.17 13,956.56\n"
+)
+
+
+def test_parse_paystub_vanderbilt_pdf_extract():
+    """Regression: pdfplumber single-space header must not grab label row as employer."""
+    parsed = parse_paystub_text(VANDERBILT_PDF_STUB)
+
+    assert parsed["employer_name"] == "Vanderbilt University Medical Center"
+    assert parsed["pay_date"] == "2026-05-22"
+    assert parsed["gross_amount"] == "1449.88"
+    assert parsed["net_amount"] == "1046.54"
+    assert "Employee ID" not in (parsed["employer_name"] or "")
+    assert parsed["pay_date"] != "2026-05-03"
+
+
+# Single-space OCR (no column padding) — same Vanderbilt header shape.
+SINGLE_SPACE_HEADER_STUB = (
+    "Name Company Employee ID Pay Period Begin Pay Period End Check Date Check Number\n"
+    "Torrey Stuard Vanderbilt University Medical Center 0150776 05/03/2026 05/16/2026 05/22/2026 000123\n"
+    "Hours Worked Gross Pay Pre Tax Deductions Employee Taxes Post Tax Deductions Net Pay\n"
+    "Current 59.23 1,449.88 165.83 171.78 65.73 1,046.54\n"
+)
+
+
+def test_parse_paystub_single_space_header_table():
+    parsed = parse_paystub_text(SINGLE_SPACE_HEADER_STUB)
+
+    assert parsed["employer_name"] == "Vanderbilt University Medical Center"
+    assert parsed["pay_date"] == "2026-05-22"
+    assert parsed["gross_amount"] == "1449.88"
+    assert parsed["net_amount"] == "1046.54"
+    assert "Employee ID" not in (parsed["employer_name"] or "")
+    assert parsed["pay_date"] != "2026-05-03"
+
+
+# Label row split across two OCR lines (common Tesseract layout).
+SPLIT_LABEL_HEADER_STUB = (
+    "Name Company Employee ID\n"
+    "Pay Period Begin Pay Period End Check Date Check Number\n"
+    "Torrey Stuard Vanderbilt University Medical Center 0150776 05/03/2026 05/16/2026 05/22/2026 000123\n"
+    "Hours Worked Gross Pay Pre Tax Deductions Employee Taxes Post Tax Deductions Net Pay\n"
+    "Current 59.23 1,449.88 165.83 171.78 65.73 1,046.54\n"
+)
+
+
+def test_parse_paystub_split_label_row_header():
+    parsed = parse_paystub_text(SPLIT_LABEL_HEADER_STUB)
+
+    assert parsed["employer_name"] == "Vanderbilt University Medical Center"
+    assert parsed["pay_date"] == "2026-05-22"
+    assert parsed["gross_amount"] == "1449.88"
+    assert parsed["net_amount"] == "1046.54"
+
+
+# Pipe-delimited header (PDF text extraction variant).
+PIPE_HEADER_STUB = (
+    "Name | Company | Employee ID | Pay Period Begin | Pay Period End | Check Date | Check Number\n"
+    "Torrey Stuard | Vanderbilt University Medical Center | 0150776 | 05/03/2026 | 05/16/2026 | 05/22/2026 | 000123\n"
+    "Hours Worked Gross Pay Pre Tax Deductions Employee Taxes Post Tax Deductions Net Pay\n"
+    "Current 59.23 1,449.88 165.83 171.78 65.73 1,046.54\n"
+)
+
+
+def test_parse_paystub_pipe_delimited_header():
+    parsed = parse_paystub_text(PIPE_HEADER_STUB)
+
+    assert parsed["employer_name"] == "Vanderbilt University Medical Center"
+    assert parsed["pay_date"] == "2026-05-22"

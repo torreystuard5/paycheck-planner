@@ -89,6 +89,7 @@ class Bill(Base):
     assigned_member = relationship("User", foreign_keys=[assigned_member_id])
     household = relationship("Household", back_populates="bills")
     payments = relationship("Payment", back_populates="bill")
+    cycle_payments = relationship("BillCyclePayment", back_populates="bill", cascade="all, delete-orphan")
     member_payments = relationship("BillMemberPayment", back_populates="bill", cascade="all, delete-orphan")
 
     budget = relationship("Budget")
