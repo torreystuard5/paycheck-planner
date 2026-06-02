@@ -86,25 +86,48 @@ def upgrade() -> None:
             amount_due, amount_paid, is_paid, paid_date, source, notes, created_at, updated_at
         )
         SELECT
-            p.bill_id,
-            p.user_id,
-            b.household_id,
-            COALESCE(p.budget_id, b.budget_id),
-            p.paid_date::date,
-            EXTRACT(YEAR FROM p.paid_date::date)::int,
-            EXTRACT(MONTH FROM p.paid_date::date)::int,
-            COALESCE(b.amount, p.amount, 0),
-            COALESCE(p.amount, b.amount, 0),
-            true,
-            p.paid_date::timestamp with time zone,
-            COALESCE(p.source, 'legacy_payment'),
-            'Backfilled from payments',
-            COALESCE(p.created_at, now()),
-            now()
-        FROM payments p
-        JOIN bills b ON b.id = p.bill_id
-        WHERE p.bill_id IS NOT NULL
-          AND p.paid_date IS NOT NULL
+            ranked.bill_id,
+            ranked.user_id,
+            ranked.household_id,
+            ranked.budget_id,
+            ranked.due_date,
+            ranked.cycle_year,
+            ranked.cycle_month,
+            ranked.amount_due,
+            ranked.amount_paid,
+            ranked.is_paid,
+            ranked.paid_date,
+            ranked.source,
+            ranked.notes,
+            ranked.created_at,
+            ranked.updated_at
+        FROM (
+            SELECT
+                p.bill_id,
+                p.user_id,
+                b.household_id,
+                COALESCE(p.budget_id, b.budget_id) AS budget_id,
+                p.paid_date::date AS due_date,
+                EXTRACT(YEAR FROM p.paid_date::date)::int AS cycle_year,
+                EXTRACT(MONTH FROM p.paid_date::date)::int AS cycle_month,
+                COALESCE(b.amount, p.amount, 0) AS amount_due,
+                COALESCE(p.amount, b.amount, 0) AS amount_paid,
+                true AS is_paid,
+                p.paid_date::timestamp with time zone AS paid_date,
+                COALESCE(p.source, 'legacy_payment') AS source,
+                'Backfilled from payments' AS notes,
+                COALESCE(p.created_at, now()) AS created_at,
+                now() AS updated_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY p.bill_id, p.paid_date::date
+                    ORDER BY p.amount DESC NULLS LAST, p.created_at DESC NULLS LAST, p.id
+                ) AS rn
+            FROM payments p
+            JOIN bills b ON b.id = p.bill_id
+            WHERE p.bill_id IS NOT NULL
+              AND p.paid_date IS NOT NULL
+        ) ranked
+        WHERE ranked.rn = 1
         ON CONFLICT (bill_id, due_date) DO UPDATE SET
             amount_paid = GREATEST(bill_cycle_payments.amount_paid, EXCLUDED.amount_paid),
             is_paid = bill_cycle_payments.is_paid OR EXCLUDED.is_paid,
