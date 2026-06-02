@@ -173,7 +173,7 @@ class TestNewPaycheckEntryDoesNotCarryPaidStateForward(unittest.TestCase):
             net_amount=Decimal("2000"),
         )
 
-        plan = asyncio.get_event_loop().run_until_complete(
+        plan = asyncio.run(
             build_paycheck_plan(
                 user=user,
                 income_sources=[],
