@@ -3,7 +3,13 @@ from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
 
-from app.services.bill_cycles import next_due_date_for_bill, occurrence_dates_for_bill
+from app.services.bill_cycles import (
+    current_month_due_date,
+    cycle_window_start,
+    due_date_for_month,
+    next_due_date_for_bill,
+    occurrence_dates_for_bill,
+)
 from app.services.paycheck_engine import assign_bills_to_paycheck
 
 
@@ -89,3 +95,20 @@ def test_next_due_uses_cycle_occurrence_not_global_paid_state():
     bill = _bill(frequency="one_time", start_date=date(2099, 3, 1), due_day=None)
 
     assert next_due_date_for_bill(bill, today=date(2099, 2, 1)) == date(2099, 3, 1)
+
+
+def test_monthly_bill_appears_in_current_month_without_cycle_row():
+    bill = _bill(due_day=5, frequency="monthly")
+    window_start = cycle_window_start(date(2026, 6, 10))
+
+    assert window_start == date(2026, 6, 1)
+    assert occurrence_dates_for_bill(bill, window_start, date(2026, 6, 30)) == [date(2026, 6, 5)]
+    assert current_month_due_date(bill, date(2026, 6, 10)) == date(2026, 6, 5)
+    assert next_due_date_for_bill(bill, today=date(2026, 6, 10)) == date(2026, 6, 5)
+
+
+def test_due_date_for_month_clamps_to_last_day_of_month():
+    bill = _bill(due_day=31, frequency="monthly")
+
+    assert due_date_for_month(bill, 2026, 2) == date(2026, 2, 28)
+    assert due_date_for_month(bill, 2026, 4) == date(2026, 4, 30)

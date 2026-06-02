@@ -53,6 +53,18 @@ const fmtCurrency = (val) => {
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
+const formatBillDueLabel = (bill) => {
+  const dueDate = bill.occurrence_due_date || bill.next_due_date;
+  if (dueDate) {
+    return `Due ${formatFriendlyDate(dueDate)}`;
+  }
+  if (bill.due_day) {
+    const month = new Date().toLocaleDateString('en-US', { month: 'short' });
+    return `Due ${month} ${bill.due_day}`;
+  }
+  return 'Due --';
+};
+
 const freqLabel = (freq) => {
   const f = FREQUENCIES.find(x => x.value === freq);
   return f ? f.label : (freq || 'Monthly');
@@ -652,7 +664,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
     const catColor = getCategoryColor(bill.category);
 
     return (
-      <div key={bill.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 ${isPaid ? 'opacity-60 bg-gray-50' : ''}`}>
+      <div key={`${bill.id}-${bill.occurrence_due_date || bill.next_due_date || bill.due_day || 'bill'}`} className={`bg-white rounded-lg shadow-sm border border-gray-200 ${isPaid ? 'opacity-60 bg-gray-50' : ''}`}>
         <div className="p-4">
           {/* Line 1: Name + action icons */}
           <div className="flex items-center justify-between gap-2">
@@ -756,7 +768,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
             <span>
               {(bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
                 ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
-                : `Due ${bill.next_due_date ? formatFriendlyDate(bill.next_due_date) : (bill.due_day ? `day ${bill.due_day}` : '--')}`
+                : formatBillDueLabel(bill)
               }
             </span>
             <span className="text-gray-300">·</span>

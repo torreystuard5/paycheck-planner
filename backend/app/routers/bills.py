@@ -34,7 +34,11 @@ from app.schemas.bill import (
     MemberShareResponse,
 )
 from app.services.bill_cycles import (
+    cycle_window_start,
+    ensure_pending_cycle_row,
+    ensure_pending_cycle_rows,
     get_cycle_payments,
+    local_today,
     mark_bill_cycle_paid,
     mark_bill_cycle_unpaid,
     next_due_date_for_bill,
@@ -63,9 +67,9 @@ async def _get_household_member_count(db: AsyncSession, household_id: UUID | Non
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
-def _compute_next_due_date(bill: Bill) -> date | None:
+def _compute_next_due_date(bill: Bill, today: date | None = None) -> date | None:
     """Compute the next due date for a bill based on its frequency."""
-    return next_due_date_for_bill(bill)
+    return next_due_date_for_bill(bill, today)
 
 
 def _bill_to_response(
@@ -162,17 +166,18 @@ async def _bill_responses_for_current_cycle(
     current_user: User,
 ) -> list[BillResponse]:
     member_count = await _get_household_member_count(db, current_user.household_id)
+    today = local_today(current_user)
     due_dates_by_bill: dict[UUID, date] = {}
     for bill in bills:
-        due_date = _compute_next_due_date(bill)
+        due_date = _compute_next_due_date(bill, today)
         if due_date:
             due_dates_by_bill[bill.id] = due_date
 
     payments: dict[tuple[UUID, date], BillCyclePayment] = {}
     if due_dates_by_bill:
-        start_date = min(due_dates_by_bill.values())
-        end_date = max(due_dates_by_bill.values())
-        payments = await get_cycle_payments(db, list(due_dates_by_bill.keys()), start_date, end_date)
+        payments = await ensure_pending_cycle_rows(
+            db, bills, due_dates_by_bill, current_user
+        )
 
     return [
         _bill_to_response(
@@ -440,7 +445,8 @@ async def list_bill_cycles(
     The recurring bill row is the template; each item in this response is a
     specific upcoming due date with its own paid state.
     """
-    today = date.today()
+    today = local_today(current_user)
+    window_start = cycle_window_start(today)
     end_month = today.month - 1 + months
     end_date = date(today.year + end_month // 12, end_month % 12 + 1, 1) - timedelta(days=1)
 
@@ -458,12 +464,16 @@ async def list_bill_cycles(
     result = await db.execute(query)
     bills = list(result.scalars().all())
     member_count = await _get_household_member_count(db, current_user.household_id)
-    payments = await get_cycle_payments(db, [b.id for b in bills], today, end_date)
+    payments = await get_cycle_payments(db, [b.id for b in bills], window_start, end_date)
 
     grouped: dict[tuple[int, int], list[BillResponse]] = {}
     for bill in bills:
-        for due_date in occurrence_dates_for_bill(bill, today, end_date):
+        for due_date in occurrence_dates_for_bill(bill, window_start, end_date):
             payment = payments.get((bill.id, due_date))
+            if payment is None:
+                payment = await ensure_pending_cycle_row(
+                    db, bill, current_user, due_date
+                )
             response = _bill_to_response(
                 bill,
                 current_user.id,
