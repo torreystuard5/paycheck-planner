@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bill import Bill
 from app.models.bill_cycle_payment import BillCyclePayment
+from app.services.bill_cycles import auto_generate_missing_cycle_rows_for_window
 from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
 from app.models.income import IncomeSource
@@ -181,9 +182,17 @@ async def get_paid_bill_map(
     bill_ids: list[UUID],
     overall_start: date,
     overall_end: date,
+    *,
+    bills: list[Bill] | None = None,
+    user: User | None = None,
 ) -> dict[UUID, list[Any]]:
     if not bill_ids or not user_ids:
         return {}
+
+    if bills and user:
+        await auto_generate_missing_cycle_rows_for_window(
+            db, bills, user, overall_start, overall_end
+        )
 
     cycle_result = await db.execute(
         select(BillCyclePayment.bill_id, BillCyclePayment.due_date, BillCyclePayment.paid_date).where(

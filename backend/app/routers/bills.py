@@ -34,10 +34,12 @@ from app.schemas.bill import (
     MemberShareResponse,
 )
 from app.services.bill_cycles import (
+    auto_generate_missing_cycle_rows,
+    auto_generate_missing_cycle_rows_for_window,
     cycle_window_start,
     ensure_pending_cycle_row,
-    ensure_pending_cycle_rows,
     get_cycle_payments,
+    get_cycle_payments_for_month,
     local_today,
     mark_bill_cycle_paid,
     mark_bill_cycle_unpaid,
@@ -146,6 +148,7 @@ def _bill_to_response(
         cycle_paid_date=cycle_payment.paid_date if cycle_payment else None,
         cycle_paid_amount=cycle_payment.amount_paid if cycle_payment else None,
         cycle_amount_due=cycle_payment.amount_due if cycle_payment else amount,
+        cycle_source=cycle_payment.source if cycle_payment else None,
     )
 
 
@@ -167,17 +170,26 @@ async def _bill_responses_for_current_cycle(
 ) -> list[BillResponse]:
     member_count = await _get_household_member_count(db, current_user.household_id)
     today = local_today(current_user)
+    cycle_year, cycle_month = today.year, today.month
+
+    await auto_generate_missing_cycle_rows(db, bills, current_user, cycle_year, cycle_month)
+
+    bill_ids = [b.id for b in bills]
+    payments_by_key = await get_cycle_payments_for_month(
+        db, bill_ids, cycle_year, cycle_month
+    )
+    payments_by_bill: dict[UUID, BillCyclePayment] = {}
     due_dates_by_bill: dict[UUID, date] = {}
+    for (bill_id, due_date), payment in payments_by_key.items():
+        due_dates_by_bill[bill_id] = due_date
+        payments_by_bill[bill_id] = payment
+
     for bill in bills:
+        if bill.id in due_dates_by_bill:
+            continue
         due_date = _compute_next_due_date(bill, today)
         if due_date:
             due_dates_by_bill[bill.id] = due_date
-
-    payments: dict[tuple[UUID, date], BillCyclePayment] = {}
-    if due_dates_by_bill:
-        payments = await ensure_pending_cycle_rows(
-            db, bills, due_dates_by_bill, current_user
-        )
 
     return [
         _bill_to_response(
@@ -185,9 +197,7 @@ async def _bill_responses_for_current_cycle(
             current_user.id,
             member_count,
             occurrence_due_date=due_dates_by_bill.get(bill.id),
-            cycle_payment=payments.get((bill.id, due_dates_by_bill[bill.id]))
-            if bill.id in due_dates_by_bill
-            else None,
+            cycle_payment=payments_by_bill.get(bill.id),
         )
         for bill in bills
     ]
@@ -463,17 +473,48 @@ async def list_bill_cycles(
 
     result = await db.execute(query)
     bills = list(result.scalars().all())
+
     member_count = await _get_household_member_count(db, current_user.household_id)
-    payments = await get_cycle_payments(db, [b.id for b in bills], window_start, end_date)
+    await auto_generate_missing_cycle_rows_for_window(
+        db, bills, current_user, window_start, end_date
+    )
+
+    bill_ids = [b.id for b in bills]
+    bill_by_id = {b.id: b for b in bills}
+    payments = await get_cycle_payments(db, bill_ids, window_start, end_date)
 
     grouped: dict[tuple[int, int], list[BillResponse]] = {}
+    seen: set[tuple[UUID, date]] = set()
+    for (bill_id, due_date), payment in sorted(
+        payments.items(), key=lambda item: (item[0][1], item[0][0])
+    ):
+        bill = bill_by_id.get(bill_id)
+        if not bill:
+            continue
+        key = (bill_id, due_date)
+        if key in seen:
+            continue
+        seen.add(key)
+        response = _bill_to_response(
+            bill,
+            current_user.id,
+            member_count,
+            occurrence_due_date=due_date,
+            cycle_payment=payment,
+        )
+        if status == "paid" and not response.is_paid:
+            continue
+        if status == "unpaid" and response.is_paid:
+            continue
+        grouped.setdefault((payment.cycle_year, payment.cycle_month), []).append(response)
+
     for bill in bills:
         for due_date in occurrence_dates_for_bill(bill, window_start, end_date):
-            payment = payments.get((bill.id, due_date))
-            if payment is None:
-                payment = await ensure_pending_cycle_row(
-                    db, bill, current_user, due_date
-                )
+            key = (bill.id, due_date)
+            if key in seen:
+                continue
+            payment = await ensure_pending_cycle_row(db, bill, current_user, due_date)
+            seen.add(key)
             response = _bill_to_response(
                 bill,
                 current_user.id,

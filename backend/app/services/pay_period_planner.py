@@ -239,6 +239,8 @@ async def build_pay_calendar_context(
         [b.id for b in bills],
         current_start,
         overall_end,
+        bills=bills,
+        user=user,
     )
 
     return {

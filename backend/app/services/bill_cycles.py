@@ -8,6 +8,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bill import Bill
@@ -17,13 +18,16 @@ from app.models.user import User
 
 DEFAULT_TIMEZONE = "America/Chicago"
 
+RECURRING_FREQUENCIES = frozenset(
+    {"weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "annual", "yearly"}
+)
+
 
 def _actual_due_date(due_day: int, year: int, month: int) -> date:
     return date(year, month, min(due_day, calendar.monthrange(year, month)[1]))
 
 
 def resolve_user_timezone(user: User | None = None) -> ZoneInfo:
-    """Use the user's timezone when available; otherwise America/Chicago."""
     tz_name = DEFAULT_TIMEZONE
     if user is not None:
         for attr in ("timezone", "time_zone"):
@@ -38,19 +42,39 @@ def resolve_user_timezone(user: User | None = None) -> ZoneInfo:
 
 
 def local_today(user: User | None = None) -> date:
-    """Calendar date in the user's local timezone."""
     return datetime.now(resolve_user_timezone(user)).date()
 
 
+def is_recurring_bill(bill: Bill) -> bool:
+    freq = (bill.frequency or "monthly").lower()
+    return freq in RECURRING_FREQUENCIES
+
+
 def due_date_for_month(bill: Bill, year: int, month: int) -> date | None:
-    """Construct a bill's due date for a calendar month from due_day."""
     if bill.due_day is None:
         return None
     return _actual_due_date(bill.due_day, year, month)
 
 
+def month_bounds(year: int, month: int) -> tuple[date, date]:
+    start = date(year, month, 1)
+    end = date(year, month, calendar.monthrange(year, month)[1])
+    return start, end
+
+
+def months_in_range(start: date, end: date) -> list[tuple[int, int]]:
+    pairs: list[tuple[int, int]] = []
+    y, m = start.year, start.month
+    while (y, m) <= (end.year, end.month):
+        pairs.append((y, m))
+        if m == 12:
+            y, m = y + 1, 1
+        else:
+            m += 1
+    return pairs
+
+
 def current_month_due_date(bill: Bill, today: date | None = None) -> date | None:
-    """Due date for the bill in the current local month, when applicable."""
     today = today or date.today()
     freq = bill.frequency or "monthly"
     if freq in ("weekly", "biweekly", "one_time"):
@@ -60,8 +84,7 @@ def current_month_due_date(bill: Bill, today: date | None = None) -> date | None
     if freq in ("monthly", "semi_monthly"):
         return due_date_for_month(bill, today.year, today.month)
 
-    month_start = today.replace(day=1)
-    month_end = date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
+    month_start, month_end = month_bounds(today.year, today.month)
     dates = occurrence_dates_for_bill(bill, month_start, month_end)
     return dates[0] if dates else None
 
@@ -91,8 +114,6 @@ def occurrence_dates_for_bill(
     window_start: date,
     window_end: date,
 ) -> list[date]:
-    """Return every occurrence due date for a bill inside a date window."""
-
     freq = bill.frequency or "monthly"
     if window_end < window_start:
         return []
@@ -172,6 +193,11 @@ def occurrence_dates_for_bill(
     return sorted(set(occurrences))
 
 
+def occurrence_dates_for_month(bill: Bill, year: int, month: int) -> list[date]:
+    start, end = month_bounds(year, month)
+    return occurrence_dates_for_bill(bill, start, end)
+
+
 def next_due_date_for_bill(bill: Bill, today: date | None = None) -> date | None:
     today = today or date.today()
     month_due = current_month_due_date(bill, today)
@@ -182,7 +208,6 @@ def next_due_date_for_bill(bill: Bill, today: date | None = None) -> date | None
 
 
 def cycle_window_start(today: date | None = None) -> date:
-    """Start bill-cycle windows at the first day of the current month."""
     today = today or date.today()
     return today.replace(day=1)
 
@@ -202,55 +227,6 @@ async def get_visible_bill_query(db: AsyncSession, current_user: User, bill_id: 
     return query
 
 
-async def ensure_pending_cycle_row(
-    db: AsyncSession,
-    bill: Bill,
-    user: User,
-    due_date: date,
-) -> BillCyclePayment:
-    """Create an unpaid cycle row lazily when a bill occurrence has no row yet."""
-    existing = await get_cycle_payments(db, [bill.id], due_date, due_date)
-    row = existing.get((bill.id, due_date))
-    if row is not None:
-        return row
-
-    row = BillCyclePayment(
-        bill_id=bill.id,
-        user_id=user.id,
-        household_id=bill.household_id,
-        budget_id=bill.budget_id,
-        due_date=due_date,
-        cycle_year=due_date.year,
-        cycle_month=due_date.month,
-        amount_due=Decimal(str(bill.amount or 0)),
-        amount_paid=Decimal("0"),
-        is_paid=False,
-        source="auto_pending",
-    )
-    db.add(row)
-    await db.flush()
-    return row
-
-
-async def ensure_pending_cycle_rows(
-    db: AsyncSession,
-    bills: list[Bill],
-    due_dates_by_bill: dict[UUID, date],
-    user: User,
-) -> dict[tuple[UUID, date], BillCyclePayment]:
-    """Ensure pending rows exist for each bill occurrence being returned."""
-    payments: dict[tuple[UUID, date], BillCyclePayment] = {}
-    bill_by_id = {bill.id: bill for bill in bills}
-    for bill_id, due_date in due_dates_by_bill.items():
-        bill = bill_by_id.get(bill_id)
-        if not bill:
-            continue
-        payments[(bill_id, due_date)] = await ensure_pending_cycle_row(
-            db, bill, user, due_date
-        )
-    return payments
-
-
 async def get_cycle_payments(
     db: AsyncSession,
     bill_ids: list[UUID],
@@ -267,6 +243,148 @@ async def get_cycle_payments(
         )
     )
     return {(row.bill_id, row.due_date): row for row in result.scalars().all()}
+
+
+async def get_cycle_payments_for_month(
+    db: AsyncSession,
+    bill_ids: list[UUID],
+    cycle_year: int,
+    cycle_month: int,
+) -> dict[tuple[UUID, date], BillCyclePayment]:
+    if not bill_ids:
+        return {}
+    result = await db.execute(
+        select(BillCyclePayment).where(
+            BillCyclePayment.bill_id.in_(bill_ids),
+            BillCyclePayment.cycle_year == cycle_year,
+            BillCyclePayment.cycle_month == cycle_month,
+        )
+    )
+    return {(row.bill_id, row.due_date): row for row in result.scalars().all()}
+
+
+async def auto_generate_missing_cycle_rows(
+    db: AsyncSession,
+    bills: list[Bill],
+    user: User,
+    cycle_year: int,
+    cycle_month: int,
+) -> int:
+    """Insert pending cycle rows for recurring bills missing from a calendar month."""
+    recurring = [b for b in bills if is_recurring_bill(b)]
+    if not recurring:
+        return 0
+
+    bill_ids = [b.id for b in recurring]
+    existing = await get_cycle_payments_for_month(db, bill_ids, cycle_year, cycle_month)
+    existing_keys = set(existing.keys())
+
+    rows: list[dict[str, Any]] = []
+    for bill in recurring:
+        for due_date in occurrence_dates_for_month(bill, cycle_year, cycle_month):
+            if (bill.id, due_date) in existing_keys:
+                continue
+            rows.append(
+                {
+                    "bill_id": bill.id,
+                    "user_id": bill.user_id,
+                    "household_id": bill.household_id,
+                    "budget_id": bill.budget_id,
+                    "due_date": due_date,
+                    "cycle_year": cycle_year,
+                    "cycle_month": cycle_month,
+                    "amount_due": Decimal(str(bill.amount or 0)),
+                    "amount_paid": Decimal("0"),
+                    "is_paid": False,
+                    "paid_date": None,
+                    "source": "auto_generated",
+                }
+            )
+            existing_keys.add((bill.id, due_date))
+
+    if not rows:
+        return 0
+
+    stmt = insert(BillCyclePayment).values(rows)
+    stmt = stmt.on_conflict_do_nothing(constraint="uq_bill_cycle_payments_bill_due")
+    await db.execute(stmt)
+    await db.flush()
+    return len(rows)
+
+
+async def auto_generate_missing_cycle_rows_for_window(
+    db: AsyncSession,
+    bills: list[Bill],
+    user: User,
+    window_start: date,
+    window_end: date,
+) -> int:
+    total = 0
+    for year, month in months_in_range(window_start, window_end):
+        total += await auto_generate_missing_cycle_rows(db, bills, user, year, month)
+    return total
+
+
+async def ensure_pending_cycle_row(
+    db: AsyncSession,
+    bill: Bill,
+    user: User,
+    due_date: date,
+) -> BillCyclePayment:
+    existing = await get_cycle_payments(db, [bill.id], due_date, due_date)
+    row = existing.get((bill.id, due_date))
+    if row is not None:
+        return row
+
+    await auto_generate_missing_cycle_rows(
+        db, [bill], user, due_date.year, due_date.month
+    )
+    existing = await get_cycle_payments(db, [bill.id], due_date, due_date)
+    row = existing.get((bill.id, due_date))
+    if row is not None:
+        return row
+
+    row = BillCyclePayment(
+        bill_id=bill.id,
+        user_id=bill.user_id,
+        household_id=bill.household_id,
+        budget_id=bill.budget_id,
+        due_date=due_date,
+        cycle_year=due_date.year,
+        cycle_month=due_date.month,
+        amount_due=Decimal(str(bill.amount or 0)),
+        amount_paid=Decimal("0"),
+        is_paid=False,
+        source="auto_generated",
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def ensure_pending_cycle_rows(
+    db: AsyncSession,
+    bills: list[Bill],
+    due_dates_by_bill: dict[UUID, date],
+    user: User,
+) -> dict[tuple[UUID, date], BillCyclePayment]:
+    if not due_dates_by_bill:
+        return {}
+
+    months_needed: set[tuple[int, int]] = set()
+    for due_date in due_dates_by_bill.values():
+        months_needed.add((due_date.year, due_date.month))
+    for year, month in months_needed:
+        await auto_generate_missing_cycle_rows(db, bills, user, year, month)
+
+    start_date = min(due_dates_by_bill.values())
+    end_date = max(due_dates_by_bill.values())
+    payments = await get_cycle_payments(db, list(due_dates_by_bill.keys()), start_date, end_date)
+    return {
+        (bill_id, due_date): payments[(bill_id, due_date)]
+        for bill_id, due_date in due_dates_by_bill.items()
+        if (bill_id, due_date) in payments
+    }
 
 
 async def mark_bill_cycle_paid(
@@ -340,8 +458,6 @@ async def mark_bill_cycle_unpaid(
         legacy_filter.append(Payment.user_id == user_id)
     await db.execute(delete(Payment).where(*legacy_filter))
 
-    # The recurring definition no longer owns cycle state.  Keep the legacy
-    # fields aligned only as a compatibility hint for older callers.
     bill.is_paid = False
     bill.paid_date = None
     bill.paid_amount = None

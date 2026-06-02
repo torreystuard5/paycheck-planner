@@ -3,7 +3,7 @@ import { Plus, Edit, Trash2, Search, FileText, Upload, ChevronDown, ChevronUp, X
 import SortDropdown from '../components/SortDropdown';
 import ImportExportButton from '../components/ImportExportButton';
 import { useToast } from '../components/Toast';
-import { formatDistanceToNow, format } from 'date-fns';
+import { differenceInCalendarDays, format, formatDistanceToNow } from 'date-fns';
 import { formatFriendlyDate } from '../utils/formatDate';
 import { getCategoryColor } from '../utils/categoryColors';
 import api from '../services/api';
@@ -53,16 +53,33 @@ const fmtCurrency = (val) => {
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
-const formatBillDueLabel = (bill) => {
+const parseBillDueDate = (bill) => {
   const dueDate = bill.occurrence_due_date || bill.next_due_date;
-  if (dueDate) {
-    return `Due ${formatFriendlyDate(dueDate)}`;
+  if (!dueDate) return null;
+  const parsed = new Date(dueDate.includes('T') ? dueDate : `${dueDate}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatBillDueLabel = (bill) => {
+  const due = parseBillDueDate(bill);
+  if (due) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = differenceInCalendarDays(due, today);
+    const dateLabel = format(due, 'MMM d');
+    if (diff < 0) {
+      const days = Math.abs(diff);
+      return days === 1 ? 'Overdue by 1 day' : `Overdue by ${days} days`;
+    }
+    if (diff === 0) return `Due ${dateLabel}`;
+    if (diff <= 7) return diff === 1 ? 'Due tomorrow' : `Due in ${diff} days`;
+    return `Due ${dateLabel}`;
   }
   if (bill.due_day) {
     const month = new Date().toLocaleDateString('en-US', { month: 'short' });
     return `Due ${month} ${bill.due_day}`;
   }
-  return 'Due --';
+  return 'Due date unknown';
 };
 
 const freqLabel = (freq) => {
@@ -644,9 +661,12 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
         const matchCategory = !filterCategory || b.category === filterCategory;
         return matchSearch && matchCategory;
       });
+      const paidCount = groupBills.filter((b) => b.is_paid).length;
       return {
         ...group,
         bills: groupBills,
+        item_count: groupBills.length,
+        paid_count: paidCount,
         total_due: groupBills.reduce((sum, b) => sum + (Number(b.payment_mode === 'split' && b.is_household_bill ? (b.user_share ?? b.amount) : b.amount) || 0), 0),
         total_paid: groupBills.filter((b) => b.is_paid).reduce((sum, b) => sum + (Number(b.payment_mode === 'split' && b.is_household_bill ? (b.user_share ?? b.amount) : b.amount) || 0), 0),
       };
@@ -1083,7 +1103,8 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
                 <div>
                   <h3 className="text-sm font-semibold text-gray-800">{group.label}</h3>
                   <p className="text-xs text-gray-500">
-                    {group.bills.filter((b) => b.is_paid).length}/{group.bills.length} paid
+                    {(group.paid_count ?? group.bills.filter((b) => b.is_paid).length)}
+                    /{(group.item_count ?? group.bills.length)} paid
                   </p>
                 </div>
                 <span className="text-sm font-medium text-gray-600">

@@ -97,6 +97,7 @@ class BillResponse(BaseModel):
     cycle_paid_date: Optional[datetime] = None
     cycle_paid_amount: Optional[Decimal] = None
     cycle_amount_due: Optional[Decimal] = None
+    cycle_source: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

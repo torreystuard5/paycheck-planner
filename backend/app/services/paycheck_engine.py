@@ -522,7 +522,13 @@ async def build_paycheck_plan(
         overall_start = pay_dates[0] if pay_dates else current_date
         overall_end = pay_dates[-1] if pay_dates else current_date
         paid_bill_map = await get_paid_bill_ids_fn(
-            db, user_ids or [], bill_ids, overall_start, overall_end,
+            db,
+            user_ids or [],
+            bill_ids,
+            overall_start,
+            overall_end,
+            bills=bills,
+            user=user,
         )
     if paid_bill_map is None:
         paid_bill_map = {}
