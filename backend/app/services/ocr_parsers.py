@@ -223,10 +223,153 @@ _HEADER_LABELS = {
     "check_date": re.compile(r"check\s*date", re.I),
 }
 
+# Paystub header row markers (Name | Company | … | Check Date | …)
+_HEADER_LABEL_MARKERS = (
+    re.compile(r"\bCompany\b", re.I),
+    re.compile(r"\bCheck\s*Date\b", re.I),
+    re.compile(r"\bEmployee\s*ID\b", re.I),
+    re.compile(r"\bPay\s*Period\s*Begin\b", re.I),
+)
+
+# Data row tail: … Name+Company prefix | emp id | period begin | period end | check date | check #
+_DATA_ROW_TRAILING_RE = re.compile(
+    r"^(?P<prefix>.+?)\s+(?P<employee_id>\d{4,})\s+"
+    r"(?P<period_begin>\d{1,2}/\d{1,2}/\d{4})\s+"
+    r"(?P<period_end>\d{1,2}/\d{1,2}/\d{4})\s+"
+    r"(?P<check_date>\d{1,2}/\d{1,2}/\d{4})(?:\s+(?P<check_number>\S+))?\s*$"
+)
+
+
+def _normalize_table_line(line: str) -> str:
+    """Normalize pipe/tab OCR rows to space-separated tokens for regex parsing."""
+    s = line.strip()
+    s = re.sub(r"\s*\|\s*", " ", s)
+    s = s.replace("\t", " ")
+    s = re.sub(r"\s+", " ", s)
+    return s
+
 
 def _split_cells(line: str) -> list[str]:
-    """Split a layout-preserved table line into cells on runs of 2+ spaces."""
-    return [c for c in re.split(r"\s{2,}", line.strip()) if c]
+    """Split a table line into cells (pipes, tabs, or 2+ spaces)."""
+    s = line.strip()
+    if "|" in s:
+        return [c.strip() for c in s.split("|") if c.strip()]
+    if "\t" in s:
+        return [c.strip() for c in s.split("\t") if c.strip()]
+    return [c for c in re.split(r"\s{2,}", s) if c]
+
+
+def _is_paystub_header_label_row(line: str) -> bool:
+    """True when the line is the column header row (not the employee data row)."""
+    if not line or not line.strip():
+        return False
+    hits = sum(1 for pat in _HEADER_LABEL_MARKERS if pat.search(line))
+    return hits >= 3
+
+
+def _line_looks_like_header_labels(line: str) -> bool:
+    """True when a line is (part of) the paystub column header — never employer text."""
+    if _is_paystub_header_label_row(line):
+        return True
+    low = line.lower()
+    if "employee id" in low and "pay period begin" in low:
+        return True
+    if "check date" in low and ("check number" in low or "check numb" in low):
+        return True
+    if re.search(r"\bcompany\b", line, re.I) and re.search(r"\bemployee\s*id\b", line, re.I):
+        if not re.search(r"\b\d{1,2}/\d{1,2}/\d{4}\b", line):
+            return True
+    return False
+
+
+def _header_label_block(lines: list[str], start: int) -> tuple[str, int] | None:
+    """Return combined label-row text and the index of its last line, or None."""
+    if start >= len(lines):
+        return None
+    first = _normalize_table_line(lines[start])
+    if _is_paystub_header_label_row(first):
+        return first, start
+    if start + 1 < len(lines):
+        combined = first + " " + _normalize_table_line(lines[start + 1])
+        if _is_paystub_header_label_row(combined):
+            return combined, start + 1
+    return None
+
+
+def _parse_data_row_trailing(line: str) -> dict[str, Any] | None:
+    """Extract company + check date from a Vanderbilt-style data row."""
+    norm = _normalize_table_line(line)
+    if _line_looks_like_header_labels(norm):
+        return None
+    m = _DATA_ROW_TRAILING_RE.match(norm)
+    if not m:
+        return None
+    return {
+        "company": _company_from_name_company_prefix(m.group("prefix").strip()),
+        "check_date": _parse_loose_date(m.group("check_date")),
+    }
+
+
+def _find_header_data_row_in_text(text: str) -> dict[str, Any] | None:
+    """Scan for any employee data row (emp id + 3 dates) anywhere in OCR text."""
+    for line in text.splitlines():
+        parsed = _parse_data_row_trailing(line)
+        if parsed and parsed.get("company") and parsed.get("check_date"):
+            return parsed
+    return None
+
+
+def _company_from_name_company_prefix(prefix: str) -> str | None:
+    """Company column: text after the Name column (typically first + last name)."""
+    parts = prefix.split()
+    if len(parts) <= 2:
+        return None
+    company = " ".join(parts[2:]).strip()[:200]
+    return company or None
+
+
+def _parse_header_data_row(label_line: str, data_line: str) -> dict[str, Any] | None:
+    """Parse the data row beneath a header label row (single- or multi-space OCR)."""
+    label_line = _normalize_table_line(label_line)
+    data_line = _normalize_table_line(data_line)
+    if _line_looks_like_header_labels(data_line):
+        return None
+
+    # Multi-space / pipe table: align cells by column count with the label row.
+    label_cells = _split_cells(label_line)
+    data_cells = _split_cells(data_line)
+    if len(label_cells) >= 2 and len(data_cells) == len(label_cells):
+        company_idx = _label_index(label_cells, "company")
+        check_idx = _label_index(label_cells, "check_date")
+        if company_idx is not None and check_idx is not None:
+            company = data_cells[company_idx].strip()[:200] or None
+            check_date = _parse_loose_date(data_cells[check_idx].strip())
+            return {"company": company, "check_date": check_date}
+
+    return _parse_data_row_trailing(data_line)
+
+
+def _extract_check_date_from_header_rows(text: str) -> date | None:
+    """Check Date from the data row under a header label row (not Pay Period Begin)."""
+    if not text:
+        return None
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        block = _header_label_block(lines, i)
+        if block is None:
+            i += 1
+            continue
+        _label_text, label_end = block
+        for nxt in lines[label_end + 1 :]:
+            if not nxt.strip():
+                continue
+            parsed = _parse_data_row_trailing(nxt)
+            if parsed and parsed.get("check_date"):
+                return parsed["check_date"]
+            break
+        i = label_end + 1
+    return None
 
 
 def _label_index(cells: list[str], key: str) -> int | None:
@@ -238,60 +381,72 @@ def _label_index(cells: list[str], key: str) -> int | None:
 
 
 def _parse_header_table(text: str) -> dict[str, Any] | None:
-    """Map the paystub header's label row to the data row beneath it.
-
-    Looks for a row whose cells include both a Company and a Check Date label,
-    then reads the matching cells from the next data row. Returns ``None`` when
-    no such header is present (so simple "Employer: X" stubs are handled by the
-    caller's label regex instead). When the header is found but the data row's
-    columns don't line up, returns a dict with ``None`` values so the caller
-    won't fall back to the label-row-grabbing regex.
-    """
+    """Map the paystub header's label row to the data row beneath it."""
     if not text:
         return None
     lines = text.splitlines()
-    for i, line in enumerate(lines):
-        cells = _split_cells(line)
-        if len(cells) < 2:
+    i = 0
+    while i < len(lines):
+        block = _header_label_block(lines, i)
+        if block is None:
+            i += 1
             continue
-        company_idx = _label_index(cells, "company")
-        check_idx = _label_index(cells, "check_date")
-        if company_idx is None or check_idx is None:
-            continue
-
-        data_cells: list[str] = []
-        for nxt in lines[i + 1:]:
+        label_text, label_end = block
+        data_line = ""
+        for nxt in lines[label_end + 1 :]:
             if nxt.strip():
-                data_cells = _split_cells(nxt)
+                data_line = nxt
                 break
-        if len(data_cells) != len(cells):
+        if not data_line:
             return {"company": None, "check_date": None}
 
-        company = data_cells[company_idx].strip()[:200] or None
-        check_date = _parse_loose_date(data_cells[check_idx].strip())
-        return {"company": company, "check_date": check_date}
+        parsed = _parse_header_data_row(label_text, data_line)
+        if parsed and (parsed.get("company") or parsed.get("check_date")):
+            return parsed
+        return {"company": None, "check_date": None}
     return None
+
+
+def _merge_header_fields(*sources: dict[str, Any] | None) -> dict[str, Any] | None:
+    merged: dict[str, Any] = {}
+    for src in sources:
+        if not src:
+            continue
+        for key in ("company", "check_date"):
+            if src.get(key) is not None and merged.get(key) is None:
+                merged[key] = src[key]
+    return merged or None
 
 
 def parse_paystub_text(text: str) -> dict[str, Any]:
     t = text or ""
 
-    # Header section: a label row (Name, Company, ..., Check Date, Check Number)
-    # over a data row. Map Company -> employer and Check Date -> pay date.
-    header = _parse_header_table(t)
+    # Header section: label row(s) + data row. Company -> employer, Check Date -> pay_date.
+    header = _merge_header_fields(
+        _parse_header_table(t),
+        _find_header_data_row_in_text(t),
+    )
 
     employer = header.get("company") if header else None
     if employer is None and header is None:
-        m = re.search(r"(?:Employer|Company|Employer Name)\s*[:\s]+\s*(.+?)(?:\n|$)", t, re.I)
-        if m:
-            employer = m.group(1).strip()[:200]
+        for line in t.splitlines():
+            if _line_looks_like_header_labels(line):
+                continue
+            m = re.search(
+                r"(?:Employer|Company|Employer Name)\s*:\s*(.+?)(?:\n|$)",
+                line,
+                re.I,
+            )
+            if m:
+                employer = m.group(1).strip()[:200]
+                break
 
-    # Pay date priority: the header's Check Date column, then an inline
-    # "Check Date:" label, then the first date (often Pay Period Begin).
     pay_date = header.get("check_date") if header else None
     if pay_date is None:
         pay_date = _extract_check_date(t)
     if pay_date is None:
+        pay_date = _extract_check_date_from_header_rows(t)
+    if pay_date is None and header is None:
         dates = re.findall(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b", t)
         pay_date = _parse_loose_date(dates[0]) if dates else None
 
