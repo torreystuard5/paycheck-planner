@@ -10,6 +10,7 @@ from uuid import uuid4
 from app.services.paycheck_engine import (
     active_cycle_overdue,
     apply_planning_due_labels,
+    build_paycheck_widget_state,
     compute_available_to_pull,
     normalize_planning_item,
     occurrence_key,
@@ -119,6 +120,40 @@ class TestPaycheckPlanningState(unittest.TestCase):
             len(result["available_visible_items"]) + result["available_remaining_count"],
         )
 
+    def test_widget_state_respects_current_to_next_paycheck_window(self):
+        current = date(2026, 5, 21)
+        next_paycheck = date(2026, 6, 4)
+        in_window = _item(name="In Window", due=date(2026, 5, 30))
+        before = _item(name="Before", due=date(2026, 5, 20))
+        boundary = _item(name="Boundary", due=next_paycheck)
+
+        result = build_paycheck_widget_state(
+            current_paycheck_date=current,
+            next_paycheck_date=next_paycheck,
+            candidate_items=[in_window, before, boundary],
+            assigned_items=[],
+        )
+
+        self.assertEqual([i["name"] for i in result["widget_items"]], ["In Window"])
+        self.assertEqual(result["widget_total_due"], Decimal("50"))
+
+    def test_widget_state_excludes_assigned_and_paid_items(self):
+        current = date(2026, 5, 21)
+        next_paycheck = date(2026, 6, 4)
+        assigned_id = uuid4()
+        assigned = _item(name="Assigned", due=date(2026, 5, 25), item_id=assigned_id)
+        paid = _item(name="Paid", due=date(2026, 5, 26), is_paid=True)
+        open_item = _item(name="Open", due=date(2026, 5, 27))
+
+        result = build_paycheck_widget_state(
+            current_paycheck_date=current,
+            next_paycheck_date=next_paycheck,
+            candidate_items=[assigned, paid, open_item],
+            assigned_items=[assigned],
+        )
+
+        self.assertEqual([i["name"] for i in result["widget_items"]], ["Open"])
+
     def test_may_due_not_overdue_in_june(self):
         today = date(2026, 6, 2)
         labeled = apply_planning_due_labels(
@@ -179,6 +214,16 @@ class TestPaycheckPlanningState(unittest.TestCase):
             "available_unpaid_count": 1,
             "available_total_due": Decimal("50"),
             "available_visible_total_due": Decimal("50"),
+            "widget_items": [
+                normalize_planning_item(_item(name="Electric")),
+            ],
+            "widget_visible_items": [
+                normalize_planning_item(_item(name="Electric")),
+            ],
+            "widget_remaining_count": 0,
+            "widget_total_count": 1,
+            "widget_total_due": Decimal("50"),
+            "widget_visible_total_due": Decimal("50"),
         }
         current = build_current_paycheck_plan(
             planning,

@@ -22,7 +22,7 @@ from app.services.paycheck_data import (
 from app.services.paycheck_engine import (
     apply_planning_due_labels,
     assign_bills_to_paycheck,
-    compute_available_to_pull,
+    build_paycheck_widget_state,
     normalize_planning_item,
 )
 
@@ -148,10 +148,11 @@ async def build_paycheck_planning_state(
     next_period = _label_items(next_period)
     current_candidates = _label_items(natural_current)
 
-    available = compute_available_to_pull(
-        current_candidates,
-        current_assigned,
-        require_pull_forward_flag=False,
+    widget_state = build_paycheck_widget_state(
+        current_paycheck_date=current_start,
+        next_paycheck_date=next_start,
+        candidate_items=current_candidates,
+        assigned_items=current_assigned,
     )
 
     bill_by_id = {b.id: b for b in bills}
@@ -172,10 +173,10 @@ async def build_paycheck_planning_state(
         return row
 
     available_for_pull = [
-        _enrich_widget_row(i) for i in available["available_items_for_pull"]
+        _enrich_widget_row(i) for i in widget_state["widget_items"]
     ]
     available_visible = [
-        _enrich_widget_row(i) for i in available["available_visible_items"]
+        _enrich_widget_row(i) for i in widget_state["widget_visible_items"]
     ]
 
     assigned_paid_count = sum(1 for i in current_assigned if i.get("is_paid"))
@@ -207,10 +208,16 @@ async def build_paycheck_planning_state(
         "next_period_items": next_period,
         "available_items_for_pull": available_for_pull,
         "available_visible_items": available_visible,
-        "available_remaining_count": available["available_remaining_count"],
-        "available_unpaid_count": available["available_unpaid_count"],
-        "available_total_due": available["available_total_due"],
-        "available_visible_total_due": available["available_visible_total_due"],
+        "available_remaining_count": widget_state["widget_remaining_count"],
+        "available_unpaid_count": widget_state["widget_total_count"],
+        "available_total_due": widget_state["widget_total_due"],
+        "available_visible_total_due": widget_state["widget_visible_total_due"],
+        "widget_items": available_for_pull,
+        "widget_visible_items": available_visible,
+        "widget_remaining_count": widget_state["widget_remaining_count"],
+        "widget_total_count": widget_state["widget_total_count"],
+        "widget_total_due": widget_state["widget_total_due"],
+        "widget_visible_total_due": widget_state["widget_visible_total_due"],
         "paid_bill_map": paid_bill_map,
         "assigned_paid_count": assigned_paid_count,
         "assigned_total_count": assigned_total_count,
@@ -252,6 +259,12 @@ def build_current_paycheck_plan(
         "available_unpaid_count": planning["available_unpaid_count"],
         "available_total_due": planning["available_total_due"],
         "available_visible_total_due": planning["available_visible_total_due"],
+        "widget_items": planning["widget_items"],
+        "widget_visible_items": planning["widget_visible_items"],
+        "widget_remaining_count": planning["widget_remaining_count"],
+        "widget_total_count": planning["widget_total_count"],
+        "widget_total_due": planning["widget_total_due"],
+        "widget_visible_total_due": planning["widget_visible_total_due"],
     }
 
 
@@ -259,12 +272,16 @@ def build_pull_forward_widget_payload(
     current: dict[str, Any],
 ) -> dict[str, Any]:
     """Backward-compatible widget slice from current_paycheck."""
-    visible = current["available_visible_items"]
+    visible = current["widget_visible_items"]
     return {
+        "current_paycheck_date": current.get("paycheck_date"),
         "next_paycheck_date": current.get("next_paycheck_date"),
-        "total_due_for_visible_items": current["available_visible_total_due"],
-        "remaining_count": current["available_remaining_count"],
-        "unpaid_count": current["available_unpaid_count"],
+        "widget_total_due": current["widget_total_due"],
+        "total_due_for_visible_items": current["widget_total_due"],
+        "remaining_count": current["widget_remaining_count"],
+        "unpaid_count": current["widget_total_count"],
+        "widget_items": current["widget_items"],
+        "widget_visible_items": visible,
         "available_items": visible,
         "visible_items": visible,
     }

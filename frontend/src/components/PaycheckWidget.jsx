@@ -89,10 +89,10 @@ export default function PaycheckWidget({
   const [collapsed, setCollapsed] = useState(readCollapsedPreference);
 
   const plan = currentPaycheck || null;
-  const visibleItems = plan?.available_visible_items || [];
-  const remainingCount = plan?.available_remaining_count ?? 0;
-  const availableCount = plan?.available_unpaid_count ?? visibleItems.length;
-  const visibleTotalDue = plan?.available_visible_total_due ?? 0;
+  const visibleItems = plan?.widget_visible_items || [];
+  const remainingCount = plan?.widget_remaining_count ?? 0;
+  const availableCount = plan?.widget_total_count ?? visibleItems.length;
+  const widgetTotalDue = plan?.widget_total_due ?? 0;
   const nextPayDate = plan?.next_paycheck_date;
 
   if (!plan) return null;
@@ -222,11 +222,11 @@ export default function PaycheckWidget({
         <div className="px-4 pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2 text-xs md:text-sm">
             <span className="text-gray-600">
-              Next paycheck · <span className="font-medium text-gray-800">{nextPayLabel}</span>
+              Due before next paycheck · <span className="font-medium text-gray-800">{nextPayLabel}</span>
             </span>
             <span className="text-gray-600 sm:text-right">
               <span className="font-semibold text-gray-900">
-                {fmt(visibleTotalDue)}
+                {fmt(widgetTotalDue)}
               </span>
               {' due · '}
               <span className="font-medium text-gray-800">
@@ -239,7 +239,7 @@ export default function PaycheckWidget({
           </div>
 
           {visibleItems.length === 0 ? (
-            <p className="text-sm text-gray-500 py-2">Everything for this paycheck is already assigned.</p>
+            <p className="text-sm text-gray-500 py-2">Nothing left to pull before your next paycheck.</p>
           ) : (
             <ul className="divide-y divide-gray-100 md:divide-y-0">
               {visibleItems.map((item) => renderRow(item))}

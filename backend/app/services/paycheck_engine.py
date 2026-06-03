@@ -729,3 +729,41 @@ def compute_available_to_pull(
         "available_total_due": all_total,
         "available_visible_total_due": visible_total,
     }
+
+
+def build_paycheck_widget_state(
+    *,
+    current_paycheck_date: date,
+    next_paycheck_date: date | None,
+    candidate_items: list[dict],
+    assigned_items: list[dict],
+    visible_limit: int = 7,
+) -> dict[str, Any]:
+    """Return pull-into-this-paycheck state for one explicit paycheck window."""
+    if next_paycheck_date is None:
+        scoped_candidates = []
+    else:
+        scoped_candidates = [
+            item
+            for item in candidate_items
+            if current_paycheck_date
+            <= parse_item_due_date(item)
+            < next_paycheck_date
+        ]
+
+    available = compute_available_to_pull(
+        scoped_candidates,
+        assigned_items,
+        visible_limit=visible_limit,
+        require_pull_forward_flag=False,
+    )
+    return {
+        "current_paycheck_date": current_paycheck_date,
+        "next_paycheck_date": next_paycheck_date,
+        "widget_items": available["available_items_for_pull"],
+        "widget_visible_items": available["available_visible_items"],
+        "widget_remaining_count": available["available_remaining_count"],
+        "widget_total_count": available["available_unpaid_count"],
+        "widget_total_due": available["available_total_due"],
+        "widget_visible_total_due": available["available_visible_total_due"],
+    }

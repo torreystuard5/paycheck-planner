@@ -36,11 +36,18 @@ class TestPullForwardWidget(unittest.TestCase):
             "available_remaining_count": 2,
             "available_unpaid_count": 3,
             "available_visible_total_due": Decimal("800"),
+            "widget_items": [{"name": "Rent", "amount": Decimal("800")}],
+            "widget_visible_items": [{"name": "Rent", "amount": Decimal("800")}],
+            "widget_remaining_count": 2,
+            "widget_total_count": 3,
+            "widget_total_due": Decimal("800"),
+            "widget_visible_total_due": Decimal("800"),
         }
         payload = build_pull_forward_widget_payload(current)
         self.assertEqual(payload["unpaid_count"], 3)
         self.assertEqual(payload["remaining_count"], 2)
         self.assertEqual(payload["available_items"], payload["visible_items"])
+        self.assertEqual(payload["widget_total_due"], Decimal("800"))
 
     def test_assigned_paid_debt_excluded_from_available(self):
         debt_id = uuid4()

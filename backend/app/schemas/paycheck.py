@@ -66,10 +66,14 @@ class PullForwardWidgetItem(PaycheckItem):
 
 
 class PullForwardWidget(BaseModel):
+    current_paycheck_date: Optional[date] = None
     next_paycheck_date: Optional[date] = None
+    widget_total_due: Decimal = Decimal("0")
     total_due_for_visible_items: Decimal = Decimal("0")
     remaining_count: int = 0
     unpaid_count: int = 0
+    widget_items: list[PullForwardWidgetItem] = []
+    widget_visible_items: list[PullForwardWidgetItem] = []
     available_items: list[PullForwardWidgetItem] = []
     visible_items: list[PullForwardWidgetItem] = []
 
@@ -106,6 +110,12 @@ class CurrentPaycheckPlan(BaseModel):
     available_unpaid_count: int = 0
     available_total_due: Decimal = Decimal("0")
     available_visible_total_due: Decimal = Decimal("0")
+    widget_items: list[PullForwardWidgetItem] = []
+    widget_visible_items: list[PullForwardWidgetItem] = []
+    widget_remaining_count: int = 0
+    widget_total_count: int = 0
+    widget_total_due: Decimal = Decimal("0")
+    widget_visible_total_due: Decimal = Decimal("0")
 
 
 class PaycheckPlanResponse(BaseModel):

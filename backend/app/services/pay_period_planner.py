@@ -725,6 +725,12 @@ async def build_full_paycheck_plan_response(
             "available_unpaid_count": 0,
             "available_total_due": Decimal("0"),
             "available_visible_total_due": Decimal("0"),
+            "widget_items": [],
+            "widget_visible_items": [],
+            "widget_remaining_count": 0,
+            "widget_total_count": 0,
+            "widget_total_due": Decimal("0"),
+            "widget_visible_total_due": Decimal("0"),
         }
         assigned = empty_current["assigned_items"]
         empty_current["assigned_total_amount"] = sum(
