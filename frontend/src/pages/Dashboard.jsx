@@ -25,11 +25,11 @@ function CollapsibleSection({ sectionKey, title, icon: Icon, iconColor, collapse
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       <button
         onClick={() => onToggle(sectionKey)}
-        className="w-full flex items-center justify-between p-6 pb-0 text-left"
+        className="w-full flex items-center justify-between gap-3 p-4 pb-0 text-left sm:p-6 sm:pb-0"
       >
-        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+        <h2 className="min-w-0 text-base font-semibold text-gray-900 flex items-center gap-2 sm:text-lg">
           {Icon && <Icon className={`w-5 h-5 ${iconColor || 'text-gray-500'}`} />}
-          {title}
+          <span className="truncate">{title}</span>
         </h2>
         <ChevronDown
           className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
@@ -39,7 +39,7 @@ function CollapsibleSection({ sectionKey, title, icon: Icon, iconColor, collapse
         className="overflow-hidden transition-all duration-200 ease-in-out"
         style={{ maxHeight: isCollapsed ? '0px' : '2000px', opacity: isCollapsed ? 0 : 1 }}
       >
-        <div className="p-6 pt-4">
+        <div className="p-4 pt-4 sm:p-6 sm:pt-4">
           {children}
         </div>
       </div>
@@ -329,10 +329,10 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+          <h1 className="min-w-0 text-xl font-bold text-gray-900 sm:text-2xl">
             Welcome back{user?.first_name ? `, ${user.first_name}` : ''}
           </h1>
           {household && (
@@ -362,26 +362,26 @@ export default function Dashboard() {
           <div
             key={card.label}
             onClick={() => navigate(cardLinks[card.label])}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 cursor-pointer hover:shadow-md transition-shadow"
+            className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow sm:p-6"
           >
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-sm text-gray-600">{card.label}</p>
                 {card.value !== null ? (
-                  <CurrencyDisplay amount={card.value} className="text-2xl font-bold text-gray-900 mt-1 block" />
+                  <CurrencyDisplay amount={card.value} className="text-xl font-bold text-gray-900 mt-1 block break-words sm:text-2xl" />
                 ) : (
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{card.count}</p>
+                  <p className="text-xl font-bold text-gray-900 mt-1 sm:text-2xl">{card.count}</p>
                 )}
                 {card.subtitle && (
-                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                  <p className="text-xs text-green-600 mt-1 flex min-w-0 items-center gap-1">
                     <CheckCircle className="w-3 h-3" />
-                    {card.subtitle}
+                    <span className="min-w-0 break-words">{card.subtitle}</span>
                   </p>
                 )}
                 {card.paidSubtitle && (
-                  <p className="text-xs text-blue-600 mt-0.5 flex items-center gap-1">
+                  <p className="text-xs text-blue-600 mt-0.5 flex min-w-0 items-center gap-1">
                     <DollarSign className="w-3 h-3" />
-                    {card.paidSubtitle}
+                    <span className="min-w-0 break-words">{card.paidSubtitle}</span>
                   </p>
                 )}
               </div>

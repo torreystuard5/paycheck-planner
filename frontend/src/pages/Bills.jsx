@@ -915,17 +915,17 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Bills</h1>
+    <div className="min-w-0 space-y-5 sm:space-y-6">
+      <div className="min-w-0">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Bills</h1>
             <p className="text-sm text-gray-600 mt-1">Manage your recurring bills</p>
             {lastUpdated && user?.household_id && (
               <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <SortDropdown
               sortBy={sortBy}
               sortOrder={sortOrder}
@@ -936,7 +936,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
               onExport={handleExport}
               onImport={() => { setShowImportModal(true); setImportResult(null); }}
             />
-            <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+            <button onClick={openAdd} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
               <Plus className="h-4 w-4" />
               Add Bill
             </button>
@@ -961,7 +961,8 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
             <h2 className="text-lg font-semibold text-gray-900">Bill History</h2>
           </div>
 
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+          <div className="w-full overflow-x-auto pb-1">
+          <div className="flex min-w-max gap-1 bg-gray-100 p-1 rounded-lg sm:w-fit">
             {[
               { label: 'All', value: 'all' },
               { label: 'Payments', value: 'payments' },
@@ -979,6 +980,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
                 {tab.label}
               </button>
             ))}
+          </div>
           </div>
 
           {historyLoading ? (
@@ -1096,7 +1098,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
       {filtered.length === 0 && visibleCycleGroups.length === 0 ? (
         <EmptyState icon={FileText} title="No Bills Found" message="Add a bill to get started tracking your expenses." actionLabel="Add Bill" onAction={openAdd} />
       ) : visibleCycleGroups.length > 0 ? (
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
           {visibleCycleGroups.map((group) => (
             <section key={group.period_start || group.label}>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-3 px-1">
@@ -1111,7 +1113,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
                   {fmtCurrency(group.total_paid)} paid of {fmtCurrency(group.total_due)}
                 </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {group.bills.map(renderBillCard)}
               </div>
             </section>
@@ -1119,7 +1121,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
         </div>
       ) : payPeriodGroups ? (
         /* Pay period grouped view */
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
           {payPeriodGroups.map((group) => (
             <div key={group.date}>
               <div className="flex items-center justify-between mb-3 px-1">
@@ -1130,14 +1132,14 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
                   {fmtCurrency(group.total)} due
                 </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {group.bills.map(renderBillCard)}
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map(renderBillCard)}
         </div>
       )}

@@ -489,15 +489,15 @@ export default function Household() {
   const completedItems = filteredShoppingItems.filter((i) => i.is_completed);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{household.name}</h1>
+    <div className="min-w-0 space-y-5 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="break-words text-xl font-bold text-gray-900 sm:text-2xl">{household.name}</h1>
           <p className="text-sm text-gray-600 mt-1">Household Budget</p>
         </div>
         <button
           onClick={() => setShowLeaveConfirm(true)}
-          className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
+          className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 sm:w-auto"
         >
           <LogOut className="w-4 h-4" />
           Leave Household
@@ -515,7 +515,7 @@ export default function Household() {
       )}
 
       {/* Tabs — matches Settings.jsx pattern */}
-      <div className="border-b border-gray-200 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div className="border-b border-gray-200 overflow-x-auto -mx-3 px-3 sm:-mx-4 sm:px-4 md:mx-0 md:px-0">
         <nav className="flex gap-1 min-w-max" aria-label="Household tabs">
           {TABS.map((tab) => (
             <button
@@ -535,14 +535,14 @@ export default function Household() {
 
       {/* ========== OVERVIEW TAB ========== */}
       {activeTab === 'overview' && (
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
           {showMoney && (
             <ProFeatureGate featureKey="household_overview">
               <HouseholdFinancialOverview />
             </ProFeatureGate>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
             {/* Invite Code */}
             {showInvite ? (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

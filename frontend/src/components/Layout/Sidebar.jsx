@@ -220,7 +220,7 @@ export default function Sidebar({ open, onClose }) {
         </Link>
         <button
           onClick={onClose}
-          className="lg:hidden p-1 text-gray-400 hover:text-gray-600"
+          className="lg:hidden flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-600"
           aria-label="Close sidebar"
         >
           <X className="h-5 w-5" />
@@ -330,9 +330,10 @@ export default function Sidebar({ open, onClose }) {
 
       {/* Mobile drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[86vw] bg-white border-r border-gray-200 transform transition-transform lg:hidden ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {content}
       </aside>

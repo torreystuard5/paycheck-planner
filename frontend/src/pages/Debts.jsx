@@ -625,18 +625,18 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Debts</h1>
+    <div className="min-w-0 space-y-5 sm:space-y-6">
+      <div className="min-w-0">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Debts</h1>
             <p className="text-sm text-gray-600 mt-1">Track and pay down your debts</p>
             {lastUpdated && user?.household_id && (
               <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
             )}
           </div>
           {activeTab === 'Overview' && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
               <SortDropdown
                 sortBy={sortBy}
                 sortOrder={sortOrder}
@@ -654,7 +654,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
                 onExport={handleExport}
                 onImport={() => { setShowImportModal(true); setImportResult(null); }}
               />
-              <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+              <button onClick={openAdd} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
                 <Plus className="h-4 w-4" />
                 Add Debt
               </button>
@@ -667,8 +667,8 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
       )}
 
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-6">
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="flex min-w-max gap-5 sm:gap-6">
           {TABS.map((tab) => (
             <button
               key={tab}
@@ -684,13 +684,13 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
       </div>
 
       {activeTab === 'Overview' && (
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
               <p className="text-sm text-gray-600">Total Debt</p>
               <CurrencyDisplay amount={totalDebt} className="text-2xl font-bold text-gray-900 mt-1 block" />
             </div>
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
               <p className="text-sm text-gray-600">Total Min Payments</p>
               <CurrencyDisplay amount={totalMinPayment} className="text-2xl font-bold text-gray-900 mt-1 block" />
             </div>

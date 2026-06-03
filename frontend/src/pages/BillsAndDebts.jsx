@@ -102,25 +102,25 @@ export default function BillsAndDebts() {
   if (activeTab === 'all' && loading) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       {/* Header */}
-      <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Bills & Debts</h1>
+      <div className="min-w-0">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Bills & Debts</h1>
             <p className="text-sm text-gray-600 mt-1">Manage your bills and debts in one place</p>
           </div>
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <button
               onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu); }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors"
+              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 sm:w-auto"
             >
               <Plus className="h-4 w-4" />
               Add
               <ChevronDown className="h-3 w-3" />
             </button>
             {showAddMenu && (
-              <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+              <div className="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 sm:left-auto sm:w-40">
                 <button
                   onClick={() => { setShowAddMenu(false); setAddType('bill'); setTab('bills'); }}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors min-h-[44px]"
@@ -142,7 +142,8 @@ export default function BillsAndDebts() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="w-full overflow-x-auto pb-1">
+        <div className="flex min-w-max gap-1 rounded-lg bg-gray-100 p-1 sm:w-fit">
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -156,6 +157,7 @@ export default function BillsAndDebts() {
             {tab.label}
           </button>
         ))}
+        </div>
       </div>
 
       {error && activeTab === 'all' && (
@@ -188,10 +190,10 @@ export default function BillsAndDebts() {
 
 function AllTabContent({ bills, debts, combinedItems, totalBillsAmount, totalDebtAmount, onRefresh, user }) {
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
           <div className="flex items-center gap-2 mb-1">
             <Receipt className="w-4 h-4 text-blue-500" />
             <p className="text-sm text-gray-600">Total Bills</p>
@@ -199,7 +201,7 @@ function AllTabContent({ bills, debts, combinedItems, totalBillsAmount, totalDeb
           <CurrencyDisplay amount={totalBillsAmount} className="text-2xl font-bold text-gray-900 block" />
           <p className="text-xs text-gray-500 mt-1">{bills.length} bill{bills.length !== 1 ? 's' : ''}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
           <div className="flex items-center gap-2 mb-1">
             <CreditCard className="w-4 h-4 text-red-500" />
             <p className="text-sm text-gray-600">Total Debt</p>
@@ -215,7 +217,7 @@ function AllTabContent({ bills, debts, combinedItems, totalBillsAmount, totalDeb
           <p className="text-gray-500 text-sm">No bills or debts found. Add one to get started.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {combinedItems.map((item) => (
             <CombinedCard key={`${item._type}-${item.id}`} item={item} />
           ))}
