@@ -185,6 +185,26 @@ class TestPaycheckPlanningState(unittest.TestCase):
         result = compute_available_to_pull(next_period, assigned)
         self.assertEqual(len(result["available_items_for_pull"]), 0)
 
+    def test_same_bill_different_due_date_is_not_hidden_by_assigned_id(self):
+        bill_id = uuid4()
+        assigned = [
+            _item(item_id=bill_id, due=date(2026, 5, 22), can_pull_forward=False)
+        ]
+        candidates = [
+            _item(item_id=bill_id, name="Weekly Bill", due=date(2026, 5, 29)),
+        ]
+
+        result = build_paycheck_widget_state(
+            current_paycheck_date=date(2026, 5, 21),
+            next_paycheck_date=date(2026, 6, 4),
+            candidate_items=candidates,
+            assigned_items=assigned,
+        )
+
+        self.assertEqual(len(result["widget_items"]), 1)
+        self.assertEqual(result["widget_items"][0]["name"], "Weekly Bill")
+        self.assertTrue(result["widget_items"][0]["can_pull_forward"])
+
     def test_current_paycheck_plan_unified_shape(self):
         planning = {
             "paycheck_context": {

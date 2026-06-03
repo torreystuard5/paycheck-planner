@@ -7,6 +7,8 @@ paychecks based on due dates and the user's pay schedule.
 from __future__ import annotations
 
 import calendar
+import logging
+import os
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
@@ -694,7 +696,6 @@ def compute_available_to_pull(
 
     Both lists must come from the same planning pass (same paid flags).
     """
-    assigned_entities = assigned_entity_keys(assigned_items)
     assigned_keys = assigned_planning_keys(assigned_items)
 
     candidates: list[dict] = []
@@ -704,11 +705,9 @@ def compute_available_to_pull(
             continue
         if require_pull_forward_flag and not item.get("can_pull_forward"):
             continue
-        entity = (item["item_type"], item["item_id"])
-        if entity in assigned_entities:
-            continue
         if item["planning_key"] in assigned_keys:
             continue
+        item["can_pull_forward"] = True
         candidates.append(item)
 
     candidates.sort(
@@ -750,6 +749,33 @@ def build_paycheck_widget_state(
             <= parse_item_due_date(item)
             < next_paycheck_date
         ]
+
+    if os.getenv("PAYCHECK_WIDGET_DEBUG") == "1":
+        assigned_keys = assigned_planning_keys(assigned_items)
+        logging.getLogger(__name__).info(
+            "paycheck_widget_candidates",
+            extra={
+                "current_paycheck_date": current_paycheck_date.isoformat(),
+                "next_paycheck_date": next_paycheck_date.isoformat()
+                if next_paycheck_date
+                else None,
+                "candidates": [
+                    {
+                        "type": item["item_type"],
+                        "id": str(planning_item_id(item)),
+                        "name": item.get("name"),
+                        "due_date": parse_item_due_date(item).isoformat(),
+                        "amount": str(item.get("amount")),
+                        "assigned_to_current_paycheck": normalize_planning_item(item)[
+                            "planning_key"
+                        ]
+                        in assigned_keys,
+                        "fully_paid_for_period": bool(item.get("is_paid")),
+                    }
+                    for item in scoped_candidates
+                ],
+            },
+        )
 
     available = compute_available_to_pull(
         scoped_candidates,
