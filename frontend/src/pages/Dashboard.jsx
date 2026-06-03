@@ -8,7 +8,6 @@ import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import PaycheckPlanItemActions from '../components/PaycheckPlanItemActions';
-import PaycheckWidget from '../components/PaycheckWidget';
 import usePolling from '../hooks/usePolling';
 import { formatDate, formatPaycheckDate } from '../utils/formatDate';
 import { augmentPaycheckPlan } from '../utils/paycheckPlanItems';
@@ -424,12 +423,6 @@ export default function Dashboard() {
               )}
             </div>
           )}
-          <PaycheckWidget
-            currentPaycheck={paycheckPlan?.current_paycheck}
-            overrideBusyKey={overrideBusyKey}
-            onPullForward={handlePullForward}
-            onRevert={handleRevertOverride}
-          />
           {hasPaycheckPlan ? (
             <div className="space-y-3">
               {(() => {

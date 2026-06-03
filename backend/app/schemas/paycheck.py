@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -57,27 +57,6 @@ class PaycheckUpcomingResponse(BaseModel):
     upcoming: list[PaycheckPlan] = []
 
 
-class PullForwardWidgetItem(PaycheckItem):
-    category: Optional[str] = None
-    paid_date: Optional[datetime] = None
-    due_status: str = "due"
-    is_carryover: bool = False
-    carryover_label: Optional[str] = None
-
-
-class PullForwardWidget(BaseModel):
-    current_paycheck_date: Optional[date] = None
-    next_paycheck_date: Optional[date] = None
-    widget_total_due: Decimal = Decimal("0")
-    total_due_for_visible_items: Decimal = Decimal("0")
-    remaining_count: int = 0
-    unpaid_count: int = 0
-    widget_items: list[PullForwardWidgetItem] = []
-    widget_visible_items: list[PullForwardWidgetItem] = []
-    available_items: list[PullForwardWidgetItem] = []
-    visible_items: list[PullForwardWidgetItem] = []
-
-
 class PaycheckContext(BaseModel):
     pay_period_start: date
     pay_period_end: Optional[date] = None
@@ -104,18 +83,6 @@ class CurrentPaycheckPlan(BaseModel):
     assigned_total_amount: Decimal = Decimal("0")
     assigned_still_owed: Decimal = Decimal("0")
     assigned_progress_percent: float = 0.0
-    available_items_for_pull: list[PullForwardWidgetItem] = []
-    available_visible_items: list[PullForwardWidgetItem] = []
-    available_remaining_count: int = 0
-    available_unpaid_count: int = 0
-    available_total_due: Decimal = Decimal("0")
-    available_visible_total_due: Decimal = Decimal("0")
-    widget_items: list[PullForwardWidgetItem] = []
-    widget_visible_items: list[PullForwardWidgetItem] = []
-    widget_remaining_count: int = 0
-    widget_total_count: int = 0
-    widget_total_due: Decimal = Decimal("0")
-    widget_visible_total_due: Decimal = Decimal("0")
 
 
 class PaycheckPlanResponse(BaseModel):
@@ -130,4 +97,3 @@ class PaycheckPlanResponse(BaseModel):
     next_paycheck_date: Optional[date] = None
     budget_id: Optional[UUID] = None
     current_paycheck: Optional[CurrentPaycheckPlan] = None
-    pull_forward_widget: Optional[PullForwardWidget] = None

@@ -7,8 +7,6 @@ paychecks based on due dates and the user's pay schedule.
 from __future__ import annotations
 
 import calendar
-import logging
-import os
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
@@ -625,18 +623,6 @@ def normalize_planning_item(item: dict) -> dict:
     return out
 
 
-def assigned_planning_keys(assigned_items: list[dict]) -> set[str]:
-    keys: set[str] = set()
-    for item in assigned_items:
-        normalized = normalize_planning_item(item)
-        keys.add(normalized["planning_key"])
-    return keys
-
-
-def assigned_entity_keys(assigned_items: list[dict]) -> set[tuple[str, UUID]]:
-    return {(i["item_type"], planning_item_id(i)) for i in assigned_items}
-
-
 def parse_item_due_date(item: dict) -> date:
     raw = item.get("due_date")
     if isinstance(raw, date):
@@ -657,15 +643,6 @@ def active_cycle_overdue(
         return False
     return due_date.year == cycle_year and due_date.month == cycle_month
 
-
-def assigned_identity_keys(assigned_items: list[dict]) -> set[tuple[str, UUID]]:
-    return assigned_entity_keys(assigned_items)
-
-
-def assigned_occurrence_keys(assigned_items: list[dict]) -> set[str]:
-    return assigned_planning_keys(assigned_items)
-
-
 def apply_planning_due_labels(
     item: dict,
     *,
@@ -682,159 +659,3 @@ def apply_planning_due_labels(
     out["due_status"] = "overdue" if overdue else "due"
     out["days_until_due"] = days
     return out
-
-
-def compute_available_to_pull(
-    candidate_items: list[dict],
-    assigned_items: list[dict],
-    *,
-    visible_limit: int = 7,
-    require_pull_forward_flag: bool = True,
-) -> dict[str, Any]:
-    """
-    Available-to-pull = same-context candidates minus assigned/paid.
-
-    Both lists must come from the same planning pass (same paid flags).
-    """
-    assigned_keys = assigned_planning_keys(assigned_items)
-
-    candidates: list[dict] = []
-    for raw in candidate_items:
-        item = normalize_planning_item(raw)
-        if item.get("is_paid"):
-            continue
-        if require_pull_forward_flag and not item.get("can_pull_forward"):
-            continue
-        if item["planning_key"] in assigned_keys:
-            continue
-        item["can_pull_forward"] = True
-        candidates.append(item)
-
-    candidates.sort(
-        key=lambda x: (
-            0 if x.get("is_overdue") else 1,
-            parse_item_due_date(x),
-        )
-    )
-    visible = candidates[:visible_limit]
-    remaining = max(0, len(candidates) - visible_limit)
-    visible_total = sum((Decimal(str(i["amount"])) for i in visible), Decimal("0"))
-    all_total = sum((Decimal(str(i["amount"])) for i in candidates), Decimal("0"))
-    return {
-        "available_items_for_pull": candidates,
-        "available_visible_items": visible,
-        "available_remaining_count": remaining,
-        "available_unpaid_count": len(candidates),
-        "available_total_due": all_total,
-        "available_visible_total_due": visible_total,
-    }
-
-
-def build_paycheck_widget_state(
-    *,
-    current_paycheck_date: date,
-    next_paycheck_date: date | None,
-    candidate_items: list[dict],
-    assigned_items: list[dict],
-    visible_limit: int = 7,
-) -> dict[str, Any]:
-    """Return pull-into-this-paycheck state for one explicit paycheck window."""
-    if next_paycheck_date is None:
-        scoped_candidates = []
-    else:
-        scoped_candidates = [
-            item
-            for item in candidate_items
-            if current_paycheck_date
-            <= parse_item_due_date(item)
-            < next_paycheck_date
-        ]
-
-    if os.getenv("PAYCHECK_WIDGET_DEBUG") == "1":
-        assigned_keys = assigned_planning_keys(assigned_items)
-        logging.getLogger(__name__).info(
-            "paycheck_widget_candidates",
-            extra={
-                "current_paycheck_date": current_paycheck_date.isoformat(),
-                "next_paycheck_date": next_paycheck_date.isoformat()
-                if next_paycheck_date
-                else None,
-                "candidates": [
-                    {
-                        "type": item["item_type"],
-                        "id": str(planning_item_id(item)),
-                        "name": item.get("name"),
-                        "due_date": parse_item_due_date(item).isoformat(),
-                        "amount": str(item.get("amount")),
-                        "assigned_to_current_paycheck": normalize_planning_item(item)[
-                            "planning_key"
-                        ]
-                        in assigned_keys,
-                        "fully_paid_for_period": bool(item.get("is_paid")),
-                    }
-                    for item in scoped_candidates
-                ],
-            },
-        )
-
-    available = compute_available_to_pull(
-        scoped_candidates,
-        assigned_items,
-        visible_limit=visible_limit,
-        require_pull_forward_flag=False,
-    )
-    return {
-        "current_paycheck_date": current_paycheck_date,
-        "next_paycheck_date": next_paycheck_date,
-        "widget_items": available["available_items_for_pull"],
-        "widget_visible_items": available["available_visible_items"],
-        "widget_remaining_count": available["available_remaining_count"],
-        "widget_total_count": available["available_unpaid_count"],
-        "widget_total_due": available["available_total_due"],
-        "widget_visible_total_due": available["available_visible_total_due"],
-    }
-
-
-def paycheck_widget_debug_payload(
-    *,
-    current_paycheck_date: date,
-    next_paycheck_date: date | None,
-    candidate_items: list[dict],
-    assigned_items: list[dict],
-    widget_items: list[dict],
-) -> dict[str, Any]:
-    """Inspectable candidate-vs-filtered rows for the pull widget."""
-    assigned_keys = assigned_planning_keys(assigned_items)
-    widget_keys = {normalize_planning_item(item)["planning_key"] for item in widget_items}
-
-    def row(item: dict) -> dict[str, Any]:
-        normalized = normalize_planning_item(item)
-        return {
-            "item_type": normalized["item_type"],
-            "item_id": normalized["item_id"],
-            "name": normalized.get("name"),
-            "due_date": parse_item_due_date(normalized),
-            "amount": normalized.get("amount"),
-            "assigned_to_current_paycheck": normalized["planning_key"] in assigned_keys,
-            "fully_paid_for_period": bool(normalized.get("is_paid")),
-        }
-
-    scoped_candidates = (
-        []
-        if next_paycheck_date is None
-        else [
-            item
-            for item in candidate_items
-            if current_paycheck_date <= parse_item_due_date(item) < next_paycheck_date
-        ]
-    )
-    return {
-        "current_paycheck_date": current_paycheck_date,
-        "next_paycheck_date": next_paycheck_date,
-        "candidate_items": [row(item) for item in scoped_candidates],
-        "widget_items": [
-            row(item)
-            for item in scoped_candidates
-            if normalize_planning_item(item)["planning_key"] in widget_keys
-        ],
-    }

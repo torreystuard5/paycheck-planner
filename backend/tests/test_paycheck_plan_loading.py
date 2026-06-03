@@ -109,18 +109,6 @@ class TestPaycheckPlanLoading(unittest.TestCase):
             },
             "assigned_items": assigned,
             "next_period_items": [],
-            "available_items_for_pull": [],
-            "available_visible_items": [],
-            "available_remaining_count": 0,
-            "available_unpaid_count": 0,
-            "available_total_due": Decimal("0"),
-            "available_visible_total_due": Decimal("0"),
-            "widget_items": [],
-            "widget_visible_items": [],
-            "widget_remaining_count": 0,
-            "widget_total_count": 0,
-            "widget_total_due": Decimal("0"),
-            "widget_visible_total_due": Decimal("0"),
             "assigned_paid_count": 0,
             "assigned_total_count": 1,
             "assigned_paid_amount": Decimal("0"),
@@ -174,7 +162,8 @@ class TestPaycheckPlanLoading(unittest.TestCase):
             self.assertTrue(plan.get("paychecks"))
             self.assertEqual(len(plan["paychecks"][0]["assigned_items"]), 1)
             self.assertIsNotNone(plan.get("current_paycheck"))
-            self.assertIsNotNone(plan.get("pull_forward_widget"))
+            self.assertEqual(plan["current_paycheck"]["assigned_total_count"], 1)
+            self.assertEqual(plan["current_paycheck"]["total_due"], Decimal("800"))
             PaycheckPlanResponse(**plan)
 
         asyncio.run(run())

@@ -1,8 +1,8 @@
-"""Single source of truth for current-paycheck assigned + pull-forward widget."""
+"""Single source of truth for current-paycheck assigned item state."""
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -13,11 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.pay_period_item_override import PayPeriodItemOverride
 from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.user import User
-from app.services.bill_cycles import (
-    auto_generate_missing_cycle_rows,
-    auto_generate_missing_cycle_rows_for_window,
-    get_cycle_payments,
-)
+from app.services.bill_cycles import auto_generate_missing_cycle_rows
 from app.services.paycheck_data import (
     fetch_widget_bills,
     get_paid_bill_map,
@@ -26,9 +22,7 @@ from app.services.paycheck_data import (
 from app.services.paycheck_engine import (
     apply_planning_due_labels,
     assign_bills_to_paycheck,
-    build_paycheck_widget_state,
     normalize_planning_item,
-    paycheck_widget_debug_payload,
 )
 
 
@@ -56,12 +50,7 @@ async def build_paycheck_planning_state(
     overrides: list[PayPeriodItemOverride],
     today: date,
 ) -> dict[str, Any]:
-    """
-    Compute assigned items, next-period pool, and available-to-pull from one pass.
-
-    Bills use bill_cycle_payments (via paid_bill_map). Cycle rows are auto-generated
-    before paid state is read so missing rows do not drift from the bills list.
-    """
+    """Compute assigned items and paid state for the current paycheck plan."""
     from app.services.pay_period_planner import _apply_effective_lists
 
     bills = ctx["bills"]
@@ -152,95 +141,6 @@ async def build_paycheck_planning_state(
     current_assigned = _label_items(current_assigned)
     next_period = _label_items(next_period)
 
-    widget_window_end = (
-        next_start - timedelta(days=1) if next_start is not None else current_end
-    )
-    await auto_generate_missing_cycle_rows_for_window(
-        db, responsible, user, current_start, widget_window_end
-    )
-    cycle_rows = await get_cycle_payments(
-        db, [b.id for b in responsible], current_start, widget_window_end
-    )
-    bill_by_id = {b.id: b for b in bills}
-
-    bill_candidates: list[dict[str, Any]] = []
-    for (bill_id, due_date), row in cycle_rows.items():
-        bill = bill_by_id.get(bill_id)
-        if bill is None or getattr(bill, "is_active", True) is False:
-            continue
-        full_amount = Decimal(str(getattr(bill, "amount", None) or row.amount_due or 0))
-        user_amount = getattr(bill, "user_share_amount", None)
-        if user_amount is None:
-            user_amount = row.amount_due if row.amount_due is not None else full_amount
-        is_split = (
-            getattr(bill, "payment_mode", "single") == "split"
-            and getattr(bill, "household_id", None) is not None
-        )
-        bill_candidates.append(
-            {
-                "id": bill.id,
-                "item_id": bill.id,
-                "cycle_payment_id": getattr(row, "id", None),
-                "name": bill.name,
-                "item_type": "bill",
-                "amount": Decimal(str(user_amount or 0)),
-                "full_amount": full_amount if is_split else None,
-                "due_date": due_date,
-                "days_until_due": (due_date - today).days,
-                "status": "due",
-                "auto_pay": bool(getattr(bill, "auto_pay", False)),
-                "is_split": is_split,
-                "split_count": getattr(bill, "split_member_count", 1) or 1,
-                "is_paid": bool(getattr(row, "is_paid", False)),
-                "is_overdue": False,
-                "hidden_overdue": bool(getattr(bill, "hidden_overdue", False)),
-                "can_pull_forward": True,
-            }
-        )
-
-    active_debts = [d for d in debts if getattr(d, "is_active", True) is not False]
-    debt_candidates = assign_bills_to_paycheck(
-        [],
-        active_debts,
-        current_start,
-        widget_window_end,
-        today,
-        paid_debt_ids=paid_current,
-        paid_bill_map={},
-    )
-    current_candidates = _label_items([*bill_candidates, *debt_candidates])
-
-    widget_state = build_paycheck_widget_state(
-        current_paycheck_date=current_start,
-        next_paycheck_date=next_start,
-        candidate_items=current_candidates,
-        assigned_items=current_assigned,
-    )
-
-    bill_by_id = {b.id: b for b in bills}
-    debt_by_id = {d.id: d for d in debts}
-
-    def _enrich_widget_row(item: dict) -> dict:
-        row = dict(item)
-        if item["item_type"] == "bill":
-            bill = bill_by_id.get(item["item_id"])
-            if bill:
-                row["category"] = bill.category
-        elif item["item_type"] == "debt":
-            debt = debt_by_id.get(item["item_id"])
-            if debt:
-                row["category"] = getattr(debt, "type", None) or "Debt/Loan"
-            else:
-                row["category"] = "Debt/Loan"
-        return row
-
-    available_for_pull = [
-        _enrich_widget_row(i) for i in widget_state["widget_items"]
-    ]
-    available_visible = [
-        _enrich_widget_row(i) for i in widget_state["widget_visible_items"]
-    ]
-
     assigned_paid_count = sum(1 for i in current_assigned if i.get("is_paid"))
     assigned_total_count = len(current_assigned)
     assigned_total_amount = sum(
@@ -268,25 +168,6 @@ async def build_paycheck_planning_state(
         },
         "assigned_items": current_assigned,
         "next_period_items": next_period,
-        "available_items_for_pull": available_for_pull,
-        "available_visible_items": available_visible,
-        "available_remaining_count": widget_state["widget_remaining_count"],
-        "available_unpaid_count": widget_state["widget_total_count"],
-        "available_total_due": widget_state["widget_total_due"],
-        "available_visible_total_due": widget_state["widget_visible_total_due"],
-        "widget_items": available_for_pull,
-        "widget_visible_items": available_visible,
-        "widget_remaining_count": widget_state["widget_remaining_count"],
-        "widget_total_count": widget_state["widget_total_count"],
-        "widget_total_due": widget_state["widget_total_due"],
-        "widget_visible_total_due": widget_state["widget_visible_total_due"],
-        "widget_debug": paycheck_widget_debug_payload(
-            current_paycheck_date=current_start,
-            next_paycheck_date=next_start,
-            candidate_items=current_candidates,
-            assigned_items=current_assigned,
-            widget_items=available_for_pull,
-        ),
         "paid_bill_map": paid_bill_map,
         "assigned_paid_count": assigned_paid_count,
         "assigned_total_count": assigned_total_count,
@@ -322,35 +203,4 @@ def build_current_paycheck_plan(
         "assigned_total_amount": planning["assigned_total_amount"],
         "assigned_still_owed": planning["assigned_still_owed"],
         "assigned_progress_percent": planning["assigned_progress_percent"],
-        "available_items_for_pull": planning["available_items_for_pull"],
-        "available_visible_items": planning["available_visible_items"],
-        "available_remaining_count": planning["available_remaining_count"],
-        "available_unpaid_count": planning["available_unpaid_count"],
-        "available_total_due": planning["available_total_due"],
-        "available_visible_total_due": planning["available_visible_total_due"],
-        "widget_items": planning["widget_items"],
-        "widget_visible_items": planning["widget_visible_items"],
-        "widget_remaining_count": planning["widget_remaining_count"],
-        "widget_total_count": planning["widget_total_count"],
-        "widget_total_due": planning["widget_total_due"],
-        "widget_visible_total_due": planning["widget_visible_total_due"],
-    }
-
-
-def build_pull_forward_widget_payload(
-    current: dict[str, Any],
-) -> dict[str, Any]:
-    """Backward-compatible widget slice from current_paycheck."""
-    visible = current["widget_visible_items"]
-    return {
-        "current_paycheck_date": current.get("paycheck_date"),
-        "next_paycheck_date": current.get("next_paycheck_date"),
-        "widget_total_due": current["widget_total_due"],
-        "total_due_for_visible_items": current["widget_total_due"],
-        "remaining_count": current["widget_remaining_count"],
-        "unpaid_count": current["widget_total_count"],
-        "widget_items": current["widget_items"],
-        "widget_visible_items": visible,
-        "available_items": visible,
-        "visible_items": visible,
     }

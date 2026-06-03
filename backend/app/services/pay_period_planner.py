@@ -34,7 +34,6 @@ from app.services.paycheck_engine import (
 from app.services.paycheck_planning_state import (
     build_current_paycheck_plan,
     build_paycheck_planning_state,
-    build_pull_forward_widget_payload,
 )
 
 
@@ -689,9 +688,6 @@ async def build_full_paycheck_plan_response(
             paycheck_meta=paycheck_meta,
             ctx=ctx,
         )
-        plan["pull_forward_widget"] = build_pull_forward_widget_payload(
-            plan["current_paycheck"],
-        )
     elif paychecks:
         empty_current = {
             "paycheck_context": {
@@ -719,18 +715,6 @@ async def build_full_paycheck_plan_response(
             "assigned_total_amount": Decimal("0"),
             "assigned_still_owed": Decimal("0"),
             "assigned_progress_percent": 0.0,
-            "available_items_for_pull": [],
-            "available_visible_items": [],
-            "available_remaining_count": 0,
-            "available_unpaid_count": 0,
-            "available_total_due": Decimal("0"),
-            "available_visible_total_due": Decimal("0"),
-            "widget_items": [],
-            "widget_visible_items": [],
-            "widget_remaining_count": 0,
-            "widget_total_count": 0,
-            "widget_total_due": Decimal("0"),
-            "widget_visible_total_due": Decimal("0"),
         }
         assigned = empty_current["assigned_items"]
         empty_current["assigned_total_amount"] = sum(
@@ -751,10 +735,8 @@ async def build_full_paycheck_plan_response(
                 1,
             )
         plan["current_paycheck"] = empty_current
-        plan["pull_forward_widget"] = build_pull_forward_widget_payload(empty_current)
     else:
         plan["current_paycheck"] = None
-        plan["pull_forward_widget"] = None
 
     plan["budget_id"] = budget_id
     return plan
