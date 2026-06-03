@@ -793,3 +793,48 @@ def build_paycheck_widget_state(
         "widget_total_due": available["available_total_due"],
         "widget_visible_total_due": available["available_visible_total_due"],
     }
+
+
+def paycheck_widget_debug_payload(
+    *,
+    current_paycheck_date: date,
+    next_paycheck_date: date | None,
+    candidate_items: list[dict],
+    assigned_items: list[dict],
+    widget_items: list[dict],
+) -> dict[str, Any]:
+    """Inspectable candidate-vs-filtered rows for the pull widget."""
+    assigned_keys = assigned_planning_keys(assigned_items)
+    widget_keys = {normalize_planning_item(item)["planning_key"] for item in widget_items}
+
+    def row(item: dict) -> dict[str, Any]:
+        normalized = normalize_planning_item(item)
+        return {
+            "item_type": normalized["item_type"],
+            "item_id": normalized["item_id"],
+            "name": normalized.get("name"),
+            "due_date": parse_item_due_date(normalized),
+            "amount": normalized.get("amount"),
+            "assigned_to_current_paycheck": normalized["planning_key"] in assigned_keys,
+            "fully_paid_for_period": bool(normalized.get("is_paid")),
+        }
+
+    scoped_candidates = (
+        []
+        if next_paycheck_date is None
+        else [
+            item
+            for item in candidate_items
+            if current_paycheck_date <= parse_item_due_date(item) < next_paycheck_date
+        ]
+    )
+    return {
+        "current_paycheck_date": current_paycheck_date,
+        "next_paycheck_date": next_paycheck_date,
+        "candidate_items": [row(item) for item in scoped_candidates],
+        "widget_items": [
+            row(item)
+            for item in scoped_candidates
+            if normalize_planning_item(item)["planning_key"] in widget_keys
+        ],
+    }

@@ -108,6 +108,24 @@ async def get_paycheck_plan(
     return PaycheckPlanResponse(**plan)
 
 
+@router.get("/debug/paycheck-widget")
+async def debug_paycheck_widget(
+    budget_id: UUID | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    bid = await _require_budget_id(db, current_user, budget_id)
+    plan = await build_full_paycheck_plan_response(db, current_user, bid, periods=4)
+    current = plan.get("current_paycheck") or {}
+    debug = current.get("widget_debug")
+    if debug is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No paycheck widget debug data available.",
+        )
+    return debug
+
+
 @router.get("/{paycheck_date}", response_model=PaycheckPlan)
 async def get_single_paycheck(
     paycheck_date: date,

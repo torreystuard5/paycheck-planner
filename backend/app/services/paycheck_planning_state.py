@@ -24,6 +24,7 @@ from app.services.paycheck_engine import (
     assign_bills_to_paycheck,
     build_paycheck_widget_state,
     normalize_planning_item,
+    paycheck_widget_debug_payload,
 )
 
 
@@ -218,6 +219,13 @@ async def build_paycheck_planning_state(
         "widget_total_count": widget_state["widget_total_count"],
         "widget_total_due": widget_state["widget_total_due"],
         "widget_visible_total_due": widget_state["widget_visible_total_due"],
+        "widget_debug": paycheck_widget_debug_payload(
+            current_paycheck_date=current_start,
+            next_paycheck_date=next_start,
+            candidate_items=current_candidates,
+            assigned_items=current_assigned,
+            widget_items=available_for_pull,
+        ),
         "paid_bill_map": paid_bill_map,
         "assigned_paid_count": assigned_paid_count,
         "assigned_total_count": assigned_total_count,

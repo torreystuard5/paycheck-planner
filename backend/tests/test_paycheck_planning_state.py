@@ -14,6 +14,7 @@ from app.services.paycheck_engine import (
     compute_available_to_pull,
     normalize_planning_item,
     occurrence_key,
+    paycheck_widget_debug_payload,
 )
 from app.services.paycheck_planning_state import build_current_paycheck_plan
 
@@ -153,6 +154,33 @@ class TestPaycheckPlanningState(unittest.TestCase):
         )
 
         self.assertEqual([i["name"] for i in result["widget_items"]], ["Open"])
+
+    def test_widget_debug_payload_exposes_candidates_and_filtered_rows(self):
+        current = date(2026, 5, 21)
+        next_paycheck = date(2026, 6, 4)
+        assigned_id = uuid4()
+        assigned = _item(name="Assigned", due=date(2026, 5, 25), item_id=assigned_id)
+        paid = _item(name="Paid", due=date(2026, 5, 26), is_paid=True)
+        open_item = _item(name="Open", due=date(2026, 5, 27))
+        outside = _item(name="Outside", due=date(2026, 6, 4))
+
+        debug = paycheck_widget_debug_payload(
+            current_paycheck_date=current,
+            next_paycheck_date=next_paycheck,
+            candidate_items=[assigned, paid, open_item, outside],
+            assigned_items=[assigned],
+            widget_items=[open_item],
+        )
+
+        self.assertEqual(
+            [item["name"] for item in debug["candidate_items"]],
+            ["Assigned", "Paid", "Open"],
+        )
+        assigned_row = debug["candidate_items"][0]
+        paid_row = debug["candidate_items"][1]
+        self.assertTrue(assigned_row["assigned_to_current_paycheck"])
+        self.assertTrue(paid_row["fully_paid_for_period"])
+        self.assertEqual([item["name"] for item in debug["widget_items"]], ["Open"])
 
     def test_may_due_not_overdue_in_june(self):
         today = date(2026, 6, 2)
