@@ -70,9 +70,9 @@ export default function Reports() {
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Reports</h1>
         <p className="text-sm text-gray-600 mt-1">Insights into your finances</p>
       </div>
 
@@ -80,8 +80,8 @@ export default function Reports() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
       )}
 
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-6">
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="flex min-w-max gap-5 sm:gap-6">
           {TABS.map((tab) => (
             <button
               key={tab}

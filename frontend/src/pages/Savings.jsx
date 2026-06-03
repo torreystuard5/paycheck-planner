@@ -164,17 +164,17 @@ export default function Savings() {
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Savings Goals</h1>
+    <div className="min-w-0 space-y-5 sm:space-y-6">
+      <div className="min-w-0">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Savings Goals</h1>
             <p className="text-sm text-gray-600 mt-1">Set goals and track your progress</p>
             {lastUpdated && user?.household_id && (
               <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <SortDropdown
               sortBy={sortBy}
               sortOrder={sortOrder}
@@ -186,11 +186,11 @@ export default function Savings() {
                 { value: 'created_at', label: 'Date Added' },
               ]}
             />
-            <button onClick={openAddContrib} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-colors">
+            <button onClick={openAddContrib} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">
               <Plus className="h-4 w-4" />
               Add Contribution
             </button>
-            <button onClick={openAddGoal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+            <button onClick={openAddGoal} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
               <Plus className="h-4 w-4" />
               Add Goal
             </button>
@@ -328,7 +328,7 @@ export default function Savings() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
             <input type="text" value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} className={inputClass} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Target Amount</label>
               <input type="number" step="0.01" value={goalForm.target_amount} onChange={(e) => setGoalForm({ ...goalForm, target_amount: e.target.value })} className={inputClass} />
@@ -342,9 +342,9 @@ export default function Savings() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
             <DateInput value={goalForm.target_date} onChange={(e) => setGoalForm({ ...goalForm, target_date: e.target.value })} className={inputClass} />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setShowGoalModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
+            <button type="button" onClick={() => setShowGoalModal(false)} className="min-h-[44px] px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
               {saving ? 'Saving...' : editingGoal ? 'Update' : 'Create'}
             </button>
           </div>
@@ -360,7 +360,7 @@ export default function Savings() {
               {goals.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
               <input type="number" step="0.01" value={contribForm.amount} onChange={(e) => setContribForm({ ...contribForm, amount: e.target.value })} className={inputClass} />
@@ -370,9 +370,9 @@ export default function Savings() {
               <DateInput value={contribForm.pay_period_date} onChange={(e) => setContribForm({ ...contribForm, pay_period_date: e.target.value })} className={inputClass} />
             </div>
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setShowContribModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
+            <button type="button" onClick={() => setShowContribModal(false)} className="min-h-[44px] px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="min-h-[44px] px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
               {saving ? 'Saving...' : 'Add Contribution'}
             </button>
           </div>

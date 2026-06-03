@@ -1292,7 +1292,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
             <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
               <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
@@ -1406,11 +1406,9 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Days</label>
-              <input type="number" min="0" max="30" value={form.reminder_days} onChange={(e) => setForm({ ...form, reminder_days: e.target.value })} className={inputClass} />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Days</label>
+            <input type="number" min="0" max="30" value={form.reminder_days} onChange={(e) => setForm({ ...form, reminder_days: e.target.value })} className={inputClass} />
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" id="auto_pay" checked={form.auto_pay} onChange={(e) => setForm({ ...form, auto_pay: e.target.checked })} className="rounded border-gray-300" />
@@ -1429,9 +1427,9 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
               </select>
             </div>
           )}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
+            <button type="button" onClick={() => setShowModal(false)} className="min-h-[44px] px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
               {saving ? 'Saving...' : editingBill ? 'Update' : 'Create'}
             </button>
           </div>

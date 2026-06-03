@@ -176,14 +176,14 @@ export default function Income() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Income & Paychecks</h1>
+    <div className="min-w-0 space-y-5 sm:space-y-6">
+      <div className="min-w-0">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Income & Paychecks</h1>
             <p className="text-sm text-gray-600 mt-1">Track your take-home pay</p>
           </div>
-          <button onClick={openAddEntry} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-colors">
+          <button onClick={openAddEntry} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">
             <DollarSign className="h-4 w-4" />
             Log Paycheck
           </button>
@@ -386,7 +386,7 @@ export default function Income() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Pay Date</label>
             <DateInput value={entryForm.pay_date} onChange={(e) => setEntryForm({ ...entryForm, pay_date: e.target.value })} className={inputClass} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Net Amount (take-home)</label>
               <input type="number" step="0.01" required value={entryForm.net_amount} onChange={(e) => setEntryForm({ ...entryForm, net_amount: e.target.value })} className={inputClass} />
@@ -400,9 +400,9 @@ export default function Income() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Memo (optional)</label>
             <input type="text" maxLength={255} value={entryForm.memo} onChange={(e) => setEntryForm({ ...entryForm, memo: e.target.value })} className={inputClass} placeholder="e.g. Overtime included" />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setShowEntryModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" disabled={savingEntry} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
+            <button type="button" onClick={() => setShowEntryModal(false)} className="min-h-[44px] px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={savingEntry} className="min-h-[44px] px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
               {savingEntry ? 'Saving...' : editingEntry ? 'Update' : 'Log Paycheck'}
             </button>
           </div>

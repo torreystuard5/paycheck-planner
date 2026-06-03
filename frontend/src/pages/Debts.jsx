@@ -958,7 +958,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
               {modalError}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
               <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
@@ -970,7 +970,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Balance</label>
               <input type="number" step="0.01" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} className={inputClass} />
@@ -980,7 +980,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
               <input type="number" step="0.01" value={form.credit_limit} onChange={(e) => setForm({ ...form, credit_limit: e.target.value })} className={inputClass} placeholder="Optional" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">APR (%)</label>
               <input type="number" step="0.01" value={form.apr} onChange={(e) => setForm({ ...form, apr: e.target.value })} className={inputClass} />
@@ -990,7 +990,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
               <input type="number" step="0.01" value={form.minimum_payment} onChange={(e) => setForm({ ...form, minimum_payment: e.target.value })} className={inputClass} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Due Day</label>
               <input type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className={inputClass} />

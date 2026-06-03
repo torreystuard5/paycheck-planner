@@ -241,11 +241,11 @@ export default function Calendar() {
     .sort((a, b) => a.day - b.day);
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <CalendarIcon className="h-7 w-7 text-blue-600" />
-        <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
+        <CalendarIcon className="h-6 w-6 text-blue-600 sm:h-7 sm:w-7" />
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Calendar</h1>
       </div>
 
       {/* View toggle */}
@@ -280,7 +280,7 @@ export default function Calendar() {
           <button onClick={goPrev} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
             <ChevronLeft className="h-4 w-4 text-gray-600" />
           </button>
-          <h2 className="text-lg font-semibold text-gray-900 min-w-[180px] text-center">
+          <h2 className="text-base font-semibold text-gray-900 w-[140px] text-center sm:w-[180px] sm:text-lg">
             {MONTH_NAMES[month]} {year}
           </h2>
           <button onClick={goNext} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">

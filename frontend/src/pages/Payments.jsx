@@ -179,10 +179,10 @@ export default function Payments() {
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Payment History</h1>
+    <div className="min-w-0 space-y-5 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Payment History</h1>
           <p className="text-sm text-gray-600 mt-1">View and manage your payments</p>
           {lastUpdated && user?.household_id && (
             <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
@@ -192,7 +192,7 @@ export default function Payments() {
           <div className="relative" ref={exportRef}>
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              className="flex min-h-[44px] items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
             >
               <Download className="h-4 w-4" />
               Export
@@ -209,7 +209,7 @@ export default function Payments() {
               </div>
             )}
           </div>
-          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+          <button onClick={() => setShowModal(true)} className="flex min-h-[44px] items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
             <Plus className="h-4 w-4" />
             Record Payment
           </button>
@@ -220,21 +220,23 @@ export default function Payments() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <DateInput
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
-          aria-label="Start date"
-        />
-        <span className="text-sm text-gray-400">to</span>
-        <DateInput
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
-          aria-label="End date"
-        />
-        <button onClick={handleFilter} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <DateInput
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+            aria-label="Start date"
+          />
+          <span className="shrink-0 text-sm text-gray-400">to</span>
+          <DateInput
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+            aria-label="End date"
+          />
+        </div>
+        <button onClick={handleFilter} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
           <Filter className="h-4 w-4" />
           Filter
         </button>
@@ -396,7 +398,7 @@ export default function Payments() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Pay For</label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Bill</label>
                 <select
@@ -421,7 +423,7 @@ export default function Payments() {
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
               <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
@@ -431,19 +433,19 @@ export default function Payments() {
               <DateInput value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} className={inputClass} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pay Period Date</label>
               <DateInput value={form.pay_period_date} onChange={(e) => setForm({ ...form, pay_period_date: e.target.value })} className={inputClass} />
             </div>
-            <div className="flex items-center gap-2 pt-6">
+            <div className="flex items-center gap-2 sm:pt-6">
               <input type="checkbox" id="is_extra" checked={form.is_extra} onChange={(e) => setForm({ ...form, is_extra: e.target.checked })} className="rounded border-gray-300" />
               <label htmlFor="is_extra" className="text-sm text-gray-700">Extra Payment</label>
             </div>
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
+            <button type="button" onClick={() => setShowModal(false)} className="min-h-[44px] px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
               {saving ? 'Saving...' : 'Record Payment'}
             </button>
           </div>

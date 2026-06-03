@@ -102,15 +102,15 @@ export default function Support() {
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Support</h1>
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Support</h1>
         <p className="text-sm text-gray-600 mt-1">Get help and find answers to common questions</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
+          <div className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <HelpCircle className="w-5 h-5 text-blue-500" />
               Frequently Asked Questions
