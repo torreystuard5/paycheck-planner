@@ -81,7 +81,6 @@ function itemKey(item) {
 
 export default function PaycheckWidget({
   currentPaycheck,
-  widget,
   overrideBusyKey,
   onPullForward,
   onRevert,
@@ -90,21 +89,13 @@ export default function PaycheckWidget({
   const [collapsed, setCollapsed] = useState(readCollapsedPreference);
 
   const plan = currentPaycheck || null;
-  const visibleItems =
-    plan?.available_visible_items
-    || widget?.available_visible_items
-    || widget?.available_items
-    || widget?.visible_items
-    || [];
-  const remainingCount =
-    plan?.available_remaining_count ?? widget?.remaining_count ?? 0;
-  const unpaidCount =
-    plan?.available_unpaid_count ?? widget?.unpaid_count ?? visibleItems.length;
-  const visibleTotalDue =
-    plan?.available_visible_total_due ?? widget?.total_due_for_visible_items ?? 0;
-  const nextPayDate = plan?.next_paycheck_date ?? widget?.next_paycheck_date;
+  const visibleItems = plan?.available_visible_items || [];
+  const remainingCount = plan?.available_remaining_count ?? 0;
+  const availableCount = plan?.available_unpaid_count ?? visibleItems.length;
+  const visibleTotalDue = plan?.available_visible_total_due ?? 0;
+  const nextPayDate = plan?.next_paycheck_date;
 
-  if (!plan && !widget) return null;
+  if (!plan) return null;
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -239,7 +230,7 @@ export default function PaycheckWidget({
               </span>
               {' due · '}
               <span className="font-medium text-gray-800">
-                {unpaidCount} to pull
+                {availableCount} available
               </span>
               {remainingCount > 0 && (
                 <span className="text-gray-500"> (+{remainingCount} more)</span>
@@ -248,7 +239,7 @@ export default function PaycheckWidget({
           </div>
 
           {visibleItems.length === 0 ? (
-            <p className="text-sm text-gray-500 py-2">Nothing available to pull into this paycheck.</p>
+            <p className="text-sm text-gray-500 py-2">Everything for this paycheck is already assigned.</p>
           ) : (
             <ul className="divide-y divide-gray-100 md:divide-y-0">
               {visibleItems.map((item) => renderRow(item))}

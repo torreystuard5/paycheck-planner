@@ -76,11 +76,11 @@ export default function Dashboard() {
   const [hidingOverdue, setHidingOverdue] = useState({});
   const [overrideBusyKey, setOverrideBusyKey] = useState(null);
 
-  /** Stable key + paid flag: engine is_paid (household source of truth) OR user checklist row. */
+  /** Stable key + paid flag from the canonical paycheck-plan response. */
   const assignItemKey = useCallback((item) => `${item.item_type}_${item.id || item.item_id}`, []);
   const assignItemPaid = useCallback(
-    (item, map = checklist) => Boolean(item.is_paid) || Boolean(map[assignItemKey(item)]),
-    [checklist, assignItemKey],
+    (item) => Boolean(item.is_paid) || Boolean(checklist[assignItemKey(item)]),
+    [assignItemKey, checklist],
   );
 
   // Collapsible sections state
@@ -108,50 +108,6 @@ export default function Dashboard() {
       await api.patch('/api/v1/users/me/ui-preferences', { collapsed_sections: updated });
     } catch { /* ignore */ }
   };
-
-  const fetchChecklist = useCallback(async (payPeriodStart, assignedItems) => {
-    if (!payPeriodStart) return;
-
-    const enginePaidKeys = new Set();
-    const seedMap = {};
-    if (Array.isArray(assignedItems)) {
-      assignedItems.forEach((item) => {
-        const key = `${item.item_type}_${item.id || item.item_id}`;
-        if (item.is_paid) {
-          seedMap[key] = true;
-          enginePaidKeys.add(key);
-        }
-      });
-    }
-
-    try {
-      const res = await api.get(`/api/v1/paycheck-checklist?pay_period_start=${payPeriodStart}`);
-      const items = Array.isArray(res.data) ? res.data : res.data?.items || [];
-      const map = { ...seedMap };
-      items.forEach((entry) => {
-        const key = `${entry.item_type}_${entry.item_id}`;
-        if (enginePaidKeys.has(key)) return;
-        const eng = Array.isArray(assignedItems)
-          ? assignedItems.find((i) => `${i.item_type}_${i.id || i.item_id}` === key)
-          : null;
-        // Ignore stale per-user checklist "checked" when plan engine already says unpaid
-        // (e.g. co-owner unchecked before we cleared other members' checklist rows).
-        if (
-          eng &&
-          (eng.item_type === 'bill' || eng.item_type === 'debt') &&
-          eng.is_paid === false &&
-          entry.is_checked
-        ) {
-          map[key] = false;
-          return;
-        }
-        map[key] = entry.is_checked;
-      });
-      setChecklist(map);
-    } catch {
-      setChecklist(seedMap);
-    }
-  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     if (user?.app_mode === 'business') return;
@@ -185,11 +141,7 @@ export default function Dashboard() {
       if (planRes.status === 'fulfilled') {
         const planData = augmentPaycheckPlan(planRes.value.data);
         setPaycheckPlan(planData);
-        const current = planData?.current_paycheck || planData?.paychecks?.[0];
-        if (current) {
-          const payPeriodStart = current.pay_period_start || current.paycheck_date;
-          if (payPeriodStart) fetchChecklist(payPeriodStart, current.assigned_items);
-        }
+        setChecklist({});
       } else {
         console.error('Paycheck plan fetch failed:', planRes.reason);
         const msg = formatApiError(planRes.reason);
@@ -213,7 +165,7 @@ export default function Dashboard() {
     } catch (err) {
       setError('Failed to load dashboard data.');
     }
-  }, [fetchChecklist, user?.app_mode, activeBudget?.id]);
+  }, [user?.app_mode, activeBudget?.id]);
 
   useEffect(() => {
     if (budgetLoading) return;
@@ -474,7 +426,6 @@ export default function Dashboard() {
           )}
           <PaycheckWidget
             currentPaycheck={paycheckPlan?.current_paycheck}
-            widget={paycheckPlan?.pull_forward_widget}
             overrideBusyKey={overrideBusyKey}
             onPullForward={handlePullForward}
             onRevert={handleRevertOverride}

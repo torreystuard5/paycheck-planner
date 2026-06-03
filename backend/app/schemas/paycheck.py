@@ -74,7 +74,17 @@ class PullForwardWidget(BaseModel):
     visible_items: list[PullForwardWidgetItem] = []
 
 
+class PaycheckContext(BaseModel):
+    pay_period_start: date
+    pay_period_end: Optional[date] = None
+    next_paycheck_date: Optional[date] = None
+    budget_id: Optional[UUID] = None
+    household_id: Optional[UUID] = None
+    user_id: Optional[UUID] = None
+
+
 class CurrentPaycheckPlan(BaseModel):
+    paycheck_context: PaycheckContext
     paycheck_date: date
     pay_period_start: date
     pay_period_end: Optional[date] = None

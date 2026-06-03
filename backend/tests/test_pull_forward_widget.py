@@ -26,6 +26,11 @@ def _user(**overrides):
 class TestPullForwardWidget(unittest.TestCase):
     def test_widget_payload_matches_current_paycheck(self):
         current = {
+            "paycheck_context": {
+                "pay_period_start": date(2026, 5, 22),
+                "pay_period_end": date(2026, 6, 4),
+                "next_paycheck_date": date(2026, 6, 5),
+            },
             "next_paycheck_date": date(2026, 6, 5),
             "available_visible_items": [{"name": "Rent", "amount": Decimal("800")}],
             "available_remaining_count": 2,
@@ -89,6 +94,10 @@ class TestPullForwardWidget(unittest.TestCase):
                 new_callable=AsyncMock,
                 return_value=set(),
             ), patch(
+                "app.services.paycheck_planning_state._checked_items_for_period",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ), patch(
                 "app.services.paycheck_planning_state.assign_bills_to_paycheck",
                 side_effect=[[assigned_item], [next_item]],
             ), patch(
@@ -119,6 +128,7 @@ class TestPullForwardWidget(unittest.TestCase):
             for item in current["available_items_for_pull"]:
                 self.assertNotIn(item["planning_key"], assigned_keys)
             self.assertEqual(current["assigned_paid_count"], 1)
+            self.assertEqual(current["available_unpaid_count"], 0)
 
         asyncio.run(run())
 

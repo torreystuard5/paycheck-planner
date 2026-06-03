@@ -68,18 +68,20 @@ class TestPaycheckPlanningState(unittest.TestCase):
         names = [i["name"] for i in visible]
         self.assertNotIn("Affirm Amazon", names)
 
-    def test_all_assigned_paid_excludes_assigned_from_available(self):
+    def test_all_assigned_paid_same_context_has_no_available_items(self):
         assigned = [
             _item(name=f"A{i}", due=date(2026, 6, 1 + i), is_paid=True, can_pull_forward=False)
             for i in range(12)
         ]
-        next_period = assigned + [
-            _item(name="NextOnly", due=date(2026, 6, 20), can_pull_forward=True)
-        ]
-        result = compute_available_to_pull(next_period, assigned)
+        result = compute_available_to_pull(
+            assigned,
+            assigned,
+            require_pull_forward_flag=False,
+        )
         assigned_keys = {normalize_planning_item(i)["planning_key"] for i in assigned}
         for item in result["available_items_for_pull"]:
             self.assertNotIn(item["planning_key"], assigned_keys)
+        self.assertEqual(result["available_unpaid_count"], 0)
         self.assertEqual(result["available_unpaid_count"], len(result["available_items_for_pull"]))
         self.assertEqual(
             result["available_remaining_count"],
@@ -150,6 +152,14 @@ class TestPaycheckPlanningState(unittest.TestCase):
 
     def test_current_paycheck_plan_unified_shape(self):
         planning = {
+            "paycheck_context": {
+                "pay_period_start": date(2026, 5, 22),
+                "pay_period_end": date(2026, 6, 4),
+                "next_paycheck_date": date(2026, 6, 5),
+                "budget_id": uuid4(),
+                "household_id": None,
+                "user_id": uuid4(),
+            },
             "assigned_items": [
                 normalize_planning_item(_item(name="Rent", is_paid=True, due=date(2026, 5, 22))),
             ],
@@ -183,6 +193,10 @@ class TestPaycheckPlanningState(unittest.TestCase):
         )
         self.assertEqual(current["assigned_paid_count"], 1)
         self.assertEqual(current["available_unpaid_count"], 1)
+        self.assertEqual(
+            current["paycheck_context"]["pay_period_start"],
+            current["pay_period_start"],
+        )
         assigned_keys = {i["planning_key"] for i in current["assigned_items"]}
         for item in current["available_items_for_pull"]:
             self.assertNotIn(item["planning_key"], assigned_keys)

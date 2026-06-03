@@ -99,6 +99,14 @@ class TestPaycheckPlanLoading(unittest.TestCase):
         }
 
         planning = {
+            "paycheck_context": {
+                "pay_period_start": date(2026, 5, 22),
+                "pay_period_end": date(2026, 6, 4),
+                "next_paycheck_date": date(2026, 6, 5),
+                "budget_id": budget_id,
+                "household_id": None,
+                "user_id": user.id,
+            },
             "assigned_items": assigned,
             "next_period_items": [],
             "available_items_for_pull": [],

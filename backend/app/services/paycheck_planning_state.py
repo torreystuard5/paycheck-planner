@@ -7,9 +7,11 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pay_period_item_override import PayPeriodItemOverride
+from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.user import User
 from app.services.bill_cycles import auto_generate_missing_cycle_rows
 from app.services.paycheck_data import (
@@ -23,6 +25,21 @@ from app.services.paycheck_engine import (
     compute_available_to_pull,
     normalize_planning_item,
 )
+
+
+async def _checked_items_for_period(
+    db: AsyncSession,
+    user: User,
+    pay_period_start: date,
+) -> set[tuple[str, UUID]]:
+    result = await db.execute(
+        select(PaycheckChecklist).where(
+            PaycheckChecklist.user_id == user.id,
+            PaycheckChecklist.pay_period_start == pay_period_start,
+            PaycheckChecklist.is_checked.is_(True),
+        )
+    )
+    return {(row.item_type, row.item_id) for row in result.scalars().all()}
 
 
 async def build_paycheck_planning_state(
@@ -109,10 +126,12 @@ async def build_paycheck_planning_state(
         next_start,
         overrides,
     )
+    checked_items = await _checked_items_for_period(db, user, current_start)
 
     def _label_items(items: list[dict]) -> list[dict]:
-        return [
-            normalize_planning_item(
+        labeled: list[dict] = []
+        for item in items:
+            normalized = normalize_planning_item(
                 apply_planning_due_labels(
                     item,
                     today=today,
@@ -120,13 +139,20 @@ async def build_paycheck_planning_state(
                     cycle_month=cycle_month,
                 )
             )
-            for item in items
-        ]
+            if (normalized["item_type"], normalized["item_id"]) in checked_items:
+                normalized["is_paid"] = True
+            labeled.append(normalized)
+        return labeled
 
     current_assigned = _label_items(current_assigned)
     next_period = _label_items(next_period)
+    current_candidates = _label_items(natural_current)
 
-    available = compute_available_to_pull(next_period, current_assigned)
+    available = compute_available_to_pull(
+        current_candidates,
+        current_assigned,
+        require_pull_forward_flag=False,
+    )
 
     bill_by_id = {b.id: b for b in bills}
     debt_by_id = {d.id: d for d in debts}
@@ -169,6 +195,14 @@ async def build_paycheck_planning_state(
     )
 
     return {
+        "paycheck_context": {
+            "pay_period_start": current_start,
+            "pay_period_end": current_end,
+            "next_paycheck_date": next_start,
+            "budget_id": budget_id,
+            "household_id": user.household_id,
+            "user_id": user.id,
+        },
         "assigned_items": current_assigned,
         "next_period_items": next_period,
         "available_items_for_pull": available_for_pull,
@@ -195,6 +229,7 @@ def build_current_paycheck_plan(
 ) -> dict[str, Any]:
     """Unified current-paycheck object for dashboard assigned + pull widget."""
     return {
+        "paycheck_context": planning["paycheck_context"],
         "paycheck_date": paycheck_meta["paycheck_date"],
         "pay_period_start": paycheck_meta.get("pay_period_start")
         or paycheck_meta["paycheck_date"],

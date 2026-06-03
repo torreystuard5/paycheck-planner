@@ -694,6 +694,14 @@ async def build_full_paycheck_plan_response(
         )
     elif paychecks:
         empty_current = {
+            "paycheck_context": {
+                "pay_period_start": paychecks[0]["paycheck_date"],
+                "pay_period_end": None,
+                "next_paycheck_date": None,
+                "budget_id": budget_id,
+                "household_id": user.household_id,
+                "user_id": user.id,
+            },
             "paycheck_date": paychecks[0]["paycheck_date"],
             "pay_period_start": paychecks[0]["paycheck_date"],
             "pay_period_end": None,

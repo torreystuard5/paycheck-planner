@@ -683,13 +683,14 @@ def apply_planning_due_labels(
 
 
 def compute_available_to_pull(
-    next_period_items: list[dict],
+    candidate_items: list[dict],
     assigned_items: list[dict],
     *,
     visible_limit: int = 7,
+    require_pull_forward_flag: bool = True,
 ) -> dict[str, Any]:
     """
-    Available-to-pull = next-period pull-forward candidates minus assigned/paid.
+    Available-to-pull = same-context candidates minus assigned/paid.
 
     Both lists must come from the same planning pass (same paid flags).
     """
@@ -697,11 +698,11 @@ def compute_available_to_pull(
     assigned_keys = assigned_planning_keys(assigned_items)
 
     candidates: list[dict] = []
-    for raw in next_period_items:
+    for raw in candidate_items:
         item = normalize_planning_item(raw)
         if item.get("is_paid"):
             continue
-        if not item.get("can_pull_forward"):
+        if require_pull_forward_flag and not item.get("can_pull_forward"):
             continue
         entity = (item["item_type"], item["item_id"])
         if entity in assigned_entities:
