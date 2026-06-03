@@ -21,6 +21,7 @@ from app.services.paycheck_engine import (
     apply_planning_due_labels,
     assign_bills_to_paycheck,
     compute_available_to_pull,
+    normalize_planning_item,
 )
 
 
@@ -111,11 +112,13 @@ async def build_paycheck_planning_state(
 
     def _label_items(items: list[dict]) -> list[dict]:
         return [
-            apply_planning_due_labels(
-                item,
-                today=today,
-                cycle_year=cycle_year,
-                cycle_month=cycle_month,
+            normalize_planning_item(
+                apply_planning_due_labels(
+                    item,
+                    today=today,
+                    cycle_year=cycle_year,
+                    cycle_month=cycle_month,
+                )
             )
             for item in items
         ]
@@ -123,10 +126,7 @@ async def build_paycheck_planning_state(
     current_assigned = _label_items(current_assigned)
     next_period = _label_items(next_period)
 
-    available, remaining, total_due_visible = compute_available_to_pull(
-        next_period,
-        current_assigned,
-    )
+    available = compute_available_to_pull(next_period, current_assigned)
 
     bill_by_id = {b.id: b for b in bills}
     debt_by_id = {d.id: d for d in debts}
@@ -134,52 +134,102 @@ async def build_paycheck_planning_state(
     def _enrich_widget_row(item: dict) -> dict:
         row = dict(item)
         if item["item_type"] == "bill":
-            bill = bill_by_id.get(item["id"])
+            bill = bill_by_id.get(item["item_id"])
             if bill:
                 row["category"] = bill.category
         elif item["item_type"] == "debt":
-            debt = debt_by_id.get(item["id"])
+            debt = debt_by_id.get(item["item_id"])
             if debt:
                 row["category"] = getattr(debt, "type", None) or "Debt/Loan"
             else:
                 row["category"] = "Debt/Loan"
         return row
 
-    available_items = [_enrich_widget_row(i) for i in available]
+    available_for_pull = [
+        _enrich_widget_row(i) for i in available["available_items_for_pull"]
+    ]
+    available_visible = [
+        _enrich_widget_row(i) for i in available["available_visible_items"]
+    ]
 
-    paid_count = sum(1 for i in current_assigned if i.get("is_paid"))
-    total_count = len(current_assigned)
-    progress_percent = (
-        round(100.0 * paid_count / total_count, 1) if total_count else 0.0
+    assigned_paid_count = sum(1 for i in current_assigned if i.get("is_paid"))
+    assigned_total_count = len(current_assigned)
+    assigned_total_amount = sum(
+        (Decimal(str(i["amount"])) for i in current_assigned), Decimal("0")
+    )
+    assigned_paid_amount = sum(
+        (Decimal(str(i["amount"])) for i in current_assigned if i.get("is_paid")),
+        Decimal("0"),
+    )
+    assigned_still_owed = assigned_total_amount - assigned_paid_amount
+    assigned_progress_percent = (
+        round(100.0 * assigned_paid_count / assigned_total_count, 1)
+        if assigned_total_count
+        else 0.0
     )
 
     return {
         "assigned_items": current_assigned,
         "next_period_items": next_period,
-        "available_items": available_items,
-        "available_remaining_count": remaining,
-        "available_total_due": total_due_visible,
+        "available_items_for_pull": available_for_pull,
+        "available_visible_items": available_visible,
+        "available_remaining_count": available["available_remaining_count"],
+        "available_unpaid_count": available["available_unpaid_count"],
+        "available_total_due": available["available_total_due"],
+        "available_visible_total_due": available["available_visible_total_due"],
         "paid_bill_map": paid_bill_map,
-        "progress_percent": progress_percent,
-        "paid_count": paid_count,
-        "total_assigned_count": total_count,
+        "assigned_paid_count": assigned_paid_count,
+        "assigned_total_count": assigned_total_count,
+        "assigned_paid_amount": assigned_paid_amount,
+        "assigned_total_amount": assigned_total_amount,
+        "assigned_still_owed": assigned_still_owed,
+        "assigned_progress_percent": assigned_progress_percent,
+    }
+
+
+def build_current_paycheck_plan(
+    planning: dict[str, Any],
+    *,
+    paycheck_meta: dict[str, Any],
+    ctx: dict[str, Any],
+) -> dict[str, Any]:
+    """Unified current-paycheck object for dashboard assigned + pull widget."""
+    return {
+        "paycheck_date": paycheck_meta["paycheck_date"],
+        "pay_period_start": paycheck_meta.get("pay_period_start")
+        or paycheck_meta["paycheck_date"],
+        "pay_period_end": ctx.get("current_end"),
+        "next_paycheck_date": ctx.get("next_start"),
+        "paycheck_amount": paycheck_meta["paycheck_amount"],
+        "total_due": paycheck_meta.get("total_due", Decimal("0")),
+        "remaining": paycheck_meta.get("remaining", Decimal("0")),
+        "status": paycheck_meta.get("status", "on_track"),
+        "assigned_items": planning["assigned_items"],
+        "assigned_paid_count": planning["assigned_paid_count"],
+        "assigned_total_count": planning["assigned_total_count"],
+        "assigned_paid_amount": planning["assigned_paid_amount"],
+        "assigned_total_amount": planning["assigned_total_amount"],
+        "assigned_still_owed": planning["assigned_still_owed"],
+        "assigned_progress_percent": planning["assigned_progress_percent"],
+        "available_items_for_pull": planning["available_items_for_pull"],
+        "available_visible_items": planning["available_visible_items"],
+        "available_remaining_count": planning["available_remaining_count"],
+        "available_unpaid_count": planning["available_unpaid_count"],
+        "available_total_due": planning["available_total_due"],
+        "available_visible_total_due": planning["available_visible_total_due"],
     }
 
 
 def build_pull_forward_widget_payload(
-    planning: dict[str, Any],
-    *,
-    next_paycheck_date: date | None,
+    current: dict[str, Any],
 ) -> dict[str, Any]:
-    """Shape canonical planning state for the dashboard pull-forward widget."""
-    available = planning["available_items"]
-    remaining = planning["available_remaining_count"]
+    """Backward-compatible widget slice from current_paycheck."""
+    visible = current["available_visible_items"]
     return {
-        "next_paycheck_date": next_paycheck_date,
-        "total_due_for_visible_items": planning["available_total_due"],
-        "remaining_count": remaining,
-        "unpaid_count": len(available) + remaining,
-        "progress_percent": planning["progress_percent"],
-        "available_items": available,
-        "visible_items": available,
+        "next_paycheck_date": current.get("next_paycheck_date"),
+        "total_due_for_visible_items": current["available_visible_total_due"],
+        "remaining_count": current["available_remaining_count"],
+        "unpaid_count": current["available_unpaid_count"],
+        "available_items": visible,
+        "visible_items": visible,
     }

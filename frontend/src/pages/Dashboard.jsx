@@ -185,10 +185,10 @@ export default function Dashboard() {
       if (planRes.status === 'fulfilled') {
         const planData = augmentPaycheckPlan(planRes.value.data);
         setPaycheckPlan(planData);
-        if (planData?.paychecks?.[0]) {
-          const pp = planData.paychecks[0];
-          const payPeriodStart = pp.pay_period_start || pp.paycheck_date;
-          if (payPeriodStart) fetchChecklist(payPeriodStart, pp.assigned_items);
+        const current = planData?.current_paycheck || planData?.paychecks?.[0];
+        if (current) {
+          const payPeriodStart = current.pay_period_start || current.paycheck_date;
+          if (payPeriodStart) fetchChecklist(payPeriodStart, current.assigned_items);
         }
       } else {
         console.error('Paycheck plan fetch failed:', planRes.reason);
@@ -332,13 +332,17 @@ export default function Dashboard() {
     return `${paidCount}/${totalBillCount} bills paid \u00b7 ${fmtCurrency(paidBillsTotal)} of ${fmtCurrency(totalBills)}`;
   };
 
-  const currentPaycheckItems = (paycheckPlan?.paychecks?.[0]?.assigned_items) || [];
   const hasPaycheckPlan =
     Boolean(paycheckPlan)
     && (
-      (Array.isArray(paycheckPlan.paychecks) && paycheckPlan.paychecks.length > 0)
+      Boolean(paycheckPlan.current_paycheck)
+      || (Array.isArray(paycheckPlan.paychecks) && paycheckPlan.paychecks.length > 0)
       || paycheckPlan.current_paycheck_date
     );
+  const currentPaycheckItems =
+    paycheckPlan?.current_paycheck?.assigned_items
+    || paycheckPlan?.paychecks?.[0]?.assigned_items
+    || [];
   const billItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'bill');
   const debtItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'debt');
 
@@ -469,6 +473,7 @@ export default function Dashboard() {
             </div>
           )}
           <PaycheckWidget
+            currentPaycheck={paycheckPlan?.current_paycheck}
             widget={paycheckPlan?.pull_forward_widget}
             overrideBusyKey={overrideBusyKey}
             onPullForward={handlePullForward}
@@ -477,9 +482,9 @@ export default function Dashboard() {
           {hasPaycheckPlan ? (
             <div className="space-y-3">
               {(() => {
-                const next = paycheckPlan.paychecks[0];
-                const payPeriodStart = next.pay_period_start || next.paycheck_date;
-                const assignedItems = Array.isArray(next.assigned_items) ? next.assigned_items : [];
+                const current = paycheckPlan.current_paycheck || paycheckPlan.paychecks[0];
+                const payPeriodStart = current.pay_period_start || current.paycheck_date;
+                const assignedItems = Array.isArray(current.assigned_items) ? current.assigned_items : [];
 
                 const visibleItems = assignedItems.filter(
                   (item) => !(item.is_overdue && item.hidden_overdue && !assignItemPaid(item)),
@@ -495,35 +500,33 @@ export default function Dashboard() {
                   return new Date(a.due_date) - new Date(b.due_date);
                 });
 
-                const checkedCount = visibleItems.filter((item) => assignItemPaid(item)).length;
-                const totalItems = visibleItems.length;
-                const progressPct = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0;
+                const checkedCount = current.assigned_paid_count ?? visibleItems.filter((item) => assignItemPaid(item)).length;
+                const totalItems = current.assigned_total_count ?? visibleItems.length;
+                const progressPct = current.assigned_progress_percent ?? (totalItems > 0 ? (checkedCount / totalItems) * 100 : 0);
 
-                const totalAssignedAmount = visibleItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-                const paidAmount = visibleItems
-                  .filter((item) => assignItemPaid(item))
-                  .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-                const stillOwed = totalAssignedAmount - paidAmount;
+                const totalAssignedAmount = Number(current.assigned_total_amount ?? visibleItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0));
+                const paidAmount = Number(current.assigned_paid_amount ?? visibleItems.filter((item) => assignItemPaid(item)).reduce((sum, item) => sum + (Number(item.amount) || 0), 0));
+                const stillOwed = Number(current.assigned_still_owed ?? (totalAssignedAmount - paidAmount));
 
                 return (
                   <>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Pay Period</span>
                       <span className="font-medium text-gray-900">
-                        {formatPaycheckDate(next.paycheck_date)}
+                        {formatPaycheckDate(current.paycheck_date)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Paycheck Amount</span>
-                      <CurrencyDisplay amount={next.paycheck_amount} className="font-medium text-gray-900" />
+                      <CurrencyDisplay amount={current.paycheck_amount} className="font-medium text-gray-900" />
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Total Due</span>
-                      <CurrencyDisplay amount={next.total_due} className="font-medium text-gray-900" />
+                      <CurrencyDisplay amount={current.total_due} className="font-medium text-gray-900" />
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Remaining</span>
-                      <CurrencyDisplay amount={next.remaining} className={`font-medium ${Number(next.remaining) >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                      <CurrencyDisplay amount={current.remaining} className={`font-medium ${Number(current.remaining) >= 0 ? 'text-green-600' : 'text-red-600'}`} />
                     </div>
                     {totalItems > 0 && (
                       <div className="mt-4 pt-4 border-t border-gray-100">

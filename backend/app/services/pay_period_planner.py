@@ -32,6 +32,7 @@ from app.services.paycheck_engine import (
     occurrence_key,
 )
 from app.services.paycheck_planning_state import (
+    build_current_paycheck_plan,
     build_paycheck_planning_state,
     build_pull_forward_widget_payload,
 )
@@ -682,21 +683,63 @@ async def build_full_paycheck_plan_response(
 
         plan["paychecks"] = paychecks
 
-        plan["pull_forward_widget"] = build_pull_forward_widget_payload(
+        paycheck_meta = paychecks[0]
+        plan["current_paycheck"] = build_current_paycheck_plan(
             planning,
-            next_paycheck_date=ctx.get("next_start") or ctx["current_start"],
+            paycheck_meta=paycheck_meta,
+            ctx=ctx,
+        )
+        plan["pull_forward_widget"] = build_pull_forward_widget_payload(
+            plan["current_paycheck"],
         )
     elif paychecks:
-        plan["pull_forward_widget"] = {
-            "next_paycheck_date": paychecks[0]["paycheck_date"],
-            "total_due_for_visible_items": Decimal("0"),
-            "remaining_count": 0,
-            "unpaid_count": 0,
-            "progress_percent": 0.0,
-            "available_items": [],
-            "visible_items": [],
+        empty_current = {
+            "paycheck_date": paychecks[0]["paycheck_date"],
+            "pay_period_start": paychecks[0]["paycheck_date"],
+            "pay_period_end": None,
+            "next_paycheck_date": None,
+            "paycheck_amount": paychecks[0]["paycheck_amount"],
+            "total_due": paychecks[0].get("total_due", Decimal("0")),
+            "remaining": paychecks[0].get("remaining", Decimal("0")),
+            "status": paychecks[0].get("status", "on_track"),
+            "assigned_items": paychecks[0].get("assigned_items") or [],
+            "assigned_paid_count": sum(
+                1 for i in (paychecks[0].get("assigned_items") or []) if i.get("is_paid")
+            ),
+            "assigned_total_count": len(paychecks[0].get("assigned_items") or []),
+            "assigned_paid_amount": Decimal("0"),
+            "assigned_total_amount": Decimal("0"),
+            "assigned_still_owed": Decimal("0"),
+            "assigned_progress_percent": 0.0,
+            "available_items_for_pull": [],
+            "available_visible_items": [],
+            "available_remaining_count": 0,
+            "available_unpaid_count": 0,
+            "available_total_due": Decimal("0"),
+            "available_visible_total_due": Decimal("0"),
         }
+        assigned = empty_current["assigned_items"]
+        empty_current["assigned_total_amount"] = sum(
+            (Decimal(str(i["amount"])) for i in assigned), Decimal("0")
+        )
+        empty_current["assigned_paid_amount"] = sum(
+            (Decimal(str(i["amount"])) for i in assigned if i.get("is_paid")),
+            Decimal("0"),
+        )
+        empty_current["assigned_still_owed"] = (
+            empty_current["assigned_total_amount"] - empty_current["assigned_paid_amount"]
+        )
+        if empty_current["assigned_total_count"]:
+            empty_current["assigned_progress_percent"] = round(
+                100.0
+                * empty_current["assigned_paid_count"]
+                / empty_current["assigned_total_count"],
+                1,
+            )
+        plan["current_paycheck"] = empty_current
+        plan["pull_forward_widget"] = build_pull_forward_widget_payload(empty_current)
     else:
+        plan["current_paycheck"] = None
         plan["pull_forward_widget"] = None
 
     plan["budget_id"] = budget_id

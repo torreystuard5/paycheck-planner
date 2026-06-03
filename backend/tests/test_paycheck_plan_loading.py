@@ -101,10 +101,18 @@ class TestPaycheckPlanLoading(unittest.TestCase):
         planning = {
             "assigned_items": assigned,
             "next_period_items": [],
-            "available_items": [],
+            "available_items_for_pull": [],
+            "available_visible_items": [],
             "available_remaining_count": 0,
+            "available_unpaid_count": 0,
             "available_total_due": Decimal("0"),
-            "progress_percent": 0.0,
+            "available_visible_total_due": Decimal("0"),
+            "assigned_paid_count": 0,
+            "assigned_total_count": 1,
+            "assigned_paid_amount": Decimal("0"),
+            "assigned_total_amount": Decimal("800"),
+            "assigned_still_owed": Decimal("800"),
+            "assigned_progress_percent": 0.0,
         }
 
         async def run():
@@ -151,6 +159,7 @@ class TestPaycheckPlanLoading(unittest.TestCase):
 
             self.assertTrue(plan.get("paychecks"))
             self.assertEqual(len(plan["paychecks"][0]["assigned_items"]), 1)
+            self.assertIsNotNone(plan.get("current_paycheck"))
             self.assertIsNotNone(plan.get("pull_forward_widget"))
             PaycheckPlanResponse(**plan)
 

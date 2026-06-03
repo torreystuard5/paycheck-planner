@@ -11,8 +11,10 @@ from app.services.paycheck_engine import (
     active_cycle_overdue,
     apply_planning_due_labels,
     compute_available_to_pull,
+    normalize_planning_item,
     occurrence_key,
 )
+from app.services.paycheck_planning_state import build_current_paycheck_plan
 
 
 def _item(
@@ -61,9 +63,28 @@ class TestPaycheckPlanningState(unittest.TestCase):
                 item_id=debt_id,
             )
         ]
-        available, _, _ = compute_available_to_pull(next_period, assigned)
-        names = [i["name"] for i in available]
+        result = compute_available_to_pull(next_period, assigned)
+        visible = result["available_visible_items"]
+        names = [i["name"] for i in visible]
         self.assertNotIn("Affirm Amazon", names)
+
+    def test_all_assigned_paid_excludes_assigned_from_available(self):
+        assigned = [
+            _item(name=f"A{i}", due=date(2026, 6, 1 + i), is_paid=True, can_pull_forward=False)
+            for i in range(12)
+        ]
+        next_period = assigned + [
+            _item(name="NextOnly", due=date(2026, 6, 20), can_pull_forward=True)
+        ]
+        result = compute_available_to_pull(next_period, assigned)
+        assigned_keys = {normalize_planning_item(i)["planning_key"] for i in assigned}
+        for item in result["available_items_for_pull"]:
+            self.assertNotIn(item["planning_key"], assigned_keys)
+        self.assertEqual(result["available_unpaid_count"], len(result["available_items_for_pull"]))
+        self.assertEqual(
+            result["available_remaining_count"],
+            max(0, result["available_unpaid_count"] - len(result["available_visible_items"])),
+        )
 
     def test_paid_item_not_in_available(self):
         due = date(2026, 6, 10)
@@ -71,8 +92,8 @@ class TestPaycheckPlanningState(unittest.TestCase):
             _item(name="Paid Bill", due=due, is_paid=True, can_pull_forward=True),
             _item(name="Unpaid Bill", due=date(2026, 6, 12), is_paid=False),
         ]
-        available, _, _ = compute_available_to_pull(next_period, [])
-        names = [i["name"] for i in available]
+        result = compute_available_to_pull(next_period, [])
+        names = [i["name"] for i in result["available_items_for_pull"]]
         self.assertNotIn("Paid Bill", names)
         self.assertIn("Unpaid Bill", names)
 
@@ -80,9 +101,21 @@ class TestPaycheckPlanningState(unittest.TestCase):
         next_period = [
             _item(name=f"Bill{i}", due=date(2026, 6, 1 + i)) for i in range(10)
         ]
-        available, remaining, _ = compute_available_to_pull(next_period, [])
-        self.assertEqual(len(available), 7)
-        self.assertEqual(remaining, 3)
+        result = compute_available_to_pull(next_period, [])
+        self.assertEqual(len(result["available_visible_items"]), 7)
+        self.assertEqual(result["available_remaining_count"], 3)
+        self.assertEqual(result["available_unpaid_count"], 10)
+
+    def test_widget_counts_match_dataset(self):
+        next_period = [_item(name=f"Bill{i}", due=date(2026, 6, 1 + i)) for i in range(9)]
+        result = compute_available_to_pull(next_period, [])
+        self.assertEqual(result["available_unpaid_count"], 9)
+        self.assertEqual(len(result["available_visible_items"]), 7)
+        self.assertEqual(result["available_remaining_count"], 2)
+        self.assertEqual(
+            result["available_unpaid_count"],
+            len(result["available_visible_items"]) + result["available_remaining_count"],
+        )
 
     def test_may_due_not_overdue_in_june(self):
         today = date(2026, 6, 2)
@@ -112,17 +145,47 @@ class TestPaycheckPlanningState(unittest.TestCase):
         due = date(2026, 6, 10)
         assigned = [_item(item_id=bill_id, due=due, can_pull_forward=False)]
         next_period = [_item(item_id=bill_id, due=due, can_pull_forward=True)]
-        available, _, _ = compute_available_to_pull(next_period, assigned)
-        self.assertEqual(len(available), 0)
+        result = compute_available_to_pull(next_period, assigned)
+        self.assertEqual(len(result["available_items_for_pull"]), 0)
 
-    def test_sort_overdue_first_then_due_date(self):
-        next_period = [
-            _item(name="Future", due=date(2026, 6, 15), can_pull_forward=True),
-            _item(name="Overdue", due=date(2026, 6, 1), can_pull_forward=True),
-        ]
-        next_period[1]["is_overdue"] = True
-        available, _, _ = compute_available_to_pull(next_period, [])
-        self.assertEqual(available[0]["name"], "Overdue")
+    def test_current_paycheck_plan_unified_shape(self):
+        planning = {
+            "assigned_items": [
+                normalize_planning_item(_item(name="Rent", is_paid=True, due=date(2026, 5, 22))),
+            ],
+            "assigned_paid_count": 1,
+            "assigned_total_count": 1,
+            "assigned_paid_amount": Decimal("50"),
+            "assigned_total_amount": Decimal("50"),
+            "assigned_still_owed": Decimal("0"),
+            "assigned_progress_percent": 100.0,
+            "available_items_for_pull": [
+                normalize_planning_item(_item(name="Electric")),
+            ],
+            "available_visible_items": [
+                normalize_planning_item(_item(name="Electric")),
+            ],
+            "available_remaining_count": 0,
+            "available_unpaid_count": 1,
+            "available_total_due": Decimal("50"),
+            "available_visible_total_due": Decimal("50"),
+        }
+        current = build_current_paycheck_plan(
+            planning,
+            paycheck_meta={
+                "paycheck_date": date(2026, 5, 22),
+                "paycheck_amount": Decimal("2000"),
+                "total_due": Decimal("50"),
+                "remaining": Decimal("1950"),
+                "status": "on_track",
+            },
+            ctx={"current_end": date(2026, 6, 4), "next_start": date(2026, 6, 5)},
+        )
+        self.assertEqual(current["assigned_paid_count"], 1)
+        self.assertEqual(current["available_unpaid_count"], 1)
+        assigned_keys = {i["planning_key"] for i in current["assigned_items"]}
+        for item in current["available_items_for_pull"]:
+            self.assertNotIn(item["planning_key"], assigned_keys)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 class PaycheckItem(BaseModel):
     id: UUID
+    item_id: Optional[UUID] = None
     name: str
     item_type: str
     amount: Decimal
@@ -69,9 +70,32 @@ class PullForwardWidget(BaseModel):
     total_due_for_visible_items: Decimal = Decimal("0")
     remaining_count: int = 0
     unpaid_count: int = 0
-    progress_percent: float = 0.0
     available_items: list[PullForwardWidgetItem] = []
     visible_items: list[PullForwardWidgetItem] = []
+
+
+class CurrentPaycheckPlan(BaseModel):
+    paycheck_date: date
+    pay_period_start: date
+    pay_period_end: Optional[date] = None
+    next_paycheck_date: Optional[date] = None
+    paycheck_amount: Decimal
+    total_due: Decimal
+    remaining: Decimal
+    status: str
+    assigned_items: list[PaycheckItem]
+    assigned_paid_count: int = 0
+    assigned_total_count: int = 0
+    assigned_paid_amount: Decimal = Decimal("0")
+    assigned_total_amount: Decimal = Decimal("0")
+    assigned_still_owed: Decimal = Decimal("0")
+    assigned_progress_percent: float = 0.0
+    available_items_for_pull: list[PullForwardWidgetItem] = []
+    available_visible_items: list[PullForwardWidgetItem] = []
+    available_remaining_count: int = 0
+    available_unpaid_count: int = 0
+    available_total_due: Decimal = Decimal("0")
+    available_visible_total_due: Decimal = Decimal("0")
 
 
 class PaycheckPlanResponse(BaseModel):
@@ -85,4 +109,5 @@ class PaycheckPlanResponse(BaseModel):
     current_paycheck_date: Optional[date] = None
     next_paycheck_date: Optional[date] = None
     budget_id: Optional[UUID] = None
+    current_paycheck: Optional[CurrentPaycheckPlan] = None
     pull_forward_widget: Optional[PullForwardWidget] = None

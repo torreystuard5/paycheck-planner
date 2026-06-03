@@ -10,6 +10,7 @@ import calendar
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
+from uuid import UUID
 
 from app.services.bill_cycles import occurrence_dates_for_bill
 
@@ -605,6 +606,35 @@ def occurrence_key(item_type: str, item_id: UUID, due_date: date) -> str:
     return f"{item_type}:{item_id}:{due_date.isoformat()}"
 
 
+def planning_item_id(item: dict) -> UUID:
+    raw = item.get("item_id") or item.get("id")
+    return raw if isinstance(raw, UUID) else UUID(str(raw))
+
+
+def normalize_planning_item(item: dict) -> dict:
+    """Stable item_type + item_id + occurrence key for matching across lists."""
+    out = dict(item)
+    iid = planning_item_id(item)
+    due = parse_item_due_date(item)
+    out["item_id"] = iid
+    out["id"] = iid
+    out["occurrence_due_date"] = due
+    out["planning_key"] = occurrence_key(item["item_type"], iid, due)
+    return out
+
+
+def assigned_planning_keys(assigned_items: list[dict]) -> set[str]:
+    keys: set[str] = set()
+    for item in assigned_items:
+        normalized = normalize_planning_item(item)
+        keys.add(normalized["planning_key"])
+    return keys
+
+
+def assigned_entity_keys(assigned_items: list[dict]) -> set[tuple[str, UUID]]:
+    return {(i["item_type"], planning_item_id(i)) for i in assigned_items}
+
+
 def parse_item_due_date(item: dict) -> date:
     raw = item.get("due_date")
     if isinstance(raw, date):
@@ -627,15 +657,11 @@ def active_cycle_overdue(
 
 
 def assigned_identity_keys(assigned_items: list[dict]) -> set[tuple[str, UUID]]:
-    return {(i["item_type"], i["id"]) for i in assigned_items}
+    return assigned_entity_keys(assigned_items)
 
 
 def assigned_occurrence_keys(assigned_items: list[dict]) -> set[str]:
-    keys: set[str] = set()
-    for item in assigned_items:
-        due = parse_item_due_date(item)
-        keys.add(occurrence_key(item["item_type"], item["id"], due))
-    return keys
+    return assigned_planning_keys(assigned_items)
 
 
 def apply_planning_due_labels(
@@ -661,26 +687,26 @@ def compute_available_to_pull(
     assigned_items: list[dict],
     *,
     visible_limit: int = 7,
-) -> tuple[list[dict], int, Decimal]:
+) -> dict[str, Any]:
     """
     Available-to-pull = next-period pull-forward candidates minus assigned/paid.
 
     Both lists must come from the same planning pass (same paid flags).
     """
-    assigned_ids = assigned_identity_keys(assigned_items)
-    assigned_keys = assigned_occurrence_keys(assigned_items)
+    assigned_entities = assigned_entity_keys(assigned_items)
+    assigned_keys = assigned_planning_keys(assigned_items)
 
     candidates: list[dict] = []
-    for item in next_period_items:
+    for raw in next_period_items:
+        item = normalize_planning_item(raw)
         if item.get("is_paid"):
             continue
         if not item.get("can_pull_forward"):
             continue
-        due = parse_item_due_date(item)
-        key = occurrence_key(item["item_type"], item["id"], due)
-        if (item["item_type"], item["id"]) in assigned_ids:
+        entity = (item["item_type"], item["item_id"])
+        if entity in assigned_entities:
             continue
-        if key in assigned_keys:
+        if item["planning_key"] in assigned_keys:
             continue
         candidates.append(item)
 
@@ -692,5 +718,13 @@ def compute_available_to_pull(
     )
     visible = candidates[:visible_limit]
     remaining = max(0, len(candidates) - visible_limit)
-    total_due = sum((Decimal(str(i["amount"])) for i in visible), Decimal("0"))
-    return visible, remaining, total_due
+    visible_total = sum((Decimal(str(i["amount"])) for i in visible), Decimal("0"))
+    all_total = sum((Decimal(str(i["amount"])) for i in candidates), Decimal("0"))
+    return {
+        "available_items_for_pull": candidates,
+        "available_visible_items": visible,
+        "available_remaining_count": remaining,
+        "available_unpaid_count": len(candidates),
+        "available_total_due": all_total,
+        "available_visible_total_due": visible_total,
+    }

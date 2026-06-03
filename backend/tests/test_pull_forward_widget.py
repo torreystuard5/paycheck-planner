@@ -11,28 +11,10 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from app.services.paycheck_planning_state import (
+    build_current_paycheck_plan,
     build_paycheck_planning_state,
     build_pull_forward_widget_payload,
 )
-
-
-def _bill(**overrides):
-    data = {
-        "id": uuid4(),
-        "user_id": uuid4(),
-        "household_id": None,
-        "name": "Rent",
-        "amount": Decimal("800"),
-        "frequency": "monthly",
-        "due_day": 5,
-        "category": "Housing",
-        "auto_pay": False,
-        "payment_mode": "single",
-        "user_share_amount": Decimal("800"),
-        "is_user_responsible": True,
-    }
-    data.update(overrides)
-    return SimpleNamespace(**data)
 
 
 def _user(**overrides):
@@ -42,26 +24,23 @@ def _user(**overrides):
 
 
 class TestPullForwardWidget(unittest.TestCase):
-    def test_widget_payload_uses_available_items(self):
-        planning = {
-            "available_items": [{"name": "Rent", "amount": Decimal("800")}],
+    def test_widget_payload_matches_current_paycheck(self):
+        current = {
+            "next_paycheck_date": date(2026, 6, 5),
+            "available_visible_items": [{"name": "Rent", "amount": Decimal("800")}],
             "available_remaining_count": 2,
-            "available_total_due": Decimal("800"),
-            "progress_percent": 50.0,
+            "available_unpaid_count": 3,
+            "available_visible_total_due": Decimal("800"),
         }
-        payload = build_pull_forward_widget_payload(
-            planning, next_paycheck_date=date(2026, 6, 5)
-        )
-        self.assertEqual(len(payload["available_items"]), 1)
-        self.assertEqual(payload["visible_items"], payload["available_items"])
+        payload = build_pull_forward_widget_payload(current)
+        self.assertEqual(payload["unpaid_count"], 3)
         self.assertEqual(payload["remaining_count"], 2)
+        self.assertEqual(payload["available_items"], payload["visible_items"])
 
     def test_assigned_paid_debt_excluded_from_available(self):
         debt_id = uuid4()
         user = _user()
         due = date(2026, 6, 10)
-        current_start = date(2026, 5, 22)
-        next_start = date(2026, 6, 5)
 
         assigned_item = {
             "id": debt_id,
@@ -86,10 +65,10 @@ class TestPullForwardWidget(unittest.TestCase):
             db = AsyncMock()
             ctx = {
                 "bills": [],
-                "debts": [SimpleNamespace(id=debt_id, name="Affirm Amazon", category=None)],
-                "current_start": current_start,
+                "debts": [SimpleNamespace(id=debt_id, name="Affirm Amazon", type="other")],
+                "current_start": date(2026, 5, 22),
                 "current_end": date(2026, 6, 4),
-                "next_start": next_start,
+                "next_start": date(2026, 6, 5),
                 "next_end": date(2026, 6, 18),
                 "member_ids": [user.id],
             }
@@ -116,7 +95,7 @@ class TestPullForwardWidget(unittest.TestCase):
                 "app.services.pay_period_planner._apply_effective_lists",
                 return_value=([assigned_item], [next_item]),
             ):
-                state = await build_paycheck_planning_state(
+                planning = await build_paycheck_planning_state(
                     db,
                     user,
                     uuid4(),
@@ -125,15 +104,21 @@ class TestPullForwardWidget(unittest.TestCase):
                     today=date(2026, 6, 2),
                 )
 
-            widget = build_pull_forward_widget_payload(
-                state, next_paycheck_date=next_start
+            current = build_current_paycheck_plan(
+                planning,
+                paycheck_meta={
+                    "paycheck_date": date(2026, 5, 22),
+                    "paycheck_amount": Decimal("2000"),
+                    "total_due": Decimal("50"),
+                    "remaining": Decimal("1950"),
+                    "status": "on_track",
+                },
+                ctx=ctx,
             )
-            assigned_names = [i["name"] for i in state["assigned_items"]]
-            available_names = [i["name"] for i in widget["available_items"]]
-            self.assertIn("Affirm Amazon", assigned_names)
-            self.assertNotIn("Affirm Amazon", available_names)
-            overlap = set(assigned_names) & set(available_names)
-            self.assertEqual(len(overlap), 0)
+            assigned_keys = {i["planning_key"] for i in current["assigned_items"]}
+            for item in current["available_items_for_pull"]:
+                self.assertNotIn(item["planning_key"], assigned_keys)
+            self.assertEqual(current["assigned_paid_count"], 1)
 
         asyncio.run(run())
 

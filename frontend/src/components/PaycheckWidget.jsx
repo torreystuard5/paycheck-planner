@@ -75,10 +75,12 @@ function categoryMeta(item) {
 }
 
 function itemKey(item) {
-  return `${item.item_type}_${item.id}_${item.occurrence_due_date || item.due_date}`;
+  const id = item.item_id || item.id;
+  return `${item.item_type}_${id}_${item.occurrence_due_date || item.due_date}`;
 }
 
 export default function PaycheckWidget({
+  currentPaycheck,
   widget,
   overrideBusyKey,
   onPullForward,
@@ -87,10 +89,22 @@ export default function PaycheckWidget({
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(readCollapsedPreference);
 
-  if (!widget) return null;
+  const plan = currentPaycheck || null;
+  const visibleItems =
+    plan?.available_visible_items
+    || widget?.available_visible_items
+    || widget?.available_items
+    || widget?.visible_items
+    || [];
+  const remainingCount =
+    plan?.available_remaining_count ?? widget?.remaining_count ?? 0;
+  const unpaidCount =
+    plan?.available_unpaid_count ?? widget?.unpaid_count ?? visibleItems.length;
+  const visibleTotalDue =
+    plan?.available_visible_total_due ?? widget?.total_due_for_visible_items ?? 0;
+  const nextPayDate = plan?.next_paycheck_date ?? widget?.next_paycheck_date;
 
-  const visibleItems = widget.available_items || widget.visible_items || [];
-  const remainingCount = widget.remaining_count ?? 0;
+  if (!plan && !widget) return null;
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -104,9 +118,7 @@ export default function PaycheckWidget({
     });
   };
 
-  const nextPayLabel = widget.next_paycheck_date
-    ? formatPaycheckDate(widget.next_paycheck_date)
-    : '—';
+  const nextPayLabel = nextPayDate ? formatPaycheckDate(nextPayDate) : '—';
 
   const renderRow = (item) => {
     const meta = categoryMeta(item);
@@ -223,11 +235,11 @@ export default function PaycheckWidget({
             </span>
             <span className="text-gray-600 sm:text-right">
               <span className="font-semibold text-gray-900">
-                {fmt(widget.total_due_for_visible_items)}
+                {fmt(visibleTotalDue)}
               </span>
               {' due · '}
               <span className="font-medium text-gray-800">
-                {Math.min(visibleItems.length, widget.unpaid_count ?? visibleItems.length)} unpaid
+                {unpaidCount} to pull
               </span>
               {remainingCount > 0 && (
                 <span className="text-gray-500"> (+{remainingCount} more)</span>
@@ -235,18 +247,8 @@ export default function PaycheckWidget({
             </span>
           </div>
 
-          <div className="w-full h-1 rounded-full bg-gray-100 mb-3 overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-300"
-              style={{
-                width: `${Math.min(100, Math.max(0, widget.progress_percent ?? 0))}%`,
-                backgroundColor: TEAL,
-              }}
-            />
-          </div>
-
           {visibleItems.length === 0 ? (
-            <p className="text-sm text-gray-500 py-2">No unpaid bills or debts due right now.</p>
+            <p className="text-sm text-gray-500 py-2">Nothing available to pull into this paycheck.</p>
           ) : (
             <ul className="divide-y divide-gray-100 md:divide-y-0">
               {visibleItems.map((item) => renderRow(item))}
