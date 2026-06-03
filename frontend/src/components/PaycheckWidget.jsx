@@ -89,7 +89,7 @@ export default function PaycheckWidget({
 
   if (!widget) return null;
 
-  const visibleItems = widget.visible_items || [];
+  const visibleItems = widget.available_items || widget.visible_items || [];
   const remainingCount = widget.remaining_count ?? 0;
 
   const toggleCollapsed = () => {

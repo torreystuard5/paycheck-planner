@@ -70,6 +70,7 @@ class PullForwardWidget(BaseModel):
     remaining_count: int = 0
     unpaid_count: int = 0
     progress_percent: float = 0.0
+    available_items: list[PullForwardWidgetItem] = []
     visible_items: list[PullForwardWidgetItem] = []
 
 

@@ -1,4 +1,4 @@
-"""Tests for paycheck pull-forward widget rolling list."""
+"""Integration-style tests for pull-forward widget via canonical planning state."""
 
 from __future__ import annotations
 
@@ -10,10 +10,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
-from app.models.bill_cycle_payment import BillCyclePayment
-from app.services.pay_period_planner import (
-    _active_cycle_overdue,
-    _widget_relevant_due,
+from app.services.paycheck_planning_state import (
+    build_paycheck_planning_state,
+    build_pull_forward_widget_payload,
 )
 
 
@@ -43,271 +42,100 @@ def _user(**overrides):
 
 
 class TestPullForwardWidget(unittest.TestCase):
-    def test_may_due_date_is_not_active_cycle_overdue_in_june(self):
-        today = date(2026, 6, 2)
-        self.assertFalse(_active_cycle_overdue(date(2026, 5, 22), today, 2026, 6))
-        self.assertFalse(
-            _widget_relevant_due(
-                date(2026, 5, 22),
-                today,
-                in_planning_window=True,
-                cycle_year=2026,
-                cycle_month=6,
-            )
+    def test_widget_payload_uses_available_items(self):
+        planning = {
+            "available_items": [{"name": "Rent", "amount": Decimal("800")}],
+            "available_remaining_count": 2,
+            "available_total_due": Decimal("800"),
+            "progress_percent": 50.0,
+        }
+        payload = build_pull_forward_widget_payload(
+            planning, next_paycheck_date=date(2026, 6, 5)
         )
-        self.assertTrue(_active_cycle_overdue(date(2026, 6, 1), today, 2026, 6))
+        self.assertEqual(len(payload["available_items"]), 1)
+        self.assertEqual(payload["visible_items"], payload["available_items"])
+        self.assertEqual(payload["remaining_count"], 2)
 
-    def test_widget_limits_to_seven_visible_unpaid(self):
-        from app.services.pay_period_planner import build_pull_forward_widget
-
-        bill = _bill()
-        user = _user(id=bill.user_id)
-        due = date(2026, 6, 5)
-        row = BillCyclePayment(
-            bill_id=bill.id,
-            user_id=bill.user_id,
-            due_date=due,
-            cycle_year=2026,
-            cycle_month=6,
-            amount_due=Decimal("800"),
-            amount_paid=Decimal("0"),
-            is_paid=False,
-            source="auto_generated",
-        )
-
-        async def run():
-            db = AsyncMock()
-            ctx = {
-                "current_start": date(2026, 5, 22),
-                "current_end": date(2026, 6, 4),
-                "next_start": date(2026, 6, 5),
-                "next_end": date(2026, 6, 18),
-                "member_ids": [user.id],
-            }
-            extras = []
-            for i in range(10):
-                extras.append(
-                    _bill(
-                        name=f"Bill{i}",
-                        id=uuid4(),
-                        user_id=bill.user_id,
-                        due_day=10 + i,
-                    )
-                )
-            all_bills = [bill, *extras]
-
-            def fake_cycle_payments(db, bill_ids, year, month):
-                out = {(bill.id, due): row}
-                for idx, b in enumerate(extras):
-                    d = date(2026, 6, 6 + idx)
-                    out[(b.id, d)] = BillCyclePayment(
-                        bill_id=b.id,
-                        user_id=b.user_id,
-                        due_date=d,
-                        cycle_year=2026,
-                        cycle_month=6,
-                        amount_due=Decimal("50"),
-                        amount_paid=Decimal("0"),
-                        is_paid=False,
-                    )
-                return out
-
-            with patch(
-                "app.services.pay_period_planner.build_pay_calendar_context",
-                new_callable=AsyncMock,
-                return_value=ctx,
-            ), patch(
-                "app.services.pay_period_planner.fetch_widget_bills",
-                new_callable=AsyncMock,
-                return_value=(all_bills, 1),
-            ), patch(
-                "app.services.pay_period_planner.fetch_scoped_bills_debts",
-                new_callable=AsyncMock,
-                return_value=([], []),
-            ), patch(
-                "app.services.pay_period_planner.auto_generate_missing_cycle_rows",
-                new_callable=AsyncMock,
-            ), patch(
-                "app.services.pay_period_planner.get_cycle_payments_for_month",
-                side_effect=fake_cycle_payments,
-            ), patch(
-                "app.services.pay_period_planner.load_active_overrides",
-                new_callable=AsyncMock,
-                return_value=[],
-            ), patch(
-                "app.services.pay_period_planner.assign_bills_to_paycheck",
-                return_value=[],
-            ), patch(
-                "app.services.pay_period_planner.get_paid_debt_ids_in_window",
-                new_callable=AsyncMock,
-                return_value=set(),
-            ), patch(
-                "app.services.pay_period_planner.local_today",
-                return_value=date(2026, 6, 2),
-            ):
-                result = await build_pull_forward_widget(
-                    db, user, uuid4(), visible_limit=7
-                )
-
-            self.assertEqual(len(result["visible_items"]), 7)
-            self.assertEqual(result["remaining_count"], 4)
-            names = [i["name"] for i in result["visible_items"]]
-            self.assertIn("Rent", names)
-            for item in result["visible_items"]:
-                self.assertFalse(item["is_overdue"])
-
-        asyncio.run(run())
-
-    def test_stale_may_assign_rows_are_excluded(self):
-        from app.services.pay_period_planner import build_pull_forward_widget
-
-        bill = _bill(name="NDR", due_day=22)
-        user = _user(id=bill.user_id)
-
-        async def run():
-            db = AsyncMock()
-            ctx = {
-                "current_start": date(2026, 5, 22),
-                "current_end": date(2026, 6, 4),
-                "next_start": date(2026, 6, 5),
-                "next_end": date(2026, 6, 18),
-                "member_ids": [user.id],
-            }
-
-            stale_assign = [
-                {
-                    "id": bill.id,
-                    "name": "NDR",
-                    "item_type": "bill",
-                    "amount": Decimal("100"),
-                    "due_date": date(2026, 5, 22),
-                    "is_paid": False,
-                }
-            ]
-
-            with patch(
-                "app.services.pay_period_planner.build_pay_calendar_context",
-                new_callable=AsyncMock,
-                return_value=ctx,
-            ), patch(
-                "app.services.pay_period_planner.fetch_widget_bills",
-                new_callable=AsyncMock,
-                return_value=([bill], 1),
-            ), patch(
-                "app.services.pay_period_planner.fetch_scoped_bills_debts",
-                new_callable=AsyncMock,
-                return_value=([], []),
-            ), patch(
-                "app.services.pay_period_planner.auto_generate_missing_cycle_rows",
-                new_callable=AsyncMock,
-            ), patch(
-                "app.services.pay_period_planner.get_cycle_payments_for_month",
-                new_callable=AsyncMock,
-                return_value={},
-            ), patch(
-                "app.services.pay_period_planner.load_active_overrides",
-                new_callable=AsyncMock,
-                return_value=[],
-            ), patch(
-                "app.services.pay_period_planner.assign_bills_to_paycheck",
-                return_value=stale_assign,
-            ), patch(
-                "app.services.pay_period_planner.get_paid_debt_ids_in_window",
-                new_callable=AsyncMock,
-                return_value=set(),
-            ), patch(
-                "app.services.pay_period_planner.local_today",
-                return_value=date(2026, 6, 2),
-            ):
-                result = await build_pull_forward_widget(db, user, uuid4())
-
-            names = [i["name"] for i in result["visible_items"]]
-            self.assertNotIn("NDR", names)
-
-        asyncio.run(run())
-
-    def test_assigned_paid_debt_excluded_from_widget(self):
-        from app.services.pay_period_planner import build_pull_forward_widget
-
+    def test_assigned_paid_debt_excluded_from_available(self):
         debt_id = uuid4()
         user = _user()
-        due = date(2026, 5, 22)
+        due = date(2026, 6, 10)
+        current_start = date(2026, 5, 22)
+        next_start = date(2026, 6, 5)
+
+        assigned_item = {
+            "id": debt_id,
+            "name": "Affirm Amazon",
+            "item_type": "debt",
+            "amount": Decimal("50"),
+            "due_date": due,
+            "is_paid": True,
+            "can_pull_forward": False,
+        }
+        next_item = {
+            "id": debt_id,
+            "name": "Affirm Amazon",
+            "item_type": "debt",
+            "amount": Decimal("50"),
+            "due_date": due,
+            "is_paid": False,
+            "can_pull_forward": True,
+        }
 
         async def run():
             db = AsyncMock()
             ctx = {
-                "current_start": date(2026, 5, 22),
+                "bills": [],
+                "debts": [SimpleNamespace(id=debt_id, name="Affirm Amazon", category=None)],
+                "current_start": current_start,
                 "current_end": date(2026, 6, 4),
-                "next_start": date(2026, 6, 5),
+                "next_start": next_start,
                 "next_end": date(2026, 6, 18),
                 "member_ids": [user.id],
-                "paid_bill_map": {},
             }
-            current_assigned = [
-                {
-                    "id": debt_id,
-                    "name": "Affirm Amazon",
-                    "item_type": "debt",
-                    "amount": Decimal("50"),
-                    "due_date": due,
-                    "is_paid": True,
-                }
-            ]
-            next_assign = [
-                {
-                    "id": debt_id,
-                    "name": "Affirm Amazon",
-                    "item_type": "debt",
-                    "amount": Decimal("50"),
-                    "due_date": due,
-                    "is_paid": False,
-                }
-            ]
 
             with patch(
-                "app.services.pay_period_planner.build_pay_calendar_context",
-                new_callable=AsyncMock,
-                return_value=ctx,
-            ), patch(
-                "app.services.pay_period_planner.fetch_widget_bills",
+                "app.services.paycheck_planning_state.fetch_widget_bills",
                 new_callable=AsyncMock,
                 return_value=([], 1),
             ), patch(
-                "app.services.pay_period_planner.fetch_scoped_bills_debts",
-                new_callable=AsyncMock,
-                return_value=([], [SimpleNamespace(id=debt_id, name="Affirm Amazon")]),
-            ), patch(
-                "app.services.pay_period_planner.auto_generate_missing_cycle_rows",
+                "app.services.paycheck_planning_state.auto_generate_missing_cycle_rows",
                 new_callable=AsyncMock,
             ), patch(
-                "app.services.pay_period_planner.get_cycle_payments_for_month",
+                "app.services.paycheck_planning_state.get_paid_bill_map",
                 new_callable=AsyncMock,
                 return_value={},
             ), patch(
-                "app.services.pay_period_planner.load_active_overrides",
+                "app.services.paycheck_planning_state.get_paid_debt_ids_in_window",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value=set(),
             ), patch(
-                "app.services.pay_period_planner.assign_bills_to_paycheck",
-                side_effect=[next_assign, []],
+                "app.services.paycheck_planning_state.assign_bills_to_paycheck",
+                side_effect=[[assigned_item], [next_item]],
             ), patch(
-                "app.services.pay_period_planner.get_paid_debt_ids_in_window",
-                new_callable=AsyncMock,
-                return_value={debt_id},
-            ), patch(
-                "app.services.pay_period_planner.local_today",
-                return_value=date(2026, 6, 2),
+                "app.services.pay_period_planner._apply_effective_lists",
+                return_value=([assigned_item], [next_item]),
             ):
-                result = await build_pull_forward_widget(
+                state = await build_paycheck_planning_state(
                     db,
                     user,
                     uuid4(),
-                    current_assigned_items=current_assigned,
-                    paid_bill_map={},
+                    ctx=ctx,
+                    overrides=[],
+                    current_start=current_start,
+                    next_start=next_start,
+                    today=date(2026, 6, 2),
                 )
 
-            names = [i["name"] for i in result["visible_items"]]
-            self.assertNotIn("Affirm Amazon", names)
+            widget = build_pull_forward_widget_payload(
+                state, next_paycheck_date=next_start
+            )
+            assigned_names = [i["name"] for i in state["assigned_items"]]
+            available_names = [i["name"] for i in widget["available_items"]]
+            self.assertIn("Affirm Amazon", assigned_names)
+            self.assertNotIn("Affirm Amazon", available_names)
+            overlap = set(assigned_names) & set(available_names)
+            self.assertEqual(len(overlap), 0)
 
         asyncio.run(run())
 

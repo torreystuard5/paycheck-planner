@@ -594,3 +594,103 @@ async def build_paycheck_plan(
         "current_paycheck_date": current_paycheck_date,
         "next_paycheck_date": next_paycheck_date,
     }
+
+
+# ---------------------------------------------------------------------------
+# Canonical paycheck planning state (shared by assigned items + pull widget)
+# ---------------------------------------------------------------------------
+
+
+def occurrence_key(item_type: str, item_id: UUID, due_date: date) -> str:
+    return f"{item_type}:{item_id}:{due_date.isoformat()}"
+
+
+def parse_item_due_date(item: dict) -> date:
+    raw = item.get("due_date")
+    if isinstance(raw, date):
+        return raw
+    if isinstance(raw, datetime):
+        return raw.date()
+    return date.fromisoformat(str(raw)[:10])
+
+
+def active_cycle_overdue(
+    due_date: date,
+    today: date,
+    cycle_year: int,
+    cycle_month: int,
+) -> bool:
+    """Overdue only when due falls in the active calendar cycle and is before today."""
+    if due_date >= today:
+        return False
+    return due_date.year == cycle_year and due_date.month == cycle_month
+
+
+def assigned_identity_keys(assigned_items: list[dict]) -> set[tuple[str, UUID]]:
+    return {(i["item_type"], i["id"]) for i in assigned_items}
+
+
+def assigned_occurrence_keys(assigned_items: list[dict]) -> set[str]:
+    keys: set[str] = set()
+    for item in assigned_items:
+        due = parse_item_due_date(item)
+        keys.add(occurrence_key(item["item_type"], item["id"], due))
+    return keys
+
+
+def apply_planning_due_labels(
+    item: dict,
+    *,
+    today: date,
+    cycle_year: int,
+    cycle_month: int,
+) -> dict:
+    """Single place for overdue / due labels on planning items."""
+    out = dict(item)
+    due = parse_item_due_date(item)
+    days = (due - today).days
+    overdue = active_cycle_overdue(due, today, cycle_year, cycle_month)
+    out["is_overdue"] = overdue
+    out["due_status"] = "overdue" if overdue else "due"
+    out["days_until_due"] = days
+    return out
+
+
+def compute_available_to_pull(
+    next_period_items: list[dict],
+    assigned_items: list[dict],
+    *,
+    visible_limit: int = 7,
+) -> tuple[list[dict], int, Decimal]:
+    """
+    Available-to-pull = next-period pull-forward candidates minus assigned/paid.
+
+    Both lists must come from the same planning pass (same paid flags).
+    """
+    assigned_ids = assigned_identity_keys(assigned_items)
+    assigned_keys = assigned_occurrence_keys(assigned_items)
+
+    candidates: list[dict] = []
+    for item in next_period_items:
+        if item.get("is_paid"):
+            continue
+        if not item.get("can_pull_forward"):
+            continue
+        due = parse_item_due_date(item)
+        key = occurrence_key(item["item_type"], item["id"], due)
+        if (item["item_type"], item["id"]) in assigned_ids:
+            continue
+        if key in assigned_keys:
+            continue
+        candidates.append(item)
+
+    candidates.sort(
+        key=lambda x: (
+            0 if x.get("is_overdue") else 1,
+            parse_item_due_date(x),
+        )
+    )
+    visible = candidates[:visible_limit]
+    remaining = max(0, len(candidates) - visible_limit)
+    total_due = sum((Decimal(str(i["amount"])) for i in visible), Decimal("0"))
+    return visible, remaining, total_due

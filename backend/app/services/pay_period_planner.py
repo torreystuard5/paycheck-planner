@@ -11,7 +11,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.bill import Bill
 from app.models.pay_period_item_override import PayPeriodItemOverride
 from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.user import User
@@ -19,27 +18,23 @@ from app.services.pay_period_constants import OVERRIDE_PULL_FORWARD
 from app.services.paycheck_data import (
     fetch_paycheck_entries,
     fetch_scoped_bills_debts,
-    fetch_widget_bills,
     get_paid_bill_map,
     get_paid_debt_ids_in_window,
     household_member_ids,
     resolve_anchor_income,
 )
-from app.services.bill_cycles import (
-    auto_generate_missing_cycle_rows,
-    get_cycle_payments_for_month,
-    local_today,
-)
+from app.services.bill_cycles import local_today
 from app.services.paycheck_engine import (
     assign_bills_to_paycheck,
     build_paycheck_plan,
     generate_pay_dates,
     get_pay_period_window,
+    occurrence_key,
 )
-
-
-def occurrence_key(item_type: str, item_id: UUID, occurrence_due_date: date) -> str:
-    return f"{item_type}:{item_id}:{occurrence_due_date.isoformat()}"
+from app.services.paycheck_planning_state import (
+    build_paycheck_planning_state,
+    build_pull_forward_widget_payload,
+)
 
 
 def _parse_due(item: dict) -> date:
@@ -555,402 +550,6 @@ async def revert_pull_forward_by_id(
     )
 
 
-def _widget_bill_amount(bill: Bill, cycle_row: Any) -> Decimal:
-    base = Decimal(str(cycle_row.amount_due if cycle_row.amount_due is not None else bill.amount or 0))
-    share = getattr(bill, "user_share_amount", None)
-    full = Decimal(str(bill.amount or 0))
-    if share is None or full <= 0:
-        return base
-    if bill.payment_mode == "split" and bill.household_id:
-        return Decimal(str(share))
-    if full == base:
-        return Decimal(str(share)) if share else base
-    ratio = base / full
-    return (Decimal(str(share)) * ratio).quantize(Decimal("0.01"))
-
-
-def _widget_item_shell(
-    *,
-    item_id: UUID,
-    name: str,
-    item_type: str,
-    amount: Decimal,
-    due_date: date,
-    today: date,
-    category: str | None = None,
-    is_paid: bool = False,
-    can_pull_forward: bool = False,
-    can_revert_override: bool = False,
-    pulled_forward: bool = False,
-    auto_pay: bool = False,
-    is_overdue: bool = False,
-    is_carryover: bool = False,
-    carryover_label: str | None = None,
-) -> dict[str, Any]:
-    days = (due_date - today).days
-    if is_carryover:
-        due_status = "carryover"
-    elif is_overdue:
-        due_status = "overdue"
-    else:
-        due_status = "due"
-    return {
-        "id": item_id,
-        "name": name,
-        "item_type": item_type,
-        "amount": amount,
-        "due_date": due_date,
-        "occurrence_due_date": due_date,
-        "days_until_due": days,
-        "status": due_status,
-        "auto_pay": auto_pay,
-        "is_paid": is_paid,
-        "is_overdue": is_overdue,
-        "is_carryover": is_carryover,
-        "carryover_label": carryover_label,
-        "due_status": due_status,
-        "category": category or "Other",
-        "can_pull_forward": can_pull_forward,
-        "can_revert_override": can_revert_override,
-        "pulled_forward": pulled_forward,
-    }
-
-
-def _active_cycle_overdue(due_date: date, today: date, cycle_year: int, cycle_month: int) -> bool:
-    return (
-        cycle_year == today.year
-        and cycle_month == today.month
-        and due_date.year == cycle_year
-        and due_date.month == cycle_month
-        and due_date < today
-    )
-
-
-def _widget_relevant_due(
-    due_date: date,
-    today: date,
-    *,
-    in_planning_window: bool,
-    cycle_year: int | None = None,
-    cycle_month: int | None = None,
-) -> bool:
-    if due_date >= today:
-        return in_planning_window
-    if cycle_year is not None and cycle_month is not None:
-        return _active_cycle_overdue(due_date, today, cycle_year, cycle_month)
-    return False
-
-
-def _widget_sort_key(item: dict[str, Any]) -> tuple:
-    if item.get("is_overdue"):
-        return (0, item["due_date"])
-    return (1, item["due_date"])
-
-
-def _bill_occurrence_paid(
-    bill_id: UUID,
-    due_date: date,
-    paid_bill_map: dict[UUID, list[Any]],
-) -> bool:
-    for marker in paid_bill_map.get(bill_id, []):
-        if isinstance(marker, dict):
-            marker_due = marker.get("due_date")
-            if marker_due == due_date:
-                return True
-    return False
-
-
-def _widget_exclusion_sets(
-    current_assigned_items: list[dict] | None,
-    paid_bill_map: dict[UUID, list[Any]] | None,
-) -> tuple[set[str], set[tuple[str, UUID]], set[str]]:
-    """Keys and ids to exclude from pull-forward widget."""
-    assigned_keys: set[str] = set()
-    assigned_ids: set[tuple[str, UUID]] = set()
-    paid_keys: set[str] = set()
-    paid_map = paid_bill_map or {}
-
-    for item in current_assigned_items or []:
-        due = _parse_due(item)
-        key = occurrence_key(item["item_type"], item["id"], due)
-        assigned_keys.add(key)
-        assigned_ids.add((item["item_type"], item["id"]))
-        if item.get("is_paid"):
-            paid_keys.add(key)
-
-    for bill_id, markers in paid_map.items():
-        for marker in markers:
-            if isinstance(marker, dict):
-                marker_due = marker.get("due_date")
-                if isinstance(marker_due, date):
-                    paid_keys.add(occurrence_key("bill", bill_id, marker_due))
-
-    return assigned_keys, assigned_ids, paid_keys
-
-
-def _widget_item_excluded(
-    item_type: str,
-    item_id: UUID,
-    due_date: date,
-    *,
-    assigned_keys: set[str],
-    assigned_ids: set[tuple[str, UUID]],
-    paid_keys: set[str],
-    paid_bill_map: dict[UUID, list[Any]],
-    paid_debt_ids: set[UUID],
-) -> bool:
-    key = occurrence_key(item_type, item_id, due_date)
-    if (item_type, item_id) in assigned_ids:
-        return True
-    if key in assigned_keys:
-        return True
-    if key in paid_keys:
-        return True
-    if item_type == "bill" and _bill_occurrence_paid(item_id, due_date, paid_bill_map):
-        return True
-    if item_type == "debt" and item_id in paid_debt_ids:
-        return True
-    return False
-
-
-async def build_pull_forward_widget(
-    db: AsyncSession,
-    user: User,
-    budget_id: UUID,
-    visible_limit: int = 7,
-    *,
-    current_assigned_items: list[dict] | None = None,
-    paid_bill_map: dict[UUID, list[Any]] | None = None,
-) -> dict[str, Any]:
-    """Strict rolling next-7 unpaid list for the dashboard pull-forward widget."""
-    ctx = await build_pay_calendar_context(db, user, budget_id)
-    plan_paid_map = paid_bill_map if paid_bill_map is not None else ctx.get("paid_bill_map") or {}
-    all_bills, _member_count = await fetch_widget_bills(db, user, budget_id)
-    responsible_bills = [
-        b for b in all_bills if getattr(b, "is_user_responsible", True)
-    ]
-    _, debts = await fetch_scoped_bills_debts(db, user, budget_id)
-
-    today = local_today(user)
-    cycle_year, cycle_month = today.year, today.month
-
-    await auto_generate_missing_cycle_rows(
-        db, responsible_bills, user, cycle_year, cycle_month
-    )
-
-    cycle_payments = await get_cycle_payments_for_month(
-        db, [b.id for b in responsible_bills], cycle_year, cycle_month
-    )
-    bill_by_id = {b.id: b for b in responsible_bills}
-
-    paid_debt_ids_current = await get_paid_debt_ids_in_window(
-        db, [d.id for d in debts], ctx["current_start"], ctx["current_end"]
-    )
-    assigned_keys, assigned_ids, paid_keys = _widget_exclusion_sets(
-        current_assigned_items,
-        plan_paid_map,
-    )
-
-    def excluded(item_type: str, item_id: UUID, due_date: date) -> bool:
-        return _widget_item_excluded(
-            item_type,
-            item_id,
-            due_date,
-            assigned_keys=assigned_keys,
-            assigned_ids=assigned_ids,
-            paid_keys=paid_keys,
-            paid_bill_map=plan_paid_map,
-            paid_debt_ids=paid_debt_ids_current,
-        )
-
-    overrides = await load_active_overrides(db, user, budget_id)
-    omap = _override_map(overrides)
-    pulled_keys = {
-        k
-        for k, o in omap.items()
-        if o.effective_period_start == ctx["current_start"]
-        and o.natural_period_start == ctx.get("next_start")
-    }
-
-    next_start = ctx.get("next_start")
-    next_end = ctx.get("next_end")
-    planning_end = next_end or ctx["current_end"]
-
-    candidates: dict[str, dict[str, Any]] = {}
-
-    for (bill_id, due_date), row in cycle_payments.items():
-        if row.is_paid or _bill_occurrence_paid(bill_id, due_date, plan_paid_map):
-            continue
-        if excluded("bill", bill_id, due_date):
-            continue
-        bill = bill_by_id.get(bill_id)
-        if bill is None:
-            continue
-        in_window = due_date <= planning_end
-        if not _widget_relevant_due(
-            due_date,
-            today,
-            in_planning_window=in_window,
-            cycle_year=row.cycle_year,
-            cycle_month=row.cycle_month,
-        ):
-            continue
-        amount = _widget_bill_amount(bill, row)
-        if amount <= 0:
-            continue
-        key = occurrence_key("bill", bill_id, due_date)
-        in_next = bool(
-            next_start and next_end and next_start <= due_date <= next_end
-        )
-        on_current = ctx["current_start"] <= due_date <= ctx["current_end"]
-        overdue = _active_cycle_overdue(
-            due_date, today, row.cycle_year, row.cycle_month
-        )
-        candidates[key] = _widget_item_shell(
-            item_id=bill_id,
-            name=bill.name or "Bill",
-            item_type="bill",
-            amount=amount,
-            due_date=due_date,
-            today=today,
-            category=getattr(bill, "category", None),
-            auto_pay=bool(bill.auto_pay),
-            is_overdue=overdue,
-            can_pull_forward=bool(
-                in_next and not on_current and key not in pulled_keys
-            ),
-            can_revert_override=key in pulled_keys,
-            pulled_forward=key in pulled_keys,
-        )
-
-    paid_map_cycle_only: dict[UUID, list[Any]] = {}
-    for bill_id, markers in plan_paid_map.items():
-        paid_map_cycle_only[bill_id] = list(markers)
-    for (bill_id, due_date), row in cycle_payments.items():
-        if row.is_paid:
-            paid_map_cycle_only.setdefault(bill_id, []).append(
-                {
-                    "due_date": due_date,
-                    "paid_date": row.paid_date,
-                    "source": "bill_cycle_payments",
-                }
-            )
-
-    if next_start and next_end:
-        paid_next_debts = await get_paid_debt_ids_in_window(
-            db, [d.id for d in debts], next_start, next_end
-        )
-        next_items = assign_bills_to_paycheck(
-            responsible_bills,
-            debts,
-            next_start,
-            next_end,
-            today,
-            paid_debt_ids=paid_next_debts,
-            paid_bill_map=paid_map_cycle_only,
-        )
-        for item in next_items:
-            if item.get("is_paid"):
-                continue
-            due = _parse_due(item)
-            if due < today or due > planning_end:
-                continue
-            if excluded(item["item_type"], item["id"], due):
-                continue
-            key = occurrence_key(item["item_type"], item["id"], due)
-            if key in candidates:
-                continue
-            if item["item_type"] == "bill":
-                bill = bill_by_id.get(item["id"])
-                if bill is None:
-                    continue
-                amount = Decimal(
-                    str(getattr(bill, "user_share_amount", None) or item["amount"])
-                )
-                category = getattr(bill, "category", None)
-                auto_pay = bool(bill.auto_pay)
-            else:
-                amount = Decimal(str(item["amount"]))
-                category = "Debt/Loan"
-                auto_pay = False
-            if amount <= 0:
-                continue
-            candidates[key] = _widget_item_shell(
-                item_id=item["id"],
-                name=item["name"],
-                item_type=item["item_type"],
-                amount=amount,
-                due_date=due,
-                today=today,
-                category=category,
-                auto_pay=auto_pay,
-                is_overdue=False,
-                can_pull_forward=key not in pulled_keys,
-                can_revert_override=key in pulled_keys,
-                pulled_forward=key in pulled_keys,
-            )
-
-    current_debt_items = assign_bills_to_paycheck(
-        [],
-        debts,
-        ctx["current_start"],
-        ctx["current_end"],
-        today,
-        paid_debt_ids=paid_debt_ids_current,
-        paid_bill_map={},
-    )
-    for item in current_debt_items:
-        if item.get("item_type") != "debt" or item.get("is_paid"):
-            continue
-        due = _parse_due(item)
-        if due < today:
-            continue
-        if excluded("debt", item["id"], due):
-            continue
-        key = occurrence_key("debt", item["id"], due)
-        if key in candidates:
-            continue
-        candidates[key] = _widget_item_shell(
-            item_id=item["id"],
-            name=item["name"],
-            item_type="debt",
-            amount=Decimal(str(item["amount"])),
-            due_date=due,
-            today=today,
-            category="Debt/Loan",
-            is_overdue=False,
-            can_pull_forward=False,
-            can_revert_override=key in pulled_keys,
-            pulled_forward=key in pulled_keys,
-        )
-
-    unpaid_sorted = sorted(candidates.values(), key=_widget_sort_key)
-    visible = unpaid_sorted[:visible_limit]
-    remaining = max(0, len(unpaid_sorted) - visible_limit)
-    total_visible = sum(
-        (Decimal(str(i["amount"])) for i in visible), Decimal("0")
-    )
-
-    current_cycle_paid = sum(1 for row in cycle_payments.values() if row.is_paid)
-    current_cycle_total = len(cycle_payments)
-    current_debt_total = len(
-        [i for i in current_debt_items if i.get("item_type") == "debt"]
-    )
-    current_debt_paid = len(paid_debt_ids_current)
-    denom = current_cycle_total + current_debt_total
-    numer = current_cycle_paid + current_debt_paid
-    progress = (numer / denom * 100.0) if denom else 0.0
-
-    return {
-        "next_paycheck_date": next_start or ctx["current_start"],
-        "total_due_for_visible_items": total_visible,
-        "remaining_count": remaining,
-        "unpaid_count": len(unpaid_sorted),
-        "progress_percent": round(progress, 1),
-        "visible_items": visible,
-    }
-
-
 async def build_upcoming_paycheck_response(
     db: AsyncSession,
     user: User,
@@ -1003,40 +602,21 @@ async def build_full_paycheck_plan_response(
     if len(paychecks) >= 2:
         current_start = paychecks[0]["paycheck_date"]
         next_start = paychecks[1]["paycheck_date"]
-        today = date.today()
+        today = local_today(user)
 
         ctx = await build_pay_calendar_context(db, user, budget_id)
-        paid_current = await get_paid_debt_ids_in_window(
-            db, [d.id for d in debts], ctx["current_start"], ctx["current_end"]
+        planning = await build_paycheck_planning_state(
+            db,
+            user,
+            budget_id,
+            ctx=ctx,
+            overrides=overrides,
+            current_start=current_start,
+            next_start=next_start,
+            today=today,
         )
-        natural_current = await _build_natural_for_period(
-            bills,
-            debts,
-            ctx["current_start"],
-            ctx["current_end"],
-            today,
-            ctx["paid_bill_map"],
-            paid_current,
-        )
-        paid_next = await get_paid_debt_ids_in_window(
-            db, [d.id for d in debts], ctx["next_start"], ctx["next_end"]
-        )
-        natural_next = await _build_natural_for_period(
-            bills,
-            debts,
-            ctx["next_start"],
-            ctx["next_end"],
-            today,
-            ctx["paid_bill_map"],
-            paid_next,
-        )
-        current_items, next_items = _apply_effective_lists(
-            natural_current,
-            natural_next,
-            current_start,
-            next_start,
-            overrides,
-        )
+        current_items = planning["assigned_items"]
+        next_items = planning["next_period_items"]
 
         anchor = paychecks[0]["paycheck_date"]
         all_dates = generate_pay_dates(anchor, plan["pay_frequency"], len(paychecks) + 1)
@@ -1095,15 +675,12 @@ async def build_full_paycheck_plan_response(
 
         plan["paychecks"] = paychecks
 
-        plan["pull_forward_widget"] = await build_pull_forward_widget(
-            db,
-            user,
-            budget_id,
-            current_assigned_items=paychecks[0].get("assigned_items") or [],
-            paid_bill_map=ctx["paid_bill_map"],
+        plan["pull_forward_widget"] = build_pull_forward_widget_payload(
+            planning,
+            next_paycheck_date=next_start,
         )
     else:
-        plan["pull_forward_widget"] = await build_pull_forward_widget(db, user, budget_id)
+        plan["pull_forward_widget"] = None
 
     plan["budget_id"] = budget_id
     return plan
