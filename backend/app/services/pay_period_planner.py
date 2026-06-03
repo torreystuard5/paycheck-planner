@@ -11,6 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.bill import Bill
 from app.models.pay_period_item_override import PayPeriodItemOverride
 from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.user import User
