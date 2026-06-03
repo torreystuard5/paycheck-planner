@@ -122,8 +122,6 @@ class TestPullForwardWidget(unittest.TestCase):
                     uuid4(),
                     ctx=ctx,
                     overrides=[],
-                    current_start=current_start,
-                    next_start=next_start,
                     today=date(2026, 6, 2),
                 )
 

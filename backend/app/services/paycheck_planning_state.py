@@ -31,8 +31,6 @@ async def build_paycheck_planning_state(
     *,
     ctx: dict[str, Any],
     overrides: list[PayPeriodItemOverride],
-    current_start: date,
-    next_start: date | None,
     today: date,
 ) -> dict[str, Any]:
     """
@@ -45,8 +43,10 @@ async def build_paycheck_planning_state(
 
     bills = ctx["bills"]
     debts = ctx["debts"]
+    current_start = ctx["current_start"]
     current_end = ctx["current_end"]
-    next_end = ctx["next_end"]
+    next_start = ctx.get("next_start")
+    next_end = ctx.get("next_end")
 
     cycle_year = today.year
     cycle_month = today.month
@@ -140,7 +140,7 @@ async def build_paycheck_planning_state(
         elif item["item_type"] == "debt":
             debt = debt_by_id.get(item["id"])
             if debt:
-                row["category"] = debt.category or "Debt/Loan"
+                row["category"] = getattr(debt, "type", None) or "Debt/Loan"
             else:
                 row["category"] = "Debt/Loan"
         return row

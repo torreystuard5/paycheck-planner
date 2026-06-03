@@ -12,6 +12,7 @@ import PaycheckWidget from '../components/PaycheckWidget';
 import usePolling from '../hooks/usePolling';
 import { formatDate, formatPaycheckDate } from '../utils/formatDate';
 import { augmentPaycheckPlan } from '../utils/paycheckPlanItems';
+import { formatApiError } from '../utils/formatApiError';
 
 const fmtCurrency = (val) => {
   const n = Number(val);
@@ -189,6 +190,10 @@ export default function Dashboard() {
           const payPeriodStart = pp.pay_period_start || pp.paycheck_date;
           if (payPeriodStart) fetchChecklist(payPeriodStart, pp.assigned_items);
         }
+      } else {
+        console.error('Paycheck plan fetch failed:', planRes.reason);
+        const msg = formatApiError(planRes.reason);
+        setError(msg || 'Failed to load paycheck plan.');
       }
       if (creditRes.status === 'fulfilled') setCreditScore(creditRes.value.data);
 
@@ -328,6 +333,12 @@ export default function Dashboard() {
   };
 
   const currentPaycheckItems = (paycheckPlan?.paychecks?.[0]?.assigned_items) || [];
+  const hasPaycheckPlan =
+    Boolean(paycheckPlan)
+    && (
+      (Array.isArray(paycheckPlan.paychecks) && paycheckPlan.paychecks.length > 0)
+      || paycheckPlan.current_paycheck_date
+    );
   const billItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'bill');
   const debtItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'debt');
 
@@ -463,7 +474,7 @@ export default function Dashboard() {
             onPullForward={handlePullForward}
             onRevert={handleRevertOverride}
           />
-          {paycheckPlan && Array.isArray(paycheckPlan.paychecks) && paycheckPlan.paychecks.length > 0 ? (
+          {hasPaycheckPlan ? (
             <div className="space-y-3">
               {(() => {
                 const next = paycheckPlan.paychecks[0];

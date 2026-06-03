@@ -107,7 +107,7 @@ def _apply_effective_lists(
     natural_current: list[dict],
     natural_next: list[dict],
     current_start: date,
-    next_start: date,
+    next_start: date | None,
     overrides: list[PayPeriodItemOverride],
 ) -> tuple[list[dict], list[dict]]:
     """Build effective current and next item lists (no double counting)."""
@@ -599,22 +599,29 @@ async def build_full_paycheck_plan_response(
 
     overrides = await load_active_overrides(db, user, budget_id)
     paychecks = plan.get("paychecks") or []
-    if len(paychecks) >= 2:
-        current_start = paychecks[0]["paycheck_date"]
-        next_start = paychecks[1]["paycheck_date"]
-        today = local_today(user)
+    planning: dict[str, Any] | None = None
+    ctx: dict[str, Any] | None = None
 
-        ctx = await build_pay_calendar_context(db, user, budget_id)
-        planning = await build_paycheck_planning_state(
-            db,
-            user,
-            budget_id,
-            ctx=ctx,
-            overrides=overrides,
-            current_start=current_start,
-            next_start=next_start,
-            today=today,
-        )
+    if paychecks:
+        today = local_today(user)
+        try:
+            ctx = await build_pay_calendar_context(db, user, budget_id)
+            planning = await build_paycheck_planning_state(
+                db,
+                user,
+                budget_id,
+                ctx=ctx,
+                overrides=overrides,
+                today=today,
+            )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "paycheck planning state failed; using base plan assignments"
+            )
+
+    if paychecks and planning and ctx:
         current_items = planning["assigned_items"]
         next_items = planning["next_period_items"]
 
@@ -677,8 +684,18 @@ async def build_full_paycheck_plan_response(
 
         plan["pull_forward_widget"] = build_pull_forward_widget_payload(
             planning,
-            next_paycheck_date=next_start,
+            next_paycheck_date=ctx.get("next_start") or ctx["current_start"],
         )
+    elif paychecks:
+        plan["pull_forward_widget"] = {
+            "next_paycheck_date": paychecks[0]["paycheck_date"],
+            "total_due_for_visible_items": Decimal("0"),
+            "remaining_count": 0,
+            "unpaid_count": 0,
+            "progress_percent": 0.0,
+            "available_items": [],
+            "visible_items": [],
+        }
     else:
         plan["pull_forward_widget"] = None
 
