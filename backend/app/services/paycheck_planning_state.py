@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -13,7 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.pay_period_item_override import PayPeriodItemOverride
 from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.user import User
-from app.services.bill_cycles import auto_generate_missing_cycle_rows
+from app.services.bill_cycles import (
+    auto_generate_missing_cycle_rows,
+    auto_generate_missing_cycle_rows_for_window,
+    get_cycle_payments,
+)
 from app.services.paycheck_data import (
     fetch_widget_bills,
     get_paid_bill_map,
@@ -147,7 +151,64 @@ async def build_paycheck_planning_state(
 
     current_assigned = _label_items(current_assigned)
     next_period = _label_items(next_period)
-    current_candidates = _label_items(natural_current)
+
+    widget_window_end = (
+        next_start - timedelta(days=1) if next_start is not None else current_end
+    )
+    await auto_generate_missing_cycle_rows_for_window(
+        db, responsible, user, current_start, widget_window_end
+    )
+    cycle_rows = await get_cycle_payments(
+        db, [b.id for b in responsible], current_start, widget_window_end
+    )
+    bill_by_id = {b.id: b for b in bills}
+
+    bill_candidates: list[dict[str, Any]] = []
+    for (bill_id, due_date), row in cycle_rows.items():
+        bill = bill_by_id.get(bill_id)
+        if bill is None or getattr(bill, "is_active", True) is False:
+            continue
+        full_amount = Decimal(str(getattr(bill, "amount", None) or row.amount_due or 0))
+        user_amount = getattr(bill, "user_share_amount", None)
+        if user_amount is None:
+            user_amount = row.amount_due if row.amount_due is not None else full_amount
+        is_split = (
+            getattr(bill, "payment_mode", "single") == "split"
+            and getattr(bill, "household_id", None) is not None
+        )
+        bill_candidates.append(
+            {
+                "id": bill.id,
+                "item_id": bill.id,
+                "cycle_payment_id": getattr(row, "id", None),
+                "name": bill.name,
+                "item_type": "bill",
+                "amount": Decimal(str(user_amount or 0)),
+                "full_amount": full_amount if is_split else None,
+                "due_date": due_date,
+                "days_until_due": (due_date - today).days,
+                "status": "due",
+                "auto_pay": bool(getattr(bill, "auto_pay", False)),
+                "is_split": is_split,
+                "split_count": getattr(bill, "split_member_count", 1) or 1,
+                "is_paid": bool(getattr(row, "is_paid", False)),
+                "is_overdue": False,
+                "hidden_overdue": bool(getattr(bill, "hidden_overdue", False)),
+                "can_pull_forward": True,
+            }
+        )
+
+    active_debts = [d for d in debts if getattr(d, "is_active", True) is not False]
+    debt_candidates = assign_bills_to_paycheck(
+        [],
+        active_debts,
+        current_start,
+        widget_window_end,
+        today,
+        paid_debt_ids=paid_current,
+        paid_bill_map={},
+    )
+    current_candidates = _label_items([*bill_candidates, *debt_candidates])
 
     widget_state = build_paycheck_widget_state(
         current_paycheck_date=current_start,

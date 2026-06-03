@@ -106,7 +106,7 @@ class TestPullForwardWidget(unittest.TestCase):
                 return_value=set(),
             ), patch(
                 "app.services.paycheck_planning_state.assign_bills_to_paycheck",
-                side_effect=[[assigned_item], [next_item]],
+                side_effect=[[assigned_item], [next_item], []],
             ), patch(
                 "app.services.pay_period_planner._apply_effective_lists",
                 return_value=([assigned_item], [next_item]),

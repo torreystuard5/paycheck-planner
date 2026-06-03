@@ -155,6 +155,34 @@ class TestPaycheckPlanningState(unittest.TestCase):
 
         self.assertEqual([i["name"] for i in result["widget_items"]], ["Open"])
 
+    def test_example_bill_jun2_and_debt_jun3_appear_when_unassigned_unpaid(self):
+        current = date(2026, 5, 21)
+        next_paycheck = date(2026, 6, 4)
+        bill = _item(
+            item_type="bill",
+            name="Affirm Best Buy",
+            due=date(2026, 6, 2),
+        )
+        debt = _item(
+            item_type="debt",
+            name="Capital One 8545",
+            due=date(2026, 6, 3),
+        )
+
+        result = build_paycheck_widget_state(
+            current_paycheck_date=current,
+            next_paycheck_date=next_paycheck,
+            candidate_items=[bill, debt],
+            assigned_items=[],
+        )
+
+        self.assertEqual(
+            [item["name"] for item in result["widget_items"]],
+            ["Affirm Best Buy", "Capital One 8545"],
+        )
+        self.assertEqual(result["widget_total_count"], 2)
+        self.assertEqual(result["widget_total_due"], Decimal("100"))
+
     def test_widget_debug_payload_exposes_candidates_and_filtered_rows(self):
         current = date(2026, 5, 21)
         next_paycheck = date(2026, 6, 4)
