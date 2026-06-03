@@ -647,14 +647,84 @@ def _widget_sort_key(item: dict[str, Any]) -> tuple:
     return (1, item["due_date"])
 
 
+def _bill_occurrence_paid(
+    bill_id: UUID,
+    due_date: date,
+    paid_bill_map: dict[UUID, list[Any]],
+) -> bool:
+    for marker in paid_bill_map.get(bill_id, []):
+        if isinstance(marker, dict):
+            marker_due = marker.get("due_date")
+            if marker_due == due_date:
+                return True
+    return False
+
+
+def _widget_exclusion_sets(
+    current_assigned_items: list[dict] | None,
+    paid_bill_map: dict[UUID, list[Any]] | None,
+) -> tuple[set[str], set[tuple[str, UUID]], set[str]]:
+    """Keys and ids to exclude from pull-forward widget."""
+    assigned_keys: set[str] = set()
+    assigned_ids: set[tuple[str, UUID]] = set()
+    paid_keys: set[str] = set()
+    paid_map = paid_bill_map or {}
+
+    for item in current_assigned_items or []:
+        due = _parse_due(item)
+        key = occurrence_key(item["item_type"], item["id"], due)
+        assigned_keys.add(key)
+        assigned_ids.add((item["item_type"], item["id"]))
+        if item.get("is_paid"):
+            paid_keys.add(key)
+
+    for bill_id, markers in paid_map.items():
+        for marker in markers:
+            if isinstance(marker, dict):
+                marker_due = marker.get("due_date")
+                if isinstance(marker_due, date):
+                    paid_keys.add(occurrence_key("bill", bill_id, marker_due))
+
+    return assigned_keys, assigned_ids, paid_keys
+
+
+def _widget_item_excluded(
+    item_type: str,
+    item_id: UUID,
+    due_date: date,
+    *,
+    assigned_keys: set[str],
+    assigned_ids: set[tuple[str, UUID]],
+    paid_keys: set[str],
+    paid_bill_map: dict[UUID, list[Any]],
+    paid_debt_ids: set[UUID],
+) -> bool:
+    key = occurrence_key(item_type, item_id, due_date)
+    if (item_type, item_id) in assigned_ids:
+        return True
+    if key in assigned_keys:
+        return True
+    if key in paid_keys:
+        return True
+    if item_type == "bill" and _bill_occurrence_paid(item_id, due_date, paid_bill_map):
+        return True
+    if item_type == "debt" and item_id in paid_debt_ids:
+        return True
+    return False
+
+
 async def build_pull_forward_widget(
     db: AsyncSession,
     user: User,
     budget_id: UUID,
     visible_limit: int = 7,
+    *,
+    current_assigned_items: list[dict] | None = None,
+    paid_bill_map: dict[UUID, list[Any]] | None = None,
 ) -> dict[str, Any]:
     """Strict rolling next-7 unpaid list for the dashboard pull-forward widget."""
     ctx = await build_pay_calendar_context(db, user, budget_id)
+    plan_paid_map = paid_bill_map if paid_bill_map is not None else ctx.get("paid_bill_map") or {}
     all_bills, _member_count = await fetch_widget_bills(db, user, budget_id)
     responsible_bills = [
         b for b in all_bills if getattr(b, "is_user_responsible", True)
@@ -673,6 +743,26 @@ async def build_pull_forward_widget(
     )
     bill_by_id = {b.id: b for b in responsible_bills}
 
+    paid_debt_ids_current = await get_paid_debt_ids_in_window(
+        db, [d.id for d in debts], ctx["current_start"], ctx["current_end"]
+    )
+    assigned_keys, assigned_ids, paid_keys = _widget_exclusion_sets(
+        current_assigned_items,
+        plan_paid_map,
+    )
+
+    def excluded(item_type: str, item_id: UUID, due_date: date) -> bool:
+        return _widget_item_excluded(
+            item_type,
+            item_id,
+            due_date,
+            assigned_keys=assigned_keys,
+            assigned_ids=assigned_ids,
+            paid_keys=paid_keys,
+            paid_bill_map=plan_paid_map,
+            paid_debt_ids=paid_debt_ids_current,
+        )
+
     overrides = await load_active_overrides(db, user, budget_id)
     omap = _override_map(overrides)
     pulled_keys = {
@@ -689,7 +779,9 @@ async def build_pull_forward_widget(
     candidates: dict[str, dict[str, Any]] = {}
 
     for (bill_id, due_date), row in cycle_payments.items():
-        if row.is_paid:
+        if row.is_paid or _bill_occurrence_paid(bill_id, due_date, plan_paid_map):
+            continue
+        if excluded("bill", bill_id, due_date):
             continue
         bill = bill_by_id.get(bill_id)
         if bill is None:
@@ -732,6 +824,8 @@ async def build_pull_forward_widget(
         )
 
     paid_map_cycle_only: dict[UUID, list[Any]] = {}
+    for bill_id, markers in plan_paid_map.items():
+        paid_map_cycle_only[bill_id] = list(markers)
     for (bill_id, due_date), row in cycle_payments.items():
         if row.is_paid:
             paid_map_cycle_only.setdefault(bill_id, []).append(
@@ -760,6 +854,8 @@ async def build_pull_forward_widget(
                 continue
             due = _parse_due(item)
             if due < today or due > planning_end:
+                continue
+            if excluded(item["item_type"], item["id"], due):
                 continue
             key = occurrence_key(item["item_type"], item["id"], due)
             if key in candidates:
@@ -794,16 +890,13 @@ async def build_pull_forward_widget(
                 pulled_forward=key in pulled_keys,
             )
 
-    paid_debt_ids = await get_paid_debt_ids_in_window(
-        db, [d.id for d in debts], ctx["current_start"], ctx["current_end"]
-    )
     current_debt_items = assign_bills_to_paycheck(
         [],
         debts,
         ctx["current_start"],
         ctx["current_end"],
         today,
-        paid_debt_ids=paid_debt_ids,
+        paid_debt_ids=paid_debt_ids_current,
         paid_bill_map={},
     )
     for item in current_debt_items:
@@ -811,6 +904,8 @@ async def build_pull_forward_widget(
             continue
         due = _parse_due(item)
         if due < today:
+            continue
+        if excluded("debt", item["id"], due):
             continue
         key = occurrence_key("debt", item["id"], due)
         if key in candidates:
@@ -841,7 +936,7 @@ async def build_pull_forward_widget(
     current_debt_total = len(
         [i for i in current_debt_items if i.get("item_type") == "debt"]
     )
-    current_debt_paid = len(paid_debt_ids)
+    current_debt_paid = len(paid_debt_ids_current)
     denom = current_cycle_total + current_debt_total
     numer = current_cycle_paid + current_debt_paid
     progress = (numer / denom * 100.0) if denom else 0.0
@@ -1000,6 +1095,15 @@ async def build_full_paycheck_plan_response(
 
         plan["paychecks"] = paychecks
 
+        plan["pull_forward_widget"] = await build_pull_forward_widget(
+            db,
+            user,
+            budget_id,
+            current_assigned_items=paychecks[0].get("assigned_items") or [],
+            paid_bill_map=ctx["paid_bill_map"],
+        )
+    else:
+        plan["pull_forward_widget"] = await build_pull_forward_widget(db, user, budget_id)
+
     plan["budget_id"] = budget_id
-    plan["pull_forward_widget"] = await build_pull_forward_widget(db, user, budget_id)
     return plan

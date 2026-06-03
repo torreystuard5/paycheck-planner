@@ -226,6 +226,91 @@ class TestPullForwardWidget(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_assigned_paid_debt_excluded_from_widget(self):
+        from app.services.pay_period_planner import build_pull_forward_widget
+
+        debt_id = uuid4()
+        user = _user()
+        due = date(2026, 5, 22)
+
+        async def run():
+            db = AsyncMock()
+            ctx = {
+                "current_start": date(2026, 5, 22),
+                "current_end": date(2026, 6, 4),
+                "next_start": date(2026, 6, 5),
+                "next_end": date(2026, 6, 18),
+                "member_ids": [user.id],
+                "paid_bill_map": {},
+            }
+            current_assigned = [
+                {
+                    "id": debt_id,
+                    "name": "Affirm Amazon",
+                    "item_type": "debt",
+                    "amount": Decimal("50"),
+                    "due_date": due,
+                    "is_paid": True,
+                }
+            ]
+            next_assign = [
+                {
+                    "id": debt_id,
+                    "name": "Affirm Amazon",
+                    "item_type": "debt",
+                    "amount": Decimal("50"),
+                    "due_date": due,
+                    "is_paid": False,
+                }
+            ]
+
+            with patch(
+                "app.services.pay_period_planner.build_pay_calendar_context",
+                new_callable=AsyncMock,
+                return_value=ctx,
+            ), patch(
+                "app.services.pay_period_planner.fetch_widget_bills",
+                new_callable=AsyncMock,
+                return_value=([], 1),
+            ), patch(
+                "app.services.pay_period_planner.fetch_scoped_bills_debts",
+                new_callable=AsyncMock,
+                return_value=([], [SimpleNamespace(id=debt_id, name="Affirm Amazon")]),
+            ), patch(
+                "app.services.pay_period_planner.auto_generate_missing_cycle_rows",
+                new_callable=AsyncMock,
+            ), patch(
+                "app.services.pay_period_planner.get_cycle_payments_for_month",
+                new_callable=AsyncMock,
+                return_value={},
+            ), patch(
+                "app.services.pay_period_planner.load_active_overrides",
+                new_callable=AsyncMock,
+                return_value=[],
+            ), patch(
+                "app.services.pay_period_planner.assign_bills_to_paycheck",
+                side_effect=[next_assign, []],
+            ), patch(
+                "app.services.pay_period_planner.get_paid_debt_ids_in_window",
+                new_callable=AsyncMock,
+                return_value={debt_id},
+            ), patch(
+                "app.services.pay_period_planner.local_today",
+                return_value=date(2026, 6, 2),
+            ):
+                result = await build_pull_forward_widget(
+                    db,
+                    user,
+                    uuid4(),
+                    current_assigned_items=current_assigned,
+                    paid_bill_map={},
+                )
+
+            names = [i["name"] for i in result["visible_items"]]
+            self.assertNotIn("Affirm Amazon", names)
+
+        asyncio.run(run())
+
 
 if __name__ == "__main__":
     unittest.main()
