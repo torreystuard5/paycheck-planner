@@ -49,10 +49,21 @@ function dueLabel(item) {
   const due = parseDue(item);
   if (!due) return '';
   const dateStr = format(due, 'MMM d');
-  if (item.is_overdue) {
+  if (item.due_status === 'carryover' || item.is_carryover) {
+    const monthLabel = item.carryover_label || format(due, 'MMMM');
+    return `Carryover from ${monthLabel}`;
+  }
+  if (item.due_status === 'overdue' || item.is_overdue) {
     return `Overdue · was ${dateStr}`;
   }
   return `Due ${dateStr}`;
+}
+
+function dueLabelStyle(item) {
+  if (item.due_status === 'overdue' || item.is_overdue) {
+    return { color: '#c0392b', fontWeight: 600 };
+  }
+  return { color: '#6b7280' };
 }
 
 function categoryMeta(item) {
@@ -133,11 +144,7 @@ export default function PaycheckWidget({
           </div>
           <p
             className="text-xs md:text-sm mt-0.5"
-            style={
-              item.is_overdue
-                ? { color: '#c0392b', fontWeight: 600 }
-                : { color: '#6b7280' }
-            }
+            style={dueLabelStyle(item)}
           >
             {dueLabel(item)}
           </p>

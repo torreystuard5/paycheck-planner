@@ -59,6 +59,9 @@ class PaycheckUpcomingResponse(BaseModel):
 class PullForwardWidgetItem(PaycheckItem):
     category: Optional[str] = None
     paid_date: Optional[datetime] = None
+    due_status: str = "due"
+    is_carryover: bool = False
+    carryover_label: Optional[str] = None
 
 
 class PullForwardWidget(BaseModel):
