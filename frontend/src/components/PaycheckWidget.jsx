@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ChevronDown, ArrowRight, Check, Loader2 } from 'lucide-react';
+import { Calendar, ChevronDown, ArrowRight, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { formatPaycheckDate, formatFriendlyDate } from '../utils/formatDate';
+import { formatPaycheckDate } from '../utils/formatDate';
 
 const PULL_FORWARD_COLLAPSED_KEY = 'paydrift_pull_forward_collapsed';
 const TEAL = '#01696f';
@@ -45,15 +45,10 @@ function parseDue(item) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function dueLabel(item, isPaid) {
+function dueLabel(item) {
   const due = parseDue(item);
   if (!due) return '';
   const dateStr = format(due, 'MMM d');
-  if (isPaid) {
-    const paidRaw = item.paid_date;
-    const paidStr = paidRaw ? formatFriendlyDate(String(paidRaw).slice(0, 10)) : '';
-    return paidStr ? `Due ${dateStr} · Paid ${paidStr}` : `Due ${dateStr} · Paid`;
-  }
   if (item.is_overdue) {
     return `Overdue · was ${dateStr}`;
   }
@@ -83,9 +78,8 @@ export default function PaycheckWidget({
 
   if (!widget) return null;
 
-  const unpaidItems = widget.unpaid_items || [];
-  const paidItems = widget.paid_items || [];
-  const hasRows = unpaidItems.length > 0 || paidItems.length > 0;
+  const visibleItems = widget.visible_items || [];
+  const remainingCount = widget.remaining_count ?? 0;
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -103,19 +97,17 @@ export default function PaycheckWidget({
     ? formatPaycheckDate(widget.next_paycheck_date)
     : '—';
 
-  const renderRow = (item, isPaid) => {
+  const renderRow = (item) => {
     const meta = categoryMeta(item);
     const isDebt = item.item_type === 'debt';
     const busy = overrideBusyKey === itemKey(item);
-    const canPull = !isPaid && Boolean(item.can_pull_forward);
-    const canRevert = !isPaid && Boolean(item.can_revert_override || item.pulled_forward);
+    const canPull = Boolean(item.can_pull_forward);
+    const canRevert = Boolean(item.can_revert_override || item.pulled_forward);
 
     return (
       <li
         key={itemKey(item)}
-        className={`flex items-center gap-3 py-3 px-3 md:px-4 rounded-lg transition-colors ${
-          isPaid ? 'opacity-45' : 'hover:bg-[#fafafa] md:hover:bg-[#fafafa]'
-        }`}
+        className="flex items-center gap-3 py-3 px-3 md:px-4 rounded-lg transition-all duration-300 hover:bg-[#fafafa]"
       >
         <div
           className="shrink-0 flex items-center justify-center rounded-full text-base w-[34px] h-[34px] md:w-[38px] md:h-[38px]"
@@ -127,7 +119,7 @@ export default function PaycheckWidget({
 
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className={`font-semibold text-gray-900 truncate text-sm md:text-base ${isPaid ? 'text-gray-600' : ''}`}>
+            <span className="font-semibold text-gray-900 truncate text-sm md:text-base">
               {item.name}
             </span>
             {isDebt && (
@@ -142,12 +134,12 @@ export default function PaycheckWidget({
           <p
             className="text-xs md:text-sm mt-0.5"
             style={
-              item.is_overdue && !isPaid
+              item.is_overdue
                 ? { color: '#c0392b', fontWeight: 600 }
                 : { color: '#6b7280' }
             }
           >
-            {dueLabel(item, isPaid)}
+            {dueLabel(item)}
           </p>
         </div>
 
@@ -155,15 +147,7 @@ export default function PaycheckWidget({
           {fmt(item.amount)}
         </span>
 
-        {isPaid ? (
-          <div
-            className="shrink-0 flex items-center justify-center rounded-full"
-            style={{ width: 28, height: 28, backgroundColor: '#e6f5ec' }}
-            aria-label="Paid"
-          >
-            <Check className="w-4 h-4" style={{ color: '#27ae60' }} />
-          </div>
-        ) : canRevert ? (
+        {canRevert ? (
           <button
             type="button"
             disabled={busy}
@@ -231,9 +215,16 @@ export default function PaycheckWidget({
               Next paycheck · <span className="font-medium text-gray-800">{nextPayLabel}</span>
             </span>
             <span className="text-gray-600 sm:text-right">
-              <span className="font-semibold text-gray-900">{fmt(widget.total_due)}</span>
+              <span className="font-semibold text-gray-900">
+                {fmt(widget.total_due_for_visible_items)}
+              </span>
               {' due · '}
-              <span className="font-medium text-gray-800">{widget.unpaid_count ?? 0} unpaid</span>
+              <span className="font-medium text-gray-800">
+                {Math.min(visibleItems.length, widget.unpaid_count ?? visibleItems.length)} unpaid
+              </span>
+              {remainingCount > 0 && (
+                <span className="text-gray-500"> (+{remainingCount} more)</span>
+              )}
             </span>
           </div>
 
@@ -247,12 +238,11 @@ export default function PaycheckWidget({
             />
           </div>
 
-          {!hasRows ? (
-            <p className="text-sm text-gray-500 py-2">No upcoming bills or debts in this window.</p>
+          {visibleItems.length === 0 ? (
+            <p className="text-sm text-gray-500 py-2">No unpaid bills or debts due right now.</p>
           ) : (
-            <ul className="divide-y divide-gray-100 md:divide-y-0 md:space-y-0">
-              {unpaidItems.map((item) => renderRow(item, false))}
-              {paidItems.map((item) => renderRow(item, true))}
+            <ul className="divide-y divide-gray-100 md:divide-y-0">
+              {visibleItems.map((item) => renderRow(item))}
             </ul>
           )}
 

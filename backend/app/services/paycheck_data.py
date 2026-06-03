@@ -183,6 +183,65 @@ async def fetch_scoped_bills_debts(
     return bills, filtered_debts
 
 
+def _annotate_bill_for_user(bill: Bill, user: User, member_count: int) -> None:
+    """Set user_share_amount and is_user_responsible (matches GET /bills logic)."""
+    amount = Decimal(str(bill.amount or 0))
+    is_household = bill.household_id is not None
+    if bill.payment_mode == "split" and is_household and member_count > 0:
+        share = (amount / member_count).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        bill.user_share_amount = share
+        bill.is_user_responsible = True
+    elif is_household:
+        if bill.assigned_member_id:
+            bill.is_user_responsible = bill.assigned_member_id == user.id
+        else:
+            bill.is_user_responsible = bill.user_id == user.id
+        bill.user_share_amount = amount if bill.is_user_responsible else Decimal("0")
+    else:
+        bill.user_share_amount = amount
+        bill.is_user_responsible = True
+
+
+async def fetch_widget_bills(
+    db: AsyncSession,
+    user: User,
+    budget_id: UUID,
+) -> tuple[list[Bill], int]:
+    """All active household bills visible on GET /bills, with share annotations."""
+    await validate_budget_ownership(user, db, budget_id)
+
+    if user.household_id:
+        member_result = await db.execute(
+            select(User.id).where(User.household_id == user.household_id)
+        )
+        household_member_ids = [row[0] for row in member_result.all()]
+        bills_q = select(Bill).where(
+            Bill.user_id.in_(household_member_ids),
+            Bill.is_active.is_(True),
+        )
+    else:
+        bills_q = select(Bill).where(
+            Bill.user_id == user.id,
+            Bill.is_active.is_(True),
+        )
+    bills_q = apply_household_budget_filter(bills_q, Bill, user, budget_id)
+    all_bills = list((await db.execute(bills_q)).scalars().all())
+
+    member_count = 1
+    if user.household_id:
+        count_result = await db.execute(
+            select(func.count()).select_from(User).where(
+                User.household_id == user.household_id
+            )
+        )
+        member_count = max(count_result.scalar() or 1, 1)
+
+    for bill in all_bills:
+        _annotate_bill_for_user(bill, user, member_count)
+
+    return all_bills, member_count
+
+
 async def get_paid_bill_map(
     db: AsyncSession,
     user_ids: list[UUID],
