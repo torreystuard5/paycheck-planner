@@ -23,11 +23,17 @@ from app.services.paycheck_data import (
     household_member_ids,
     resolve_anchor_income,
 )
+from app.services.bill_cycles import (
+    auto_generate_missing_cycle_rows_for_window,
+    get_cycle_payments,
+    local_today,
+)
 from app.services.paycheck_engine import (
     assign_bills_to_paycheck,
     build_paycheck_plan,
     generate_pay_dates,
     get_pay_period_window,
+    _add_months,
 )
 
 
@@ -548,6 +554,175 @@ async def revert_pull_forward_by_id(
     )
 
 
+async def build_pull_forward_widget(
+    db: AsyncSession,
+    user: User,
+    budget_id: UUID,
+    unpaid_limit: int = 7,
+) -> dict[str, Any]:
+    """Rolling next-N unpaid bills/debts for the dashboard pull-forward widget."""
+    ctx = await build_pay_calendar_context(db, user, budget_id)
+    bills = ctx["bills"]
+    debts = ctx["debts"]
+    today = local_today(user)
+    horizon_start = today.replace(day=1)
+    horizon_end = _add_months(horizon_start, 4)
+
+    await auto_generate_missing_cycle_rows_for_window(
+        db, bills, user, horizon_start, horizon_end
+    )
+
+    paid_bill_map = await get_paid_bill_map(
+        db,
+        ctx["member_ids"],
+        [b.id for b in bills],
+        today,
+        horizon_end,
+        bills=bills,
+        user=user,
+    )
+    cycle_payments = await get_cycle_payments(
+        db, [b.id for b in bills], today, horizon_end
+    )
+
+    overrides = await load_active_overrides(db, user, budget_id)
+    omap = _override_map(overrides)
+    pulled_keys = {
+        k
+        for k, o in omap.items()
+        if o.effective_period_start == ctx["current_start"]
+        and o.natural_period_start == ctx.get("next_start")
+    }
+
+    natural_next_by_key: dict[str, dict] = {}
+    if ctx.get("next_start") and ctx.get("next_end"):
+        paid_next = await get_paid_debt_ids_in_window(
+            db, [d.id for d in debts], ctx["next_start"], ctx["next_end"]
+        )
+        natural_next = await _build_natural_for_period(
+            bills,
+            debts,
+            ctx["next_start"],
+            ctx["next_end"],
+            today,
+            paid_bill_map,
+            paid_next,
+        )
+        natural_next_by_key = {
+            occurrence_key(i["item_type"], i["id"], _parse_due(i)): i
+            for i in natural_next
+        }
+
+    merged: dict[str, dict] = {}
+    income = await resolve_anchor_income(db, user, budget_id)
+    frequency = income.frequency if income else (user.pay_frequency or "biweekly")
+    anchor = ctx["current_start"]
+    pay_dates = generate_pay_dates(anchor, frequency, 8)
+
+    for i in range(len(pay_dates) - 1):
+        ws, we = get_pay_period_window(pay_dates[i], pay_dates[i + 1])
+        if we < today:
+            continue
+        paid_debts = await get_paid_debt_ids_in_window(
+            db, [d.id for d in debts], ws, we
+        )
+        period_items = assign_bills_to_paycheck(
+            bills,
+            debts,
+            ws,
+            we,
+            today,
+            paid_debt_ids=paid_debts,
+            paid_bill_map=paid_bill_map,
+        )
+        for item in period_items:
+            due = _parse_due(item)
+            if due < today and item.get("is_paid"):
+                continue
+            key = occurrence_key(item["item_type"], item["id"], due)
+            if key in merged:
+                continue
+            category = None
+            if item["item_type"] == "bill":
+                bill = next((b for b in bills if b.id == item["id"]), None)
+                category = getattr(bill, "category", None) if bill else None
+            elif item["item_type"] == "debt":
+                category = "Debt/Loan"
+
+            cp = (
+                cycle_payments.get((item["id"], due))
+                if item["item_type"] == "bill"
+                else None
+            )
+            paid_date = None
+            if cp and cp.paid_date:
+                paid_date = cp.paid_date
+            elif item.get("is_paid") and item["item_type"] == "bill":
+                for marker in paid_bill_map.get(item["id"], []):
+                    if isinstance(marker, dict) and marker.get("due_date") == due:
+                        paid_date = marker.get("paid_date")
+                        break
+
+            days = (due - today).days
+            is_overdue = days < 0 and not item.get("is_paid")
+            nat = natural_next_by_key.get(key)
+            can_pull = bool(
+                nat
+                and not item.get("is_paid")
+                and not nat.get("is_overdue")
+                and key not in pulled_keys
+            )
+
+            merged[key] = {
+                **item,
+                "occurrence_due_date": due,
+                "category": category or "Other",
+                "paid_date": paid_date,
+                "is_overdue": is_overdue,
+                "days_until_due": days,
+                "can_pull_forward": can_pull,
+                "can_revert_override": key in pulled_keys,
+                "pulled_forward": key in pulled_keys,
+            }
+
+    all_items = list(merged.values())
+    unpaid = [i for i in all_items if not i.get("is_paid")]
+    paid = [i for i in all_items if i.get("is_paid")]
+    unpaid.sort(key=lambda x: (0 if x.get("is_overdue") else 1, x["due_date"]))
+    paid.sort(key=lambda x: x["due_date"], reverse=True)
+
+    unpaid_display = unpaid[:unpaid_limit]
+    total_unpaid_due = sum(
+        (Decimal(str(i["amount"])) for i in unpaid), Decimal("0")
+    )
+
+    paid_current = await get_paid_debt_ids_in_window(
+        db, [d.id for d in debts], ctx["current_start"], ctx["current_end"]
+    )
+    current_items = await _build_natural_for_period(
+        bills,
+        debts,
+        ctx["current_start"],
+        ctx["current_end"],
+        today,
+        paid_bill_map,
+        paid_current,
+    )
+    current_total = len(current_items)
+    current_paid = sum(1 for i in current_items if i.get("is_paid"))
+    progress = (current_paid / current_total * 100.0) if current_total else 0.0
+
+    return {
+        "next_paycheck_date": ctx.get("next_start") or ctx["current_start"],
+        "total_due": total_unpaid_due,
+        "unpaid_count": len(unpaid),
+        "paid_count": len(paid),
+        "progress_percent": round(progress, 1),
+        "unpaid_items": unpaid_display,
+        "paid_items": paid[:10],
+    }
+
+
 async def build_upcoming_paycheck_response(
     db: AsyncSession,
     user: User,
@@ -693,4 +868,5 @@ async def build_full_paycheck_plan_response(
         plan["paychecks"] = paychecks
 
     plan["budget_id"] = budget_id
+    plan["pull_forward_widget"] = await build_pull_forward_widget(db, user, budget_id)
     return plan

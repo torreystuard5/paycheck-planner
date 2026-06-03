@@ -112,3 +112,21 @@ def test_due_date_for_month_clamps_to_last_day_of_month():
 
     assert due_date_for_month(bill, 2026, 2) == date(2026, 2, 28)
     assert due_date_for_month(bill, 2026, 4) == date(2026, 4, 30)
+
+
+def test_assign_bills_includes_monthly_rent_in_june_window():
+    from app.services.paycheck_engine import assign_bills_to_paycheck
+
+    bill = _bill(due_day=5, frequency="monthly", name="Rent", amount=Decimal("800"))
+    items = assign_bills_to_paycheck(
+        [bill],
+        [],
+        date(2026, 6, 4),
+        date(2026, 6, 17),
+        date(2026, 6, 2),
+        paid_bill_map={},
+    )
+    bill_items = [i for i in items if i["item_type"] == "bill" and i["name"] == "Rent"]
+    assert len(bill_items) == 1
+    assert bill_items[0]["due_date"] == date(2026, 6, 5)
+    assert bill_items[0]["is_paid"] is False

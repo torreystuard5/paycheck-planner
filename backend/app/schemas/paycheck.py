@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -56,6 +56,21 @@ class PaycheckUpcomingResponse(BaseModel):
     upcoming: list[PaycheckPlan] = []
 
 
+class PullForwardWidgetItem(PaycheckItem):
+    category: Optional[str] = None
+    paid_date: Optional[datetime] = None
+
+
+class PullForwardWidget(BaseModel):
+    next_paycheck_date: Optional[date] = None
+    total_due: Decimal = Decimal("0")
+    unpaid_count: int = 0
+    paid_count: int = 0
+    progress_percent: float = 0.0
+    unpaid_items: list[PullForwardWidgetItem] = []
+    paid_items: list[PullForwardWidgetItem] = []
+
+
 class PaycheckPlanResponse(BaseModel):
     pay_frequency: str
     currency: str
@@ -67,3 +82,4 @@ class PaycheckPlanResponse(BaseModel):
     current_paycheck_date: Optional[date] = None
     next_paycheck_date: Optional[date] = None
     budget_id: Optional[UUID] = None
+    pull_forward_widget: Optional[PullForwardWidget] = None

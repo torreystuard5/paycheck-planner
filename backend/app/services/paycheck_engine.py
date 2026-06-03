@@ -11,6 +11,8 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 
+from app.services.bill_cycles import occurrence_dates_for_bill
+
 
 # ── Pay-date generation ────────────────────────────────────────────
 
@@ -326,11 +328,7 @@ def assign_bills_to_paycheck(
             else:
                 due_dates = []
         else:
-            due_dates = _due_dates_in_window(
-                bill.due_day, freq, window_start, window_end,
-                day_of_week=getattr(bill, "day_of_week", None),
-                start_date=getattr(bill, "start_date", None),
-            )
+            due_dates = occurrence_dates_for_bill(bill, window_start, window_end)
         full_amount = Decimal(str(bill.amount or 0))
         # Use user_share_amount if set (household-aware), otherwise full amount
         user_amount = getattr(bill, "user_share_amount", None)

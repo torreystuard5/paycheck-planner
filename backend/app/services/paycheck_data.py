@@ -13,7 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bill import Bill
 from app.models.bill_cycle_payment import BillCyclePayment
-from app.services.bill_cycles import auto_generate_missing_cycle_rows_for_window
+from app.services.bill_cycles import (
+    auto_generate_missing_cycle_rows,
+    auto_generate_missing_cycle_rows_for_window,
+    local_today,
+)
 from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
 from app.models.income import IncomeSource
@@ -104,6 +108,9 @@ async def fetch_scoped_bills_debts(
     debts_result = await db.execute(debts_q)
     all_bills = list(bills_result.scalars().all())
     debts = list(debts_result.scalars().all())
+
+    today = local_today(user)
+    await auto_generate_missing_cycle_rows(db, all_bills, user, today.year, today.month)
 
     member_count = 1
     if user.household_id:

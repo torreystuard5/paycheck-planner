@@ -15,7 +15,8 @@ export function enrichPlanItemFlags(item, periodIndex) {
 }
 
 export function augmentPaycheckPlan(plan) {
-  if (!plan?.paychecks?.length) return plan;
+  if (!plan) return plan;
+  if (!plan.paychecks?.length) return plan;
   return {
     ...plan,
     paychecks: plan.paychecks.map((pc, idx) => ({
