@@ -79,6 +79,37 @@ class TestPaycheckEngineWindow(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["amount"], Decimal("25"))
         self.assertEqual(items[0]["item_type"], "debt")
+        self.assertFalse(items[0]["is_split"])
+
+    def test_debt_uses_full_minimum_not_split_share(self):
+        debt = _debt(
+            name="Cornerstone",
+            minimum_payment=Decimal("200"),
+            due_day=17,
+            is_split=True,
+        )
+        debt.user_share_amount = Decimal("100")
+        debt.split_member_count = 2
+        items = assign_bills_to_paycheck(
+            [], [debt], date(2026, 6, 4), date(2026, 6, 17), date(2026, 6, 4)
+        )
+        self.assertEqual(items[0]["amount"], Decimal("200"))
+
+    def test_rent_biweekly_without_dow_uses_monthly_due_day(self):
+        rent = _bill(
+            name="Rent",
+            amount=Decimal("800"),
+            due_day=5,
+            frequency="biweekly",
+            day_of_week=None,
+            user_share_amount=Decimal("0"),
+        )
+        items = assign_bills_to_paycheck(
+            [rent], [], date(2026, 6, 4), date(2026, 6, 17), date(2026, 6, 4)
+        )
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["amount"], Decimal("800"))
+        self.assertEqual(items[0]["due_date"], date(2026, 6, 5))
 
     def test_postponed_debt_skipped_until_postpone_date(self):
         debt = _debt(

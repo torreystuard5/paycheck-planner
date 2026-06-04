@@ -85,9 +85,7 @@ async def fetch_scoped_bills_debts(
     today = local_today(user)
     await auto_generate_missing_cycle_rows(db, all_bills, user, today.year, today.month)
 
-    bills: list[Bill] = [
-        b for b in all_bills if getattr(b, "is_user_responsible", True)
-    ]
+    bills: list[Bill] = list(all_bills)
 
     debts_q = select(Debt).where(Debt.is_active.is_(True))
     if user.household_id:
@@ -105,35 +103,12 @@ async def fetch_scoped_bills_debts(
 
     filtered_debts: list[Debt] = []
     for debt in debts:
-        amount = Decimal(str(debt.minimum_payment or 0))
+        min_payment = Decimal(str(debt.minimum_payment or 0))
+        # Paycheck planning always uses the full minimum payment (never household split).
+        debt.user_share_amount = min_payment
+        debt.split_member_count = 1
 
-        if debt.is_split:
-            split_count = 1
-            raw_members = debt.split_members
-            if raw_members:
-                try:
-                    parsed = json.loads(raw_members) if isinstance(raw_members, str) else raw_members
-                    if isinstance(parsed, list) and len(parsed) > 0:
-                        split_count = len(parsed)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            if split_count <= 1 and debt.household_id and member_count > 1:
-                split_count = member_count
-
-            if split_count > 1:
-                share = (amount / split_count).quantize(
-                    Decimal("0.01"), rounding=ROUND_HALF_UP
-                )
-                debt.user_share_amount = share
-                debt.split_member_count = split_count
-            else:
-                debt.user_share_amount = amount
-                debt.split_member_count = 1
-        else:
-            debt.user_share_amount = amount
-            debt.split_member_count = 1
-
-        if Decimal(str(debt.minimum_payment or 0)) > 0:
+        if min_payment > 0:
             filtered_debts.append(debt)
 
     return bills, filtered_debts

@@ -235,19 +235,27 @@ def _bill_due_dates_in_window(
         start = _coerce_date(getattr(bill, "start_date", None))
         return [start] if start and window_start <= start <= window_end else []
 
-    # Monthly/quarterly/etc. schedule from due_day; ignore start_date so a stray
-    # anchor does not drop in-window occurrences (e.g. Rent due Jun 5).
-    cadence_start = _coerce_date(getattr(bill, "start_date", None))
-    if freq not in ("weekly", "biweekly"):
-        cadence_start = None
+    day_of_week = getattr(bill, "day_of_week", None)
+    use_recurrence = freq in ("weekly", "biweekly") and day_of_week is not None
 
+    if use_recurrence:
+        cadence_start = _coerce_date(getattr(bill, "start_date", None))
+        return _due_dates_in_window(
+            bill.due_day or 1,
+            freq,
+            window_start,
+            window_end,
+            day_of_week=day_of_week,
+            start_date=cadence_start,
+        )
+
+    # Monthly (and bills mis-labeled biweekly without day_of_week): schedule by due_day.
+    schedule_freq = freq if freq in ("semi_monthly", "quarterly", "annual", "yearly") else "monthly"
     return _due_dates_in_window(
         bill.due_day or 1,
-        freq,
+        schedule_freq,
         window_start,
         window_end,
-        day_of_week=getattr(bill, "day_of_week", None),
-        start_date=cadence_start,
     )
 
 
@@ -361,11 +369,14 @@ def assign_bills_to_paycheck(
             continue
         due_dates = _bill_due_dates_in_window(bill, window_start, window_end)
         full_amount = Decimal(str(bill.amount or 0))
-        # Use user_share_amount if set (household-aware), otherwise full amount
-        user_amount = getattr(bill, "user_share_amount", None)
-        if user_amount is None:
-            user_amount = full_amount
         is_split = getattr(bill, "payment_mode", "single") == "split" and bill.household_id is not None
+        share = getattr(bill, "user_share_amount", None)
+        if is_split:
+            user_amount = share if share is not None else full_amount
+        elif share is not None and share > 0:
+            user_amount = share
+        else:
+            user_amount = full_amount
         split_count = getattr(bill, "split_member_count", 1) or 1
         bill_postpone = _coerce_date(getattr(bill, "postpone_until", None))
         for due_dt in due_dates:
@@ -448,14 +459,11 @@ def assign_bills_to_paycheck(
                 window_start,
                 window_end,
             )
-        # Debts assign minimum payment only (never full balance).
-        full_amount = Decimal(str(debt.minimum_payment or 0))
-        # Use user_share_amount if set (split-aware), otherwise full amount
-        user_amount = getattr(debt, "user_share_amount", None)
-        if user_amount is None:
-            user_amount = full_amount
-        is_split = bool(getattr(debt, "is_split", False))
-        split_count = getattr(debt, "split_member_count", 1) or 1
+        # Debts: full minimum payment for this paycheck (no household split).
+        min_payment = Decimal(str(debt.minimum_payment or 0))
+        user_amount = min_payment
+        is_split = False
+        split_count = 1
         debt_is_paid = debt.id in paid_debt_ids
         for due_dt in due_dates:
             days = (due_dt - current_date).days
@@ -472,13 +480,13 @@ def assign_bills_to_paycheck(
                     "name": debt.name or "Untitled Debt",
                     "item_type": "debt",
                     "amount": user_amount,
-                    "full_amount": full_amount if is_split else None,
+                    "full_amount": None,
                     "due_date": due_dt,
                     "days_until_due": days,
                     "status": _due_status(days),
                     "auto_pay": bool(debt.auto_pay),
-                    "is_split": is_split,
-                    "split_count": split_count if is_split else 1,
+                    "is_split": False,
+                    "split_count": 1,
                     "is_paid": debt_is_paid,
                     "is_overdue": is_overdue,
                     "postpone_until": str(postpone_dt) if postpone_dt else None,
