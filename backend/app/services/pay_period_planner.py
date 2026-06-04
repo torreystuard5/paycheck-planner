@@ -29,6 +29,7 @@ from app.services.paycheck_engine import (
     build_paycheck_plan,
     generate_pay_dates,
     get_pay_period_window,
+    normalize_paycheck_line_item,
     occurrence_key,
 )
 from app.services.paycheck_planning_state import (
@@ -72,7 +73,7 @@ def _enrich_item(
         and not bool(item.get("is_paid"))
         and not bool(item.get("is_overdue"))
     )
-    return out
+    return normalize_paycheck_line_item(out)
 
 
 async def load_active_overrides(

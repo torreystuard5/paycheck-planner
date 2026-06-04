@@ -20,10 +20,13 @@ from app.services.paycheck_data import (
     get_paid_bill_map,
     get_paid_debt_ids_in_window,
 )
+from app.services.bill_cycles import occurrence_dates_for_bill
 from app.services.paycheck_engine import (
     apply_planning_due_labels,
     assign_bills_to_paycheck,
+    normalize_paycheck_line_item,
     normalize_planning_item,
+    occurrence_key,
 )
 
 
@@ -162,6 +165,53 @@ async def build_paycheck_planning_state(
 
     current_assigned = _label_items(current_assigned)
     next_period = _label_items(next_period)
+
+    # Backfill in-window bill occurrences missing from assignment (e.g. Rent).
+    present_keys = {i.get("planning_key") for i in current_assigned}
+    for bill in bills:
+        if getattr(bill, "is_active", True) is False:
+            continue
+        for due_dt in occurrence_dates_for_bill(bill, current_start, current_end):
+            key = occurrence_key("bill", bill.id, due_dt)
+            if key in present_keys:
+                continue
+            extra = assign_bills_to_paycheck(
+                [bill],
+                [],
+                current_start,
+                current_end,
+                today,
+                paid_debt_ids=set(),
+                paid_bill_map=paid_bill_map,
+            )
+            for raw in extra:
+                if raw.get("due_date") != due_dt:
+                    continue
+                normalized = normalize_planning_item(
+                    apply_planning_due_labels(
+                        normalize_paycheck_line_item(raw),
+                        today=today,
+                        cycle_year=cycle_year,
+                        cycle_month=cycle_month,
+                    )
+                )
+                if (normalized["item_type"], normalized["item_id"]) in checked_items:
+                    normalized["is_paid"] = True
+                normalized.update(
+                    {
+                        "natural_period_start": current_start,
+                        "effective_period_start": current_start,
+                        "pulled_forward": False,
+                        "pay_period_start": current_start,
+                        "is_overridden": False,
+                        "original_pay_period_start": None,
+                        "override_id": None,
+                        "can_revert_override": False,
+                        "can_pull_forward": False,
+                    }
+                )
+                current_assigned.append(normalized)
+                present_keys.add(key)
 
     # ── Carryover: include unpaid-overdue items from the preceding pay period ──
     # Bills whose due date falls *before* the current window (e.g. Rent due

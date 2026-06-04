@@ -240,7 +240,7 @@ def _bill_due_dates_in_window(
 
     if use_recurrence:
         cadence_start = _coerce_date(getattr(bill, "start_date", None))
-        return _due_dates_in_window(
+        engine_dates = _due_dates_in_window(
             bill.due_day or 1,
             freq,
             window_start,
@@ -248,15 +248,29 @@ def _bill_due_dates_in_window(
             day_of_week=day_of_week,
             start_date=cadence_start,
         )
+        try:
+            from app.services.bill_cycles import occurrence_dates_for_bill
+
+            cycle_dates = occurrence_dates_for_bill(bill, window_start, window_end)
+        except Exception:
+            cycle_dates = []
+        return sorted(set(engine_dates) | set(cycle_dates))
 
     # Monthly (and bills mis-labeled biweekly without day_of_week): schedule by due_day.
     schedule_freq = freq if freq in ("semi_monthly", "quarterly", "annual", "yearly") else "monthly"
-    return _due_dates_in_window(
+    engine_dates = _due_dates_in_window(
         bill.due_day or 1,
         schedule_freq,
         window_start,
         window_end,
     )
+    try:
+        from app.services.bill_cycles import occurrence_dates_for_bill
+
+        cycle_dates = occurrence_dates_for_bill(bill, window_start, window_end)
+    except Exception:
+        cycle_dates = []
+    return sorted(set(engine_dates) | set(cycle_dates))
 
 
 # ── Assign bills / debts to a single pay period ───────────────────
@@ -345,6 +359,46 @@ def _due_dates_in_window(
     return sorted(set(candidates))
 
 
+def _debt_paycheck_amount(debt: Any) -> Decimal:
+    """Full minimum payment for paycheck assignment (never household-split)."""
+    return Decimal(str(debt.minimum_payment or 0))
+
+
+def _bill_paycheck_amount(bill: Any) -> tuple[Decimal, Decimal, bool, int]:
+    """Return (user_amount, full_amount, is_split, split_count) for a bill line."""
+    full_amount = Decimal(str(bill.amount or 0))
+    is_split = (
+        getattr(bill, "payment_mode", "single") == "split"
+        and getattr(bill, "household_id", None) is not None
+    )
+    split_count = getattr(bill, "split_member_count", 1) or 1
+    share = getattr(bill, "user_share_amount", None)
+    if is_split:
+        user_amount = share if share is not None else full_amount
+    elif share is not None and share > 0:
+        user_amount = share
+    else:
+        user_amount = full_amount
+    return user_amount, full_amount, is_split, split_count
+
+
+def normalize_paycheck_line_item(item: dict) -> dict:
+    """Canonical amounts/flags for API responses (debts = full min, bills keep split)."""
+    out = dict(item)
+    if out.get("item_type") == "debt":
+        amount = Decimal(str(out.get("amount") or 0))
+        full_amount = out.get("full_amount")
+        if full_amount is not None:
+            amount = Decimal(str(full_amount))
+        elif out.get("is_split") and int(out.get("split_count") or 1) > 1:
+            amount = (amount * int(out["split_count"])).quantize(Decimal("0.01"))
+        out["amount"] = amount
+        out["is_split"] = False
+        out["full_amount"] = None
+        out["split_count"] = 1
+    return out
+
+
 def assign_bills_to_paycheck(
     bills: list[Any],
     debts: list[Any],
@@ -368,16 +422,7 @@ def assign_bills_to_paycheck(
         if getattr(bill, "is_active", True) is False:
             continue
         due_dates = _bill_due_dates_in_window(bill, window_start, window_end)
-        full_amount = Decimal(str(bill.amount or 0))
-        is_split = getattr(bill, "payment_mode", "single") == "split" and bill.household_id is not None
-        share = getattr(bill, "user_share_amount", None)
-        if is_split:
-            user_amount = share if share is not None else full_amount
-        elif share is not None and share > 0:
-            user_amount = share
-        else:
-            user_amount = full_amount
-        split_count = getattr(bill, "split_member_count", 1) or 1
+        user_amount, full_amount, is_split, split_count = _bill_paycheck_amount(bill)
         bill_postpone = _coerce_date(getattr(bill, "postpone_until", None))
         for due_dt in due_dates:
             days = (due_dt - current_date).days
@@ -420,23 +465,25 @@ def assign_bills_to_paycheck(
 
             seen_bill_ids.add(bill.id)
             items.append(
-                {
-                    "id": bill.id,
-                    "name": bill.name or "Untitled Bill",
-                    "item_type": "bill",
-                    "amount": user_amount,
-                    "full_amount": full_amount if is_split else None,
-                    "due_date": due_dt,
-                    "days_until_due": days,
-                    "status": _due_status(days),
-                    "auto_pay": bool(bill.auto_pay),
-                    "is_split": is_split,
-                    "split_count": split_count if is_split else 1,
-                    "is_paid": paid_for_period,
-                    "is_overdue": is_overdue,
-                    "hidden_overdue": bool(getattr(bill, "hidden_overdue", False)),
-                    "postpone_until": str(bill_postpone) if bill_postpone else None,
-                }
+                normalize_paycheck_line_item(
+                    {
+                        "id": bill.id,
+                        "name": bill.name or "Untitled Bill",
+                        "item_type": "bill",
+                        "amount": user_amount,
+                        "full_amount": full_amount if is_split else None,
+                        "due_date": due_dt,
+                        "days_until_due": days,
+                        "status": _due_status(days),
+                        "auto_pay": bool(bill.auto_pay),
+                        "is_split": is_split,
+                        "split_count": split_count if is_split else 1,
+                        "is_paid": paid_for_period,
+                        "is_overdue": is_overdue,
+                        "hidden_overdue": bool(getattr(bill, "hidden_overdue", False)),
+                        "postpone_until": str(bill_postpone) if bill_postpone else None,
+                    }
+                )
             )
 
     if paid_debt_ids is None:
@@ -459,11 +506,7 @@ def assign_bills_to_paycheck(
                 window_start,
                 window_end,
             )
-        # Debts: full minimum payment for this paycheck (no household split).
-        min_payment = Decimal(str(debt.minimum_payment or 0))
-        user_amount = min_payment
-        is_split = False
-        split_count = 1
+        min_payment = _debt_paycheck_amount(debt)
         debt_is_paid = debt.id in paid_debt_ids
         for due_dt in due_dates:
             days = (due_dt - current_date).days
@@ -475,24 +518,26 @@ def assign_bills_to_paycheck(
                 is_overdue = (window_end < current_date) and (not debt_is_paid)
 
             items.append(
-                {
-                    "id": debt.id,
-                    "name": debt.name or "Untitled Debt",
-                    "item_type": "debt",
-                    "amount": user_amount,
-                    "full_amount": None,
-                    "due_date": due_dt,
-                    "days_until_due": days,
-                    "status": _due_status(days),
-                    "auto_pay": bool(debt.auto_pay),
-                    "is_split": False,
-                    "split_count": 1,
-                    "is_paid": debt_is_paid,
-                    "is_overdue": is_overdue,
-                    "postpone_until": str(postpone_dt) if postpone_dt else None,
-                    "apr": Decimal(str(getattr(debt, "apr", None) or 0)),
-                    "balance": Decimal(str(getattr(debt, "balance", None) or 0)),
-                }
+                normalize_paycheck_line_item(
+                    {
+                        "id": debt.id,
+                        "name": debt.name or "Untitled Debt",
+                        "item_type": "debt",
+                        "amount": min_payment,
+                        "full_amount": None,
+                        "due_date": due_dt,
+                        "days_until_due": days,
+                        "status": _due_status(days),
+                        "auto_pay": bool(debt.auto_pay),
+                        "is_split": False,
+                        "split_count": 1,
+                        "is_paid": debt_is_paid,
+                        "is_overdue": is_overdue,
+                        "postpone_until": str(postpone_dt) if postpone_dt else None,
+                        "apr": Decimal(str(getattr(debt, "apr", None) or 0)),
+                        "balance": Decimal(str(getattr(debt, "balance", None) or 0)),
+                    }
+                )
             )
 
     items.sort(key=lambda x: x["due_date"])

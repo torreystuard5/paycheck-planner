@@ -11,6 +11,7 @@ from uuid import uuid4
 from app.services.paycheck_engine import (
     _bill_due_dates_in_window,
     assign_bills_to_paycheck,
+    normalize_paycheck_line_item,
 )
 
 
@@ -110,6 +111,22 @@ class TestPaycheckEngineWindow(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["amount"], Decimal("800"))
         self.assertEqual(items[0]["due_date"], date(2026, 6, 5))
+
+    def test_normalize_debt_line_item_restores_full_minimum(self):
+        half = normalize_paycheck_line_item(
+            {
+                "id": uuid4(),
+                "name": "Capital One 9844",
+                "item_type": "debt",
+                "amount": Decimal("12.50"),
+                "full_amount": Decimal("25"),
+                "is_split": True,
+                "split_count": 2,
+                "due_date": date(2026, 6, 7),
+            }
+        )
+        self.assertEqual(half["amount"], Decimal("25"))
+        self.assertFalse(half["is_split"])
 
     def test_postponed_debt_skipped_until_postpone_date(self):
         debt = _debt(

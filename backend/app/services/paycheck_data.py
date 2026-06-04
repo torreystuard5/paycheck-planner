@@ -104,9 +104,9 @@ async def fetch_scoped_bills_debts(
     filtered_debts: list[Debt] = []
     for debt in debts:
         min_payment = Decimal(str(debt.minimum_payment or 0))
-        # Paycheck planning always uses the full minimum payment (never household split).
         debt.user_share_amount = min_payment
         debt.split_member_count = 1
+        debt.is_split = False
 
         if min_payment > 0:
             filtered_debts.append(debt)
