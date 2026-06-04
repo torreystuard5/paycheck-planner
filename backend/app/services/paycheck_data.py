@@ -78,19 +78,19 @@ async def fetch_scoped_bills_debts(
     user: User,
     budget_id: UUID,
 ) -> tuple[list[Bill], list[Debt]]:
-    """Bills/debts for planning with household budget filter and share annotations."""
+    """Bills/debts for planning — same visibility as GET /bills, budget-scoped."""
     await validate_budget_ownership(user, db, budget_id)
 
-    bills_q = select(Bill).where(Bill.is_active.is_(True))
-    debts_q = select(Debt).where(Debt.is_active.is_(True))
+    all_bills, _member_count = await fetch_widget_bills(db, user, budget_id)
+    today = local_today(user)
+    await auto_generate_missing_cycle_rows(db, all_bills, user, today.year, today.month)
 
+    bills: list[Bill] = [
+        b for b in all_bills if getattr(b, "is_user_responsible", True)
+    ]
+
+    debts_q = select(Debt).where(Debt.is_active.is_(True))
     if user.household_id:
-        bills_q = bills_q.where(
-            or_(
-                Bill.user_id == user.id,
-                Bill.household_id == user.household_id,
-            )
-        )
         debts_q = debts_q.where(
             or_(
                 Debt.user_id == user.id,
@@ -98,54 +98,10 @@ async def fetch_scoped_bills_debts(
             )
         )
     else:
-        bills_q = bills_q.where(Bill.user_id == user.id)
         debts_q = debts_q.where(Debt.user_id == user.id)
 
-    bills_q = apply_household_budget_filter(bills_q, Bill, user, budget_id)
     debts_q = apply_household_budget_filter(debts_q, Debt, user, budget_id)
-
-    bills_result = await db.execute(bills_q)
-    debts_result = await db.execute(debts_q)
-    all_bills = list(bills_result.scalars().all())
-    debts = list(debts_result.scalars().all())
-
-    today = local_today(user)
-    await auto_generate_missing_cycle_rows(db, all_bills, user, today.year, today.month)
-
-    member_count = 1
-    if user.household_id:
-        count_result = await db.execute(
-            select(func.count()).select_from(User).where(
-                User.household_id == user.household_id
-            )
-        )
-        member_count = max(count_result.scalar() or 1, 1)
-
-    bills: list[Bill] = []
-    for bill in all_bills:
-        is_household = bill.household_id is not None
-        amount = Decimal(str(bill.amount or 0))
-
-        if bill.payment_mode == "split" and is_household and member_count > 0:
-            share = (amount / member_count).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
-            bill.user_share_amount = share
-            bill.split_member_count = member_count
-            bills.append(bill)
-        elif bill.payment_mode == "single" and is_household:
-            if bill.assigned_member_id:
-                is_responsible = bill.assigned_member_id == user.id
-            else:
-                is_responsible = bill.user_id == user.id
-            if is_responsible:
-                bill.user_share_amount = amount
-                bill.split_member_count = 1
-                bills.append(bill)
-        else:
-            bill.user_share_amount = amount
-            bill.split_member_count = 1
-            bills.append(bill)
+    debts = list((await db.execute(debts_q)).scalars().all())
 
     filtered_debts: list[Debt] = []
     for debt in debts:
@@ -177,7 +133,7 @@ async def fetch_scoped_bills_debts(
             debt.user_share_amount = amount
             debt.split_member_count = 1
 
-        if Decimal(str(debt.balance or 0)) > 0:
+        if Decimal(str(debt.minimum_payment or 0)) > 0:
             filtered_debts.append(debt)
 
     return bills, filtered_debts

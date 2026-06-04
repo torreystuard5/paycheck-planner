@@ -12,9 +12,6 @@ from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from app.services.bill_cycles import occurrence_dates_for_bill
-
-
 # ── Pay-date generation ────────────────────────────────────────────
 
 
@@ -210,6 +207,50 @@ def _due_status(days_until_due: int) -> str:
     return "upcoming"
 
 
+def _coerce_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _bill_due_dates_in_window(
+    bill: Any,
+    window_start: date,
+    window_end: date,
+) -> list[date]:
+    """Due dates for a bill inside the pay-period window (definition-based, not cycle rows)."""
+    freq = bill.frequency or "monthly"
+    postpone_dt = _coerce_date(getattr(bill, "postpone_until", None))
+    if postpone_dt is not None:
+        return [postpone_dt] if window_start <= postpone_dt <= window_end else []
+
+    if freq == "one_time":
+        start = _coerce_date(getattr(bill, "start_date", None))
+        return [start] if start and window_start <= start <= window_end else []
+
+    # Monthly/quarterly/etc. schedule from due_day; ignore start_date so a stray
+    # anchor does not drop in-window occurrences (e.g. Rent due Jun 5).
+    cadence_start = _coerce_date(getattr(bill, "start_date", None))
+    if freq not in ("weekly", "biweekly"):
+        cadence_start = None
+
+    return _due_dates_in_window(
+        bill.due_day or 1,
+        freq,
+        window_start,
+        window_end,
+        day_of_week=getattr(bill, "day_of_week", None),
+        start_date=cadence_start,
+    )
+
+
 # ── Assign bills / debts to a single pay period ───────────────────
 
 
@@ -316,20 +357,9 @@ def assign_bills_to_paycheck(
     is_current_period = window_start <= current_date <= window_end
 
     for bill in bills:
-        freq = bill.frequency or "monthly"
-        # If postponed, override the due date with the postpone_until value
-        postpone_dt = getattr(bill, "postpone_until", None)
-        if postpone_dt is not None:
-            # Convert to date if needed
-            if isinstance(postpone_dt, datetime):
-                postpone_dt = postpone_dt.date() if hasattr(postpone_dt, "date") else postpone_dt
-            # Only include if the postponed date falls in this window
-            if window_start <= postpone_dt <= window_end:
-                due_dates = [postpone_dt]
-            else:
-                due_dates = []
-        else:
-            due_dates = occurrence_dates_for_bill(bill, window_start, window_end)
+        if getattr(bill, "is_active", True) is False:
+            continue
+        due_dates = _bill_due_dates_in_window(bill, window_start, window_end)
         full_amount = Decimal(str(bill.amount or 0))
         # Use user_share_amount if set (household-aware), otherwise full amount
         user_amount = getattr(bill, "user_share_amount", None)
@@ -337,8 +367,7 @@ def assign_bills_to_paycheck(
             user_amount = full_amount
         is_split = getattr(bill, "payment_mode", "single") == "split" and bill.household_id is not None
         split_count = getattr(bill, "split_member_count", 1) or 1
-        is_recurring = freq in ("weekly", "biweekly")
-        is_household_bill = getattr(bill, "household_id", None) is not None
+        bill_postpone = _coerce_date(getattr(bill, "postpone_until", None))
         for due_dt in due_dates:
             days = (due_dt - current_date).days
 
@@ -395,7 +424,7 @@ def assign_bills_to_paycheck(
                     "is_paid": paid_for_period,
                     "is_overdue": is_overdue,
                     "hidden_overdue": bool(getattr(bill, "hidden_overdue", False)),
-                    "postpone_until": str(postpone_dt) if postpone_dt else None,
+                    "postpone_until": str(bill_postpone) if bill_postpone else None,
                 }
             )
 
@@ -403,18 +432,23 @@ def assign_bills_to_paycheck(
         paid_debt_ids = set()
 
     for debt in debts:
-        postpone_dt = getattr(debt, "postpone_until", None)
+        if getattr(debt, "is_active", True) is False:
+            continue
+        postpone_dt = _coerce_date(getattr(debt, "postpone_until", None))
         if postpone_dt is not None:
-            if isinstance(postpone_dt, datetime):
-                postpone_dt = postpone_dt.date() if hasattr(postpone_dt, "date") else postpone_dt
-            if window_start <= postpone_dt <= window_end:
-                due_dates = [postpone_dt]
-            else:
-                due_dates = []
+            due_dates = (
+                [postpone_dt]
+                if window_start <= postpone_dt <= window_end
+                else []
+            )
         else:
             due_dates = _due_dates_in_window(
-                debt.due_day, "monthly", window_start, window_end
+                debt.due_day or 1,
+                "monthly",
+                window_start,
+                window_end,
             )
+        # Debts assign minimum payment only (never full balance).
         full_amount = Decimal(str(debt.minimum_payment or 0))
         # Use user_share_amount if set (split-aware), otherwise full amount
         user_amount = getattr(debt, "user_share_amount", None)
@@ -448,6 +482,8 @@ def assign_bills_to_paycheck(
                     "is_paid": debt_is_paid,
                     "is_overdue": is_overdue,
                     "postpone_until": str(postpone_dt) if postpone_dt else None,
+                    "apr": Decimal(str(getattr(debt, "apr", None) or 0)),
+                    "balance": Decimal(str(getattr(debt, "balance", None) or 0)),
                 }
             )
 
