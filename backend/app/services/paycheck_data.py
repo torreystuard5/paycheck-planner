@@ -81,7 +81,7 @@ async def fetch_scoped_bills_debts(
     """Bills/debts for planning — same visibility as GET /bills, budget-scoped."""
     await validate_budget_ownership(user, db, budget_id)
 
-    all_bills, _member_count = await fetch_widget_bills(db, user, budget_id)
+    all_bills, member_count = await fetch_widget_bills(db, user, budget_id)
     today = local_today(user)
     await auto_generate_missing_cycle_rows(db, all_bills, user, today.year, today.month)
 

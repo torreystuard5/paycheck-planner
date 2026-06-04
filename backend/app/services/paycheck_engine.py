@@ -411,7 +411,7 @@ def assign_bills_to_paycheck(
             items.append(
                 {
                     "id": bill.id,
-                    "name": bill.name,
+                    "name": bill.name or "Untitled Bill",
                     "item_type": "bill",
                     "amount": user_amount,
                     "full_amount": full_amount if is_split else None,
@@ -469,7 +469,7 @@ def assign_bills_to_paycheck(
             items.append(
                 {
                     "id": debt.id,
-                    "name": debt.name,
+                    "name": debt.name or "Untitled Debt",
                     "item_type": "debt",
                     "amount": user_amount,
                     "full_amount": full_amount if is_split else None,
