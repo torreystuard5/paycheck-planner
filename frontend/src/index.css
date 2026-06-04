@@ -5,7 +5,9 @@ body,
 #root {
   min-height: 100%;
   width: 100%;
-  overflow-x: hidden;
+  /* overflow-x must NOT be set on html/body — it collapses the browser's
+     outer scroll container in WebKit/Blink and breaks vertical scrolling on
+     desktop.  Horizontal overflow is clamped by the layout wrapper instead. */
 }
 
 body {
