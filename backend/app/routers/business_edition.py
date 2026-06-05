@@ -91,8 +91,7 @@ async def activate_business_edition(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Intentionally start Business mode (and 7-day trial when eligible)."""
-    tier = normalize_plan_tier(current_user.subscription_tier)
+    """Switch to Business mode; start 7-day trial when eligible and requested."""
     if user_has_business_access(current_user):
         current_user.app_mode = "business"
     elif user_can_start_business_trial(current_user) and body.accept_trial:
@@ -121,12 +120,18 @@ async def enter_personal_edition(
     if not has_personal_home_access(tier):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your plan does not include Personal mode",
+            detail={
+                "code": "personal_not_included",
+                "message": "Your plan does not include Personal mode.",
+            },
         )
     if tier == "business" and not can_switch_app_mode(tier):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Business-only plans cannot switch to Personal mode",
+            detail={
+                "code": "business_only_plan",
+                "message": "Business-only plans cannot switch to Personal mode.",
+            },
         )
     current_user.app_mode = "personal"
     db.add(current_user)

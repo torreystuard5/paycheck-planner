@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Briefcase, Loader2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { businessEdition } from '../../services/businessApi';
+import { useEditionSwitch } from '../../hooks/useEditionSwitch';
 import { Button, Card, IconStat, PageHeader } from '../../components/ui';
 
 const FEATURES = [
@@ -16,6 +17,7 @@ const FEATURES = [
 
 export default function BusinessStart() {
   const { updateUser, fetchSubscription } = useAuth();
+  const { switchToBusiness, switching } = useEditionSwitch();
   const navigate = useNavigate();
   const [access, setAccess] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -31,7 +33,7 @@ export default function BusinessStart() {
     setError(null);
     try {
       const { data } = await businessEdition.activate(true);
-      updateUser(data);
+      updateUser({ ...data, app_mode: data?.app_mode || 'business' });
       await fetchSubscription?.();
       navigate('/business/dashboard');
     } catch (e) {
@@ -85,10 +87,11 @@ export default function BusinessStart() {
         <Button
           type="button"
           variant="secondary"
-          onClick={() => navigate('/edition')}
+          onClick={switchToBusiness}
+          disabled={loading || switching}
           className="w-full"
         >
-          Open Business dashboard
+          {switching ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Open Business dashboard'}
         </Button>
       )}
 

@@ -67,6 +67,12 @@ export default function BusinessDashboard() {
       error={error}
       teamRole={teamRole}
     >
+      {!loading && !error && !data && (
+        <Card className="p-4 text-sm text-muted">
+          Dashboard data is unavailable right now. You can still use Sales, Deductions, and other Business pages from the sidebar.
+        </Card>
+      )}
+
       <div className="card-grid !gap-4">
         <BusinessStatCard
           label="Today / week / MTD sales"
@@ -161,8 +167,11 @@ export default function BusinessDashboard() {
               {title}
             </h3>
             <ul className="space-y-2 text-sm">
-              {(items || []).map((item) => (
-                <li key={item.id} className="flex justify-between gap-2 border-b border-border pb-2 last:border-0">
+              {(items || []).map((item, idx) => (
+                <li
+                  key={item?.id ?? `${key}-${idx}`}
+                  className="flex justify-between gap-2 border-b border-border pb-2 last:border-0"
+                >
                   {render(item)}
                 </li>
               ))}

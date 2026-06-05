@@ -30,23 +30,16 @@ export default function EditionChooser() {
 
   const enterPersonal = async () => {
     setLoading(true);
-    const result = await switchToPersonal();
-    if (!result?.ok) navigate('/dashboard');
+    await switchToPersonal();
     setLoading(false);
   };
 
   const enterBusiness = async () => {
-    if (!businessOk && !access?.can_start_trial) {
-      navigate('/business/start');
-      return;
-    }
-    if (access?.can_start_trial && !access?.has_business_access) {
-      navigate('/business/start');
-      return;
-    }
     setLoading(true);
     const result = await switchToBusiness();
-    if (!result?.ok) navigate('/business/start');
+    if (!result?.ok && result?.code === 'business_upgrade_required') {
+      navigate('/business/start');
+    }
     setLoading(false);
   };
 

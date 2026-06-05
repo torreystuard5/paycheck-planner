@@ -19,13 +19,6 @@ export default function BusinessPageShell({
 }) {
   const { businessName: profileName, businessTagline } = useBusinessProfile();
   const workspaceName = businessName || profileName;
-  if (loading) {
-    return (
-      <div className={cn('page-container min-w-0', maxWidth)}>
-        <LoadingSpinner label="Loading" />
-      </div>
-    );
-  }
 
   const roleBadge = teamRole && teamRole !== 'owner' ? (
     <Badge variant="purple" className="mt-2 normal-case">
@@ -55,7 +48,11 @@ export default function BusinessPageShell({
         </Card>
       )}
 
-      {children}
+      {loading ? (
+        <LoadingSpinner label="Loading dashboard" />
+      ) : (
+        children
+      )}
     </div>
   );
 }

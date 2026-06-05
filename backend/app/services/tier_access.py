@@ -104,17 +104,17 @@ def filter_feature_keys_for_plan(keys: list[str] | None, plan_tier: str) -> list
 
 
 def sync_app_mode_to_subscription(user: User) -> bool:
-    """Force app_mode invariants from subscription tier. Returns True if mutated."""
+    """Force app_mode invariants from subscription tier. Returns True if mutated.
+
+    early_access / pro / bundle users may choose Personal or Business (gated by
+    business_access). Only business-only plans are locked to Business mode.
+    """
     tier = normalize_plan_tier(user.subscription_tier)
     mode = (user.app_mode or "personal").lower()
     changed = False
     if tier == "business":
         if mode != "business":
             user.app_mode = "business"
-            changed = True
-    elif tier in ("early_access", "pro"):
-        if mode != "personal":
-            user.app_mode = "personal"
             changed = True
     elif tier == "bundle":
         if mode not in ("personal", "business"):

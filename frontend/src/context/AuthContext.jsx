@@ -157,7 +157,23 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refresh_token', data.refresh_token);
   };
 
-  const updateUser = (updated) => setUser(updated ? { ...updated, app_mode: updated.app_mode || 'personal' } : updated);
+  const updateUser = (updated) => {
+    if (!updated) {
+      setUser(null);
+      return;
+    }
+    setUser((prev) => ({
+      ...prev,
+      ...updated,
+      app_mode: updated.app_mode ?? prev?.app_mode ?? 'personal',
+    }));
+  };
+
+  const refreshUser = async () => {
+    const { data } = await api.get('/api/v1/auth/me');
+    updateUser({ ...data, app_mode: data?.app_mode || 'personal' });
+    return data;
+  };
 
   return (
     <AuthContext.Provider
@@ -174,6 +190,7 @@ export function AuthProvider({ children }) {
         subscription,
         fetchSubscription,
         updateUser,
+        refreshUser,
       }}
     >
       {children}

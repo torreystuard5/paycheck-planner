@@ -1495,5 +1495,7 @@ async def business_dashboard(
             SaleResponse.from_orm_sale(s, dcmap.get(s.customer_id)) for s in dash_sales
         ],
         recent_deductions=[DeductionResponse.from_orm_row(d) for d in rd.scalars().all()],
-        recent_pay_runs=list(rp.scalars().all()),
+        recent_pay_runs=[
+            PayRunResponse.model_validate(p) for p in rp.scalars().all()
+        ],
     )

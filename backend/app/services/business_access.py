@@ -127,7 +127,10 @@ def business_access_payload(user: User, *, now: datetime | None = None) -> dict[
         "has_business_access": user_has_business_access(user, now=now),
         "can_write_business": user_can_write_business(user, now=now),
         "can_start_trial": user_can_start_business_trial(user, now=now),
-        "can_switch_editions": can_switch_app_mode(tier) or tier == "early_access",
+        "can_switch_editions": (
+            can_switch_app_mode(tier)
+            or tier in ("early_access", "pro", "bundle")
+        ),
         "has_personal_access": has_personal_home_access(tier),
         "has_paid_business": has_business_dashboard_access(tier),
         "trial_ends_at": (
