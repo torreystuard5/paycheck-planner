@@ -1,5 +1,61 @@
 @import "tailwindcss";
 
+@theme {
+  /* Brand — pay, income, positive money flow */
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+
+  /* Accent — navigation, links, bills */
+  --color-accent-50: #eff6ff;
+  --color-accent-100: #dbeafe;
+  --color-accent-500: #3b82f6;
+  --color-accent-600: #2563eb;
+  --color-accent-700: #1d4ed8;
+
+  /* Debt — balances, debt UI */
+  --color-debt-50: #fff7ed;
+  --color-debt-100: #ffedd5;
+  --color-debt-500: #f97316;
+  --color-debt-600: #ea580c;
+  --color-debt-700: #c2410c;
+
+  /* Danger — delete, over budget, critical overdue */
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  /* Warning */
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+
+  /* Neutrals */
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-muted: #64748b;
+  --color-foreground: #0f172a;
+
+  /* Savings / purple accent */
+  --color-purple-50: #faf5ff;
+  --color-purple-500: #a855f7;
+  --color-purple-600: #9333ea;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 0.75rem;
+  --radius-button: 0.625rem;
+
+  --shadow-card: 0 1px 3px rgb(15 23 42 / 0.06), 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-card-hover: 0 4px 12px rgb(15 23 42 / 0.08);
+}
+
 html,
 body,
 #root {
@@ -11,8 +67,13 @@ body,
 }
 
 body {
+  font-family: var(--font-sans);
+  color: var(--color-foreground);
+  background-color: var(--color-surface-subtle);
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
@@ -37,4 +98,76 @@ textarea {
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(1rem); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@utility text-display {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--color-foreground);
+  @media (width >= 40rem) {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+}
+
+@utility text-title {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+  @media (width >= 40rem) {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+}
+
+@utility text-body {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted);
+}
+
+@utility text-caption {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-muted);
+}
+
+@utility text-money {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+  color: var(--color-foreground);
+  @media (width >= 40rem) {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+}
+
+@utility page-container {
+  min-width: 0;
+  & > * + * {
+    margin-top: 1.25rem;
+  }
+  @media (width >= 40rem) {
+    & > * + * {
+      margin-top: 1.5rem;
+    }
+  }
+}
+
+@utility card-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1rem;
+  @media (width >= 40rem) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  @media (width >= 64rem) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }

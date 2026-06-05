@@ -17,7 +17,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import DebtInterestPanel from '../components/DebtInterestPanel';
+import DebtFormInterestPreview from '../components/DebtFormInterestPreview';
 import usePolling from '../hooks/usePolling';
+import { Badge, Button, Card, IconStat, cn } from '../components/ui';
 
 const TABS = ['Overview', 'Payoff Strategy', 'Credit Cards'];
 const DEBT_TYPES = ['credit_card', 'student_loan', 'auto_loan', 'mortgage', 'personal_loan', 'other'];
@@ -42,7 +45,7 @@ const fmtCurrency = (val) => {
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
-export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
+export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }) {
   const { user } = useAuth();
   const { activeBudget, budgetVersion, bumpBudgetVersion } = useBudget();
   const toast = useToast();
@@ -76,6 +79,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
   const [payAmount, setPayAmount] = useState('');       // editable amount
   const [payError, setPayError] = useState(null);
   const fileInputRef = useRef(null);
+  const interestPreviewRef = useRef(null);
 
   // Postpone state
   const [postponeTarget, setPostponeTarget] = useState(null);
@@ -105,6 +109,14 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
       onClearAutoOpen?.();
     }
   }, [autoOpenAdd]);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const timer = window.setTimeout(() => {
+      interestPreviewRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [showModal]);
 
   useEffect(() => {
     if (user?.household_id) {
@@ -447,11 +459,17 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
     const catColor = getCategoryColor(debt.type === 'credit_card' ? 'debt' : debt.type);
 
     return (
-      <div key={debt.id} className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-4">
+      <Card key={debt.id} className="overflow-hidden">
+        <div className="p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <IconStat icon={TrendingDown} tone="debt" className="rounded-lg p-2.5" iconClassName="h-5 w-5" />
+            <div className="min-w-0 flex-1">
           {/* Line 1: Name + actions */}
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-gray-900 truncate">{debt.name}</h3>
+            <div className="flex min-w-0 items-center gap-2">
+              <h3 className="text-base font-semibold text-foreground truncate">{debt.name}</h3>
+              <Badge variant="debt" className="shrink-0 normal-case">Debt</Badge>
+            </div>
             <div className="flex items-center gap-1 shrink-0">
               {Number(debt.balance) > 0 && !debt.is_paid_this_period && (
                 <button
@@ -478,77 +496,70 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
           </div>
 
           {/* Line 2: Badges */}
-          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {debt.is_paid_this_period && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                <CheckCircle className="w-3 h-3" /> Paid
-              </span>
+              <Badge variant="success" className="normal-case gap-1">
+                <CheckCircle className="h-3 w-3" /> Paid
+              </Badge>
             )}
             {debt.postpone_until && (
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); handleClearPostpone(debt); }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                className="inline-flex items-center gap-1 rounded-full bg-warning-100 px-2 py-0.5 text-xs font-medium text-warning-700 transition-colors hover:bg-warning-100/80"
                 title="Click to clear postponement"
               >
-                <Clock className="w-3 h-3" />
+                <Clock className="h-3 w-3" />
                 Postponed to {formatFriendlyDate(debt.postpone_until)}
-                <X className="w-3 h-3 ml-0.5" />
+                <X className="ml-0.5 h-3 w-3" />
               </button>
             )}
             {debt.is_household_bill && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
-                <Users className="w-3 h-3" /> Shared
-              </span>
+              <Badge variant="info" className="normal-case gap-1">
+                <Users className="h-3 w-3" /> Shared
+              </Badge>
             )}
             {isSplit && (
-              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-600">
-                Split
-              </span>
+              <Badge variant="purple" className="normal-case">Split</Badge>
             )}
-            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${catColor}`}>
+            <span className={cn('inline-flex rounded-full px-2 py-0.5 text-xs font-medium', catColor)}>
               {formatLabel(debt.type) || 'Debt'}
             </span>
             {debt.auto_pay && (
-              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                Auto-pay
-              </span>
+              <Badge variant="success" className="normal-case">Auto-pay</Badge>
             )}
           </div>
 
           {/* Line 3: Balance */}
           <div className="mt-2">
-            <CurrencyDisplay amount={debt.balance} className="text-lg font-bold text-gray-900" />
+            <CurrencyDisplay amount={debt.balance} className="text-lg font-bold text-foreground" />
             {yourShare != null && (
-              <span className="block text-sm text-blue-600 mt-0.5">Your Share: {fmtCurrency(yourShare)}</span>
+              <span className="mt-0.5 block text-sm text-accent-600">Your share: {fmtCurrency(yourShare)}</span>
             )}
           </div>
 
           {/* Progress bar */}
-          <div className="mt-2 flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="mt-3 flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-subtle">
               <div
-                className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                className="h-full rounded-full bg-brand-500 transition-all duration-300"
                 style={{ width: `${Math.min(debt.percent_paid ?? 0, 100)}%` }}
               />
             </div>
-            <span className="text-xs font-medium text-gray-500 shrink-0 w-[72px] text-right">
-              {(debt.percent_paid ?? 0) >= 100 ? 'Paid off! \u{1F389}' : `${debt.percent_paid ?? 0}% paid`}
+            <span className="w-[4.5rem] shrink-0 text-right text-caption font-medium">
+              {(debt.percent_paid ?? 0) >= 100 ? 'Paid off!' : `${debt.percent_paid ?? 0}% paid`}
             </span>
           </div>
 
-          {/* Line 4: Due info */}
-          <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm text-gray-500">
-            <span>Due {debt.next_due_date ? formatFriendlyDate(debt.next_due_date) : (debt.due_day ? `day ${debt.due_day}` : '--')}</span>
-            {debt.apr && (
-              <>
-                <span className="text-gray-300">·</span>
-                <span>{debt.apr}% APR</span>
-              </>
-            )}
+          {/* Due info */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
+            <span>
+              Due {debt.next_due_date ? formatFriendlyDate(debt.next_due_date) : (debt.due_day ? `day ${debt.due_day}` : '--')}
+            </span>
             {debt.minimum_payment && (
               <>
-                <span className="text-gray-300">·</span>
-                <span>Min: {fmtCurrency(debt.minimum_payment)}</span>
+                <span className="text-muted">·</span>
+                <span>Min {fmtCurrency(debt.minimum_payment)}</span>
               </>
             )}
           </div>
@@ -557,75 +568,83 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
           {Number(debt.balance) > 0 && (
           <div className="mt-3">
             {debt.is_paid_this_period ? (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => handleUnmarkPaid(debt.id)}
                 disabled={!!markingPaid[debt.id]}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
+                className="border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100"
               >
-                <CheckCircle className="w-4 h-4" />
+                <CheckCircle className="h-4 w-4" />
                 {markingPaid[debt.id] ? 'Undoing…' : 'Paid ✓'}
-                {!markingPaid[debt.id] && <span className="text-xs text-green-500 ml-1">Undo</span>}
-              </button>
+                {!markingPaid[debt.id] && <span className="ml-1 text-xs text-brand-600">Undo</span>}
+              </Button>
             ) : (
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => openPayModal(debt)}
                 disabled={!!markingPaid[debt.id]}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
               >
-                <DollarSign className="w-4 h-4" />
+                <DollarSign className="h-4 w-4" />
                 {markingPaid[debt.id] ? 'Marking…' : 'Mark Paid'}
-              </button>
+              </Button>
             )}
           </div>
           )}
+            </div>
+          </div>
         </div>
+
+        <DebtInterestPanel
+          balance={debt.balance}
+          apr={debt.apr}
+          minimumPayment={debt.minimum_payment}
+        />
 
         {/* Expanded section */}
         <div
           className="overflow-hidden transition-all duration-300 ease-in-out"
-          style={{ maxHeight: isExpanded ? '300px' : '0px', opacity: isExpanded ? 1 : 0 }}
+          style={{ maxHeight: isExpanded ? '520px' : '0px', opacity: isExpanded ? 1 : 0 }}
         >
           <div className="px-4 pb-4">
-            <div className="border-t border-gray-200 pt-3 space-y-2 text-sm">
+            <div className="space-y-2 border-t border-border pt-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-500">Balance</span>
-                <CurrencyDisplay amount={debt.balance} className="font-medium text-gray-900" />
+                <span className="text-muted">Balance</span>
+                <CurrencyDisplay amount={debt.balance} className="font-medium text-foreground" />
               </div>
               {debt.credit_limit && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Credit Limit</span>
-                  <CurrencyDisplay amount={debt.credit_limit} className="font-medium text-gray-900" />
+                  <span className="text-muted">Credit limit</span>
+                  <CurrencyDisplay amount={debt.credit_limit} className="font-medium text-foreground" />
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-gray-500">APR</span>
-                <span className="font-medium text-gray-900">{debt.apr ? `${debt.apr}%` : '--'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Minimum Payment</span>
-                <CurrencyDisplay amount={debt.minimum_payment} className="font-medium text-gray-900" />
+                <span className="text-muted">Minimum payment</span>
+                <CurrencyDisplay amount={debt.minimum_payment} className="font-medium text-foreground" />
               </div>
               {isSplit && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Your Share</span>
+                  <span className="text-muted">Your share</span>
                   <span className="font-medium text-purple-600">{fmtCurrency(yourShare)}</span>
                 </div>
               )}
               {debt.created_at && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Added</span>
-                  <span className="text-gray-700">{formatFriendlyDate(debt.created_at)}</span>
+                  <span className="text-muted">Added</span>
+                  <span className="text-foreground">{formatFriendlyDate(debt.created_at)}</span>
                 </div>
               )}
             </div>
           </div>
         </div>
-      </div>
+      </Card>
     );
   };
 
   return (
     <div className="min-w-0 space-y-5 sm:space-y-6">
+      {!embedded && (
       <div className="min-w-0">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -662,6 +681,33 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
           )}
         </div>
       </div>
+      )}
+
+      {embedded && activeTab === 'Overview' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <SortDropdown
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+            options={[
+              { value: 'name', label: 'Name' },
+              { value: 'balance', label: 'Balance' },
+              { value: 'minimum_payment', label: 'Minimum Payment' },
+              { value: 'interest_rate', label: 'Interest Rate' },
+              { value: 'due_date', label: 'Due Date' },
+              { value: 'created_at', label: 'Date Added' },
+            ]}
+          />
+          <ImportExportButton
+            onExport={handleExport}
+            onImport={() => { setShowImportModal(true); setImportResult(null); }}
+          />
+          <Button variant="accent" onClick={openAdd}>
+            <Plus className="h-4 w-4" />
+            Add Debt
+          </Button>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
@@ -951,7 +997,12 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
         </div>
       )}
 
-      <Modal isOpen={showModal} onClose={closeDebtModal} title={editingDebt ? 'Edit Debt' : 'Add Debt'}>
+      <Modal
+        isOpen={showModal}
+        onClose={closeDebtModal}
+        title={editingDebt ? 'Edit Debt' : 'Add Debt'}
+        className="sm:max-w-xl"
+      >
         <form onSubmit={handleSubmit} className="space-y-4">
           {modalError && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700" role="alert">
@@ -982,8 +1033,17 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">APR (%)</label>
-              <input type="number" step="0.01" value={form.apr} onChange={(e) => setForm({ ...form, apr: e.target.value })} className={inputClass} />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Interest Rate (APR %)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.apr}
+                onChange={(e) => setForm({ ...form, apr: e.target.value })}
+                className={inputClass}
+                placeholder="e.g. 22.9"
+              />
+              <p className="text-caption mt-1">Annual percentage rate on the current balance</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Payment</label>
@@ -1047,6 +1107,15 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen }) {
               )}
             </div>
           )}
+
+          {/* Interest Preview — live updating from balance, APR, minimum payment */}
+          <div ref={interestPreviewRef} className="pt-1">
+            <DebtFormInterestPreview
+              balance={form.balance}
+              apr={form.apr}
+              minimumPayment={form.minimum_payment}
+            />
+          </div>
 
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={closeDebtModal} disabled={saving} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50">Cancel</button>

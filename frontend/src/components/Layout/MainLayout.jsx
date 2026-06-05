@@ -21,7 +21,7 @@ import logo from '../../assets/PayDrift-Logo.jpg';
 
 const personalMobileTabs = [
   { to: '/dashboard', label: 'Home', icon: Home },
-  { to: '/bills-debts', label: 'Bills', icon: Receipt },
+  { to: '/bills-debts', label: 'Bills & Debts', icon: Receipt },
   { to: '/income', label: 'Income', icon: DollarSign },
   { to: '/household', label: 'Household', icon: Users },
 ];

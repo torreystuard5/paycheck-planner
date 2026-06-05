@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
+import { cn } from './ui/cn';
 
-export default function Modal({ isOpen, onClose, title, children }) {
+export default function Modal({ isOpen, onClose, title, children, className }) {
   const scrollPosRef = useRef(0);
 
   useEffect(() => {
@@ -24,13 +25,25 @@ export default function Modal({ isOpen, onClose, title, children }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
-      <div className="fixed inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full overflow-x-hidden bg-white shadow-xl border border-gray-200 rounded-t-2xl sm:rounded-lg sm:w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto z-[100]">
-        <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 sm:px-6">
-          <h2 className="min-w-0 truncate text-base font-semibold text-gray-900 sm:text-lg">{title}</h2>
+      <div className="fixed inset-0 bg-foreground/40" onClick={onClose} aria-hidden />
+      <div
+        className={cn(
+          'relative z-[100] max-h-[92dvh] w-full overflow-x-hidden overflow-y-auto',
+          'rounded-t-2xl border border-border bg-surface shadow-[var(--shadow-card-hover)]',
+          'sm:w-full sm:max-w-lg sm:rounded-xl',
+          className,
+        )}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <div className="flex items-center justify-between border-b border-border px-4 py-4 sm:px-6">
+          <h2 id="modal-title" className="min-w-0 truncate text-title sm:text-lg">
+            {title}
+          </h2>
           <button
             onClick={onClose}
-            className="ml-2 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+            className="ml-2 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-subtle hover:text-foreground"
             aria-label="Close"
           >
             <X className="h-5 w-5" />

@@ -16,6 +16,7 @@ import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import DateInput from '../components/DateInput';
 import usePolling from '../hooks/usePolling';
+import { Badge, Button, Card, IconStat, cn } from '../components/ui';
 
 const CATEGORIES = ['Housing', 'Utilities', 'Insurance', 'Transportation', 'Subscriptions', 'Food', 'Healthcare', 'Other'];
 const FREQUENCIES = [
@@ -87,7 +88,7 @@ const freqLabel = (freq) => {
   return f ? f.label : (freq || 'Monthly');
 };
 
-export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
+export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }) {
   const { user } = useAuth();
   const { activeBudget, budgetVersion } = useBudget();
   const toast = useToast();
@@ -684,13 +685,19 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
     const catColor = getCategoryColor(bill.category);
 
     return (
-      <div key={`${bill.id}-${bill.occurrence_due_date || bill.next_due_date || bill.due_day || 'bill'}`} className={`bg-white rounded-lg shadow-sm border border-gray-200 ${isPaid ? 'opacity-60 bg-gray-50' : ''}`}>
+      <Card key={`${bill.id}-${bill.occurrence_due_date || bill.next_due_date || bill.due_day || 'bill'}`} className={cn(isPaid && 'opacity-75')}>
         <div className="p-4">
+          <div className="flex items-start gap-3">
+            <IconStat icon={FileText} tone="accent" className="rounded-lg p-2.5" iconClassName="h-5 w-5" />
+            <div className="min-w-0 flex-1">
           {/* Line 1: Name + action icons */}
           <div className="flex items-center justify-between gap-2">
-            <h3 className={`text-base font-semibold truncate ${isPaid ? 'text-gray-500' : 'text-gray-900'}`}>
-              {bill.name || 'Untitled'}
-            </h3>
+            <div className="flex min-w-0 items-center gap-2">
+              <h3 className={cn('text-base font-semibold truncate', isPaid ? 'text-muted line-through' : 'text-foreground')}>
+                {bill.name || 'Untitled'}
+              </h3>
+              <Badge variant="info" className="shrink-0 normal-case">Bill</Badge>
+            </div>
             <div className="flex items-center gap-1 shrink-0">
               {/* Quick mark as paid */}
               {!isPaid ? (
@@ -784,7 +791,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
           </div>
 
           {/* Line 4: Due info */}
-          <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm text-gray-500">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-caption">
             <span>
               {(bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
                 ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
@@ -798,6 +805,8 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
           {isPaid && bill.paid_date && (
             <p className="text-xs text-green-600 mt-1">Paid {formatFriendlyDate(bill.paid_date)}</p>
           )}
+            </div>
+          </div>
         </div>
 
         {/* Expanded section */}
@@ -910,12 +919,13 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
             </div>
           </div>
         </div>
-      </div>
+      </Card>
     );
   };
 
   return (
     <div className="min-w-0 space-y-5 sm:space-y-6">
+      {!embedded && (
       <div className="min-w-0">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -943,6 +953,26 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen }) {
           </div>
         </div>
       </div>
+      )}
+
+      {embedded && !showHistory && (
+        <div className="flex flex-wrap items-center gap-2">
+          <SortDropdown
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+            options={sortOptions}
+          />
+          <ImportExportButton
+            onExport={handleExport}
+            onImport={() => { setShowImportModal(true); setImportResult(null); }}
+          />
+          <Button variant="accent" onClick={openAdd}>
+            <Plus className="h-4 w-4" />
+            Add Bill
+          </Button>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>

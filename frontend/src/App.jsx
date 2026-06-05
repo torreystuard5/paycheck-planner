@@ -15,8 +15,6 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
 import SetNewPassword from './pages/auth/SetNewPassword';
 import Dashboard from './pages/Dashboard';
-import Bills from './pages/Bills';
-import Debts from './pages/Debts';
 import BillsAndDebts from './pages/BillsAndDebts';
 import Savings from './pages/Savings';
 import Payments from './pages/Payments';

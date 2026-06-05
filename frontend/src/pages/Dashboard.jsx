@@ -1,6 +1,25 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, FileText, CreditCard, PiggyBank, TrendingUp, Calendar, AlertCircle, Users, Activity, Clock, CheckCircle, ChevronRight, ChevronDown, Square, CheckSquare, EyeOff, Eye, ChevronUp } from 'lucide-react';
+import {
+  DollarSign,
+  FileText,
+  CreditCard,
+  PiggyBank,
+  TrendingUp,
+  Calendar,
+  AlertCircle,
+  Users,
+  Activity,
+  Clock,
+  CheckCircle,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Square,
+  CheckSquare,
+  EyeOff,
+  Eye,
+} from 'lucide-react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +31,15 @@ import usePolling from '../hooks/usePolling';
 import { formatDate, formatPaycheckDate } from '../utils/formatDate';
 import { augmentPaycheckPlan } from '../utils/paycheckPlanItems';
 import { formatApiError } from '../utils/formatApiError';
+import {
+  Badge,
+  Button,
+  Card,
+  CollapsibleCard,
+  IconStat,
+  PageHeader,
+  cn,
+} from '../components/ui';
 
 const fmtCurrency = (val) => {
   const n = Number(val);
@@ -19,30 +47,105 @@ const fmtCurrency = (val) => {
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
-function CollapsibleSection({ sectionKey, title, icon: Icon, iconColor, collapsed, onToggle, children }) {
-  const isCollapsed = collapsed.includes(sectionKey);
+const creditRatingMeta = (pct) => {
+  const v = Number(pct || 0);
+  if (v < 10) return { label: 'Excellent', variant: 'success', bar: 'bg-brand-500' };
+  if (v < 30) return { label: 'Good', variant: 'success', bar: 'bg-brand-500' };
+  if (v < 50) return { label: 'Fair', variant: 'warning', bar: 'bg-warning-600' };
+  if (v < 75) return { label: 'Poor', variant: 'debt', bar: 'bg-debt-500' };
+  return { label: 'Critical', variant: 'danger', bar: 'bg-danger-500' };
+};
+
+function SummaryStatCard({ label, value, count, icon, tone, subtitle, paidSubtitle, onClick }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-      <button
-        onClick={() => onToggle(sectionKey)}
-        className="w-full flex items-center justify-between gap-3 p-4 pb-0 text-left sm:p-6 sm:pb-0"
-      >
-        <h2 className="min-w-0 text-base font-semibold text-gray-900 flex items-center gap-2 sm:text-lg">
-          {Icon && <Icon className={`w-5 h-5 ${iconColor || 'text-gray-500'}`} />}
-          <span className="truncate">{title}</span>
-        </h2>
-        <ChevronDown
-          className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-        />
-      </button>
-      <div
-        className="overflow-hidden transition-all duration-200 ease-in-out"
-        style={{ maxHeight: isCollapsed ? '0px' : '2000px', opacity: isCollapsed ? 0 : 1 }}
-      >
-        <div className="p-4 pt-4 sm:p-6 sm:pt-4">
-          {children}
+    <Card
+      variant="interactive"
+      onClick={onClick}
+      className="p-4 sm:p-5"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-caption font-medium">{label}</p>
+          {value !== null && value !== undefined ? (
+            <CurrencyDisplay amount={value} className="text-money mt-1 block break-words" />
+          ) : (
+            <p className="text-money mt-1">{count}</p>
+          )}
+          {subtitle && (
+            <p className="text-caption mt-2 flex min-w-0 items-center gap-1 text-brand-600">
+              <CheckCircle className="h-3 w-3 shrink-0" />
+              <span className="min-w-0 break-words">{subtitle}</span>
+            </p>
+          )}
+          {paidSubtitle && (
+            <p className="text-caption mt-1 flex min-w-0 items-center gap-1 text-accent-600">
+              <DollarSign className="h-3 w-3 shrink-0" />
+              <span className="min-w-0 break-words">{paidSubtitle}</span>
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-col items-center gap-2">
+          <IconStat icon={icon} tone={tone} />
+          <ChevronRight className="h-4 w-4 text-muted" />
         </div>
       </div>
+    </Card>
+  );
+}
+
+function MetricRow({ label, value, valueClassName }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <span className="text-body">{label}</span>
+      <span className={cn('text-sm font-semibold text-foreground tabular-nums', valueClassName)}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function PaycheckMetricGrid({ current }) {
+  const remaining = Number(current.remaining);
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <Card variant="inset" className="p-3">
+        <p className="text-caption">Pay Period</p>
+        <p className="mt-1 text-sm font-semibold text-foreground">
+          {formatPaycheckDate(current.paycheck_date)}
+        </p>
+      </Card>
+      <Card variant="inset" className="p-3">
+        <p className="text-caption">Paycheck Amount</p>
+        <CurrencyDisplay
+          amount={current.paycheck_amount}
+          className="mt-1 block text-sm font-semibold text-foreground"
+        />
+      </Card>
+      <Card variant="inset" className="p-3">
+        <p className="text-caption">Total Due</p>
+        <CurrencyDisplay
+          amount={current.total_due}
+          className="mt-1 block text-sm font-semibold text-foreground"
+        />
+      </Card>
+      <Card variant="inset" className="p-3">
+        <p className="text-caption">Remaining</p>
+        <CurrencyDisplay
+          amount={current.remaining}
+          className={cn(
+            'mt-1 block text-sm font-semibold',
+            remaining >= 0 ? 'text-brand-600' : 'text-danger-600',
+          )}
+        />
+      </Card>
     </div>
   );
 }
@@ -57,6 +160,7 @@ export default function Dashboard() {
       navigate('/business/dashboard', { replace: true });
     }
   }, [user, navigate]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [incomeSummary, setIncomeSummary] = useState(null);
@@ -75,18 +179,15 @@ export default function Dashboard() {
   const [hidingOverdue, setHidingOverdue] = useState({});
   const [overrideBusyKey, setOverrideBusyKey] = useState(null);
 
-  /** Stable key + paid flag from the canonical paycheck-plan response. */
   const assignItemKey = useCallback((item) => `${item.item_type}_${item.id || item.item_id}`, []);
   const assignItemPaid = useCallback(
     (item) => Boolean(item.is_paid) || Boolean(checklist[assignItemKey(item)]),
     [assignItemKey, checklist],
   );
 
-  // Collapsible sections state
   const [collapsedSections, setCollapsedSections] = useState([]);
   const [sectionsLoaded, setSectionsLoaded] = useState(false);
 
-  // Load UI preferences on mount
   useEffect(() => {
     const loadPrefs = async () => {
       try {
@@ -100,7 +201,7 @@ export default function Dashboard() {
 
   const toggleSection = async (key) => {
     const updated = collapsedSections.includes(key)
-      ? collapsedSections.filter(k => k !== key)
+      ? collapsedSections.filter((k) => k !== key)
       : [...collapsedSections, key];
     setCollapsedSections(updated);
     try {
@@ -113,7 +214,7 @@ export default function Dashboard() {
     setError(null);
     const budgetId = activeBudget?.id || localStorage.getItem('active_budget_id');
     const bq = budgetId ? `budget_id=${budgetId}` : '';
-    const sep = (url) => url.includes('?') ? `${url}&${bq}` : `${url}?${bq}`;
+    const sep = (url) => (url.includes('?') ? `${url}&${bq}` : `${url}?${bq}`);
     try {
       const [incomeRes, billsRes, debtsRes, savingsRes, paymentsRes] = await Promise.allSettled([
         api.get(bq ? sep('/api/v1/paycheck-entries/monthly-summary') : '/api/v1/paycheck-entries/monthly-summary'),
@@ -161,7 +262,7 @@ export default function Dashboard() {
       }
 
       setLastUpdated(new Date());
-    } catch (err) {
+    } catch {
       setError('Failed to load dashboard data.');
     }
   }, [user?.app_mode, activeBudget?.id]);
@@ -265,15 +366,17 @@ export default function Dashboard() {
 
   const totalIncome = incomeSummary ? Number(incomeSummary.total_net) || 0 : 0;
   const incomePaycheckCount = incomeSummary ? incomeSummary.paycheck_count || 0 : 0;
-  const totalBills = Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false).reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0) : 0;
-  const activeDebts = Array.isArray(debts) ? debts.filter(d => Number(d.balance) > 0) : [];
+  const totalBills = Array.isArray(bills)
+    ? bills.filter((b) => b.is_user_responsible !== false).reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0)
+    : 0;
+  const activeDebts = Array.isArray(debts) ? debts.filter((d) => Number(d.balance) > 0) : [];
   const totalDebt = activeDebts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
-  const debtsPaidThisPeriod = activeDebts.filter(d => d.is_paid_this_period).length;
+  const debtsPaidThisPeriod = activeDebts.filter((d) => d.is_paid_this_period).length;
   const totalDebtCount = activeDebts.length;
   const savingsCount = Array.isArray(savingsGoals) ? savingsGoals.length : 0;
 
-  const billsThisMonth = Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false) : [];
-  const paidBills = billsThisMonth.filter(b => b.is_paid);
+  const billsThisMonth = Array.isArray(bills) ? bills.filter((b) => b.is_user_responsible !== false) : [];
+  const paidBills = billsThisMonth.filter((b) => b.is_paid);
   const paidCount = paidBills.length;
   const totalBillCount = billsThisMonth.length;
 
@@ -294,8 +397,8 @@ export default function Dashboard() {
     paycheckPlan?.current_paycheck?.assigned_items
     || paycheckPlan?.paychecks?.[0]?.assigned_items
     || [];
-  const billItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'bill');
-  const debtItemsInPlan = currentPaycheckItems.filter(i => i.item_type === 'debt');
+  const billItemsInPlan = currentPaycheckItems.filter((i) => i.item_type === 'bill');
+  const debtItemsInPlan = currentPaycheckItems.filter((i) => i.item_type === 'debt');
 
   const billsTotalInPlan = billItemsInPlan.reduce((s, i) => s + (Number(i.amount) || 0), 0);
   const billsPaidInPlan = billItemsInPlan
@@ -322,109 +425,114 @@ export default function Dashboard() {
   };
 
   const summaryCards = [
-    { label: 'Total Income', value: totalIncome, icon: DollarSign, color: 'text-green-500', bg: 'bg-green-50', subtitle: incomePaycheckCount > 0 ? `${incomePaycheckCount} paycheck${incomePaycheckCount !== 1 ? 's' : ''} this month` : 'No paychecks logged' },
-    { label: 'Total Bills', value: totalBills, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50', subtitle: getBillSubtitle(), paidSubtitle: billsPaidSubtitle },
-    { label: 'Total Debt', value: totalDebt, icon: CreditCard, color: 'text-red-500', bg: 'bg-red-50', subtitle: totalDebtCount > 0 ? `${debtsPaidThisPeriod}/${totalDebtCount} paid this month` : null, paidSubtitle: debtPaidSubtitle },
-    { label: 'Savings Goals', value: null, count: savingsCount, icon: PiggyBank, color: 'text-purple-500', bg: 'bg-purple-50' },
+    {
+      label: 'Total Income',
+      value: totalIncome,
+      icon: DollarSign,
+      tone: 'brand',
+      subtitle: incomePaycheckCount > 0
+        ? `${incomePaycheckCount} paycheck${incomePaycheckCount !== 1 ? 's' : ''} this month`
+        : 'No paychecks logged',
+    },
+    {
+      label: 'Total Bills',
+      value: totalBills,
+      icon: FileText,
+      tone: 'accent',
+      subtitle: getBillSubtitle(),
+      paidSubtitle: billsPaidSubtitle,
+    },
+    {
+      label: 'Total Debt',
+      value: totalDebt,
+      icon: CreditCard,
+      tone: 'debt',
+      subtitle: totalDebtCount > 0 ? `${debtsPaidThisPeriod}/${totalDebtCount} paid this month` : null,
+      paidSubtitle: debtPaidSubtitle,
+    },
+    {
+      label: 'Savings Goals',
+      value: null,
+      count: savingsCount,
+      icon: PiggyBank,
+      tone: 'purple',
+    },
   ];
 
+  const paymentTypeBadge = (payment) => {
+    if (payment.bill_id) return { label: 'Bill', variant: 'info' };
+    if (payment.debt_id) return { label: 'Debt', variant: 'debt' };
+    return { label: 'Payment', variant: 'neutral' };
+  };
+
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
-      <div className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-          <h1 className="min-w-0 text-xl font-bold text-gray-900 sm:text-2xl">
-            Welcome back{user?.first_name ? `, ${user.first_name}` : ''}
-          </h1>
-          {household && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-              <Users className="w-3 h-3" />
+    <div className="page-container min-w-0">
+      <PageHeader
+        title={`Welcome back${user?.first_name ? `, ${user.first_name}` : ''}`}
+        description="Here's your financial overview"
+        actions={
+          household ? (
+            <Badge variant="info" className="gap-1.5 px-3 py-1">
+              <Users className="h-3.5 w-3.5" />
               Household Budget
-            </span>
-          )}
-        </div>
-        <p className="text-gray-600 mt-1">Here&apos;s your financial overview</p>
+            </Badge>
+          ) : null
+        }
+      >
         {lastUpdated && household && (
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-caption mt-1">
             Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
           </p>
         )}
-      </div>
+      </PageHeader>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-          <p className="text-red-700 text-sm">{error}</p>
-        </div>
+        <Card className="flex items-center gap-3 border-danger-200 bg-danger-50 p-4">
+          <AlertCircle className="h-5 w-5 shrink-0 text-danger-600" />
+          <p className="text-sm text-danger-700">{error}</p>
+        </Card>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="card-grid">
         {summaryCards.map((card) => (
-          <div
+          <SummaryStatCard
             key={card.label}
+            {...card}
             onClick={() => navigate(cardLinks[card.label])}
-            className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow sm:p-6"
-          >
-            <div className="flex min-w-0 items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm text-gray-600">{card.label}</p>
-                {card.value !== null ? (
-                  <CurrencyDisplay amount={card.value} className="text-xl font-bold text-gray-900 mt-1 block break-words sm:text-2xl" />
-                ) : (
-                  <p className="text-xl font-bold text-gray-900 mt-1 sm:text-2xl">{card.count}</p>
-                )}
-                {card.subtitle && (
-                  <p className="text-xs text-green-600 mt-1 flex min-w-0 items-center gap-1">
-                    <CheckCircle className="w-3 h-3" />
-                    <span className="min-w-0 break-words">{card.subtitle}</span>
-                  </p>
-                )}
-                {card.paidSubtitle && (
-                  <p className="text-xs text-blue-600 mt-0.5 flex min-w-0 items-center gap-1">
-                    <DollarSign className="w-3 h-3" />
-                    <span className="min-w-0 break-words">{card.paidSubtitle}</span>
-                  </p>
-                )}
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div className={`${card.bg} p-3 rounded-lg`}>
-                  <card.icon className={`w-6 h-6 ${card.color}`} />
-                </div>
-                <ChevronRight className="w-4 h-4 text-gray-400" />
-              </div>
-            </div>
-          </div>
+          />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CollapsibleSection
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+        <CollapsibleCard
           sectionKey="paycheck_plan"
           title="Current Paycheck Plan"
           icon={Calendar}
-          iconColor="text-blue-500"
+          iconTone="accent"
           collapsed={collapsedSections}
           onToggle={toggleSection}
         >
           {paycheckPlan?.current_paycheck_date && (
-            <div className="mb-4 space-y-1">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Current Paycheck</span>
-                <span className="text-sm font-semibold text-gray-900">
+            <Card variant="inset" className="mb-4 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-caption">Current Paycheck</span>
+                <span className="text-sm font-semibold text-foreground">
                   {formatPaycheckDate(paycheckPlan.current_paycheck_date)}
                 </span>
               </div>
               {paycheckPlan.next_paycheck_date && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Next Paycheck</span>
-                  <span className="text-sm text-gray-500">
+                <div className="mt-2 flex items-center justify-between gap-3 border-t border-border pt-2">
+                  <span className="text-caption">Next Paycheck</span>
+                  <span className="text-sm text-muted">
                     {formatPaycheckDate(paycheckPlan.next_paycheck_date)}
                   </span>
                 </div>
               )}
-            </div>
+            </Card>
           )}
+
           {hasPaycheckPlan ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {(() => {
                 const current = paycheckPlan.current_paycheck || paycheckPlan.paychecks[0];
                 const payPeriodStart = current.pay_period_start || current.paycheck_date;
@@ -454,46 +562,36 @@ export default function Dashboard() {
 
                 return (
                   <>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Pay Period</span>
-                      <span className="font-medium text-gray-900">
-                        {formatPaycheckDate(current.paycheck_date)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Paycheck Amount</span>
-                      <CurrencyDisplay amount={current.paycheck_amount} className="font-medium text-gray-900" />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Total Due</span>
-                      <CurrencyDisplay amount={current.total_due} className="font-medium text-gray-900" />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Remaining</span>
-                      <CurrencyDisplay amount={current.remaining} className={`font-medium ${Number(current.remaining) >= 0 ? 'text-green-600' : 'text-red-600'}`} />
-                    </div>
+                    <PaycheckMetricGrid current={current} />
+
                     {totalItems > 0 && (
-                      <div className="mt-4 pt-4 border-t border-gray-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-medium text-gray-700">Assigned Items</p>
-                          <span className="text-xs font-medium text-gray-500">
-                            {checkedCount}/{totalItems} Paid
-                          </span>
+                      <div className="border-t border-border pt-4">
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-foreground">Assigned Items</p>
+                          <Badge variant="success" className="normal-case">
+                            {checkedCount}/{totalItems} paid
+                          </Badge>
                         </div>
-                        <div className="w-full bg-gray-100 rounded-full h-1 mb-2">
+
+                        <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-surface-subtle">
                           <div
-                            className="bg-green-500 h-1 rounded-full transition-all duration-300"
+                            className="h-full rounded-full bg-brand-500 transition-all duration-300"
                             style={{ width: `${progressPct}%` }}
                           />
                         </div>
-                        <p className="text-xs mb-3">
-                          <span className="font-semibold text-green-600">Paid: {fmtCurrency(paidAmount)}</span>
-                          <span className="text-gray-400"> of {fmtCurrency(totalAssignedAmount)}</span>
-                          <span className="text-gray-300 mx-1">·</span>
-                          <span className="font-semibold text-amber-600">Still Owed: {fmtCurrency(stillOwed)}</span>
-                        </p>
 
-                        <div className="space-y-1.5">
+                        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
+                          <span className="font-semibold text-brand-600">
+                            Paid: {fmtCurrency(paidAmount)}
+                          </span>
+                          <span className="text-muted">of {fmtCurrency(totalAssignedAmount)}</span>
+                          <span className="text-muted">·</span>
+                          <span className="font-semibold text-warning-600">
+                            Still owed: {fmtCurrency(stillOwed)}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
                           {sortedItems.map((item) => {
                             const key = assignItemKey(item);
                             const isChecked = assignItemPaid(item);
@@ -504,54 +602,97 @@ export default function Dashboard() {
                             return (
                               <div
                                 key={key}
-                                className={`flex items-center gap-2 text-sm rounded-md px-1.5 py-1 -mx-1.5 transition-colors ${item.is_overdue && !isChecked ? 'bg-red-50 border-l-2 border-red-400' : isChecked ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
+                                className={cn(
+                                  'flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors',
+                                  item.is_overdue && !isChecked && 'border-l-2 border-danger-500 bg-danger-50',
+                                  isChecked && 'bg-surface-subtle',
+                                  !isChecked && !item.is_overdue && 'hover:bg-surface-subtle',
+                                )}
                               >
                                 <button
+                                  type="button"
                                   onClick={() => toggleChecklistItem(item, payPeriodStart)}
                                   disabled={isToggling}
-                                  className={`shrink-0 transition-colors ${isToggling ? 'opacity-50' : ''} ${isChecked ? 'text-green-500' : 'text-gray-300 hover:text-gray-400'}`}
+                                  className={cn(
+                                    'shrink-0 transition-colors',
+                                    isToggling && 'opacity-50',
+                                    isChecked ? 'text-brand-600' : 'text-muted hover:text-foreground',
+                                  )}
+                                  aria-label={isChecked ? 'Mark unpaid' : 'Mark paid'}
                                 >
-                                  {isChecked
-                                    ? <CheckSquare className="w-4 h-4" />
-                                    : <Square className="w-4 h-4" />
-                                  }
+                                  {isChecked ? (
+                                    <CheckSquare className="h-4 w-4" />
+                                  ) : (
+                                    <Square className="h-4 w-4" />
+                                  )}
                                 </button>
-                                <span className={`flex-1 min-w-0 truncate ${isChecked ? 'line-through text-gray-400' : 'text-gray-600'}`}>
-                                  {item.name}
-                                  {item.is_overdue && !isChecked && (
-                                    <span className="inline-flex items-center ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">Overdue</span>
-                                  )}
-                                  {item.pulled_forward && (
-                                    <span className="inline-flex items-center ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">
-                                      Pulled forward
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                    <span
+                                      className={cn(
+                                        'truncate font-medium',
+                                        isChecked ? 'text-muted line-through' : 'text-foreground',
+                                      )}
+                                    >
+                                      {item.name}
                                     </span>
-                                  )}
+                                    {item.is_overdue && !isChecked && (
+                                      <Badge variant="danger" className="normal-case px-1.5 py-0 text-[10px]">
+                                        Overdue
+                                      </Badge>
+                                    )}
+                                    {item.pulled_forward && (
+                                      <Badge variant="warning" className="normal-case px-1.5 py-0 text-[10px]">
+                                        Pulled forward
+                                      </Badge>
+                                    )}
+                                    {isSplit && (
+                                      <Badge variant="purple" className="normal-case px-1.5 py-0 text-[10px]">
+                                        Your share
+                                      </Badge>
+                                    )}
+                                    <Badge
+                                      variant={item.item_type === 'debt' ? 'debt' : 'info'}
+                                      className="normal-case px-1.5 py-0 text-[10px]"
+                                    >
+                                      {item.item_type}
+                                    </Badge>
+                                  </div>
                                   {item.pulled_forward && item.original_pay_period_start && (
-                                    <span className="text-[10px] text-gray-400 ml-1">
-                                      from {formatPaycheckDate(item.original_pay_period_start)}
-                                    </span>
+                                    <p className="text-caption mt-0.5">
+                                      From {formatPaycheckDate(item.original_pay_period_start)}
+                                    </p>
                                   )}
-                                  {isSplit && <span className="text-xs text-purple-600 ml-1">(your share)</span>}
-                                  {' '}<span className="text-xs text-gray-400">({item.item_type})</span>
-                                </span>
-                                <span className={`shrink-0 text-right ${isChecked ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                                  <CurrencyDisplay amount={item.amount} className="inline" />
-                                </span>
-                                {isSplit && item.full_amount && (
-                                  <span className="shrink-0 text-xs text-gray-400 ml-0.5">
-                                    of {fmtCurrency(item.full_amount)}
-                                  </span>
-                                )}
+                                </div>
+
+                                <div className="shrink-0 text-right">
+                                  <CurrencyDisplay
+                                    amount={item.amount}
+                                    className={cn(
+                                      'text-sm font-medium',
+                                      isChecked ? 'text-muted line-through' : 'text-foreground',
+                                    )}
+                                  />
+                                  {isSplit && item.full_amount && (
+                                    <p className="text-caption">of {fmtCurrency(item.full_amount)}</p>
+                                  )}
+                                </div>
+
                                 {item.is_overdue && !isChecked && item.item_type === 'bill' && (
-                                  <button
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => toggleHideOverdue(item.id || item.item_id, false)}
                                     disabled={isHiding}
-                                    className={`shrink-0 p-0.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${isHiding ? 'opacity-50' : ''}`}
+                                    className="min-h-8 shrink-0 px-1.5"
                                     title="Hide overdue"
+                                    aria-label="Hide overdue"
                                   >
-                                    <EyeOff className="w-3.5 h-3.5" />
-                                  </button>
+                                    <EyeOff className="h-3.5 w-3.5" />
+                                  </Button>
                                 )}
+
                                 <PaycheckPlanItemActions
                                   item={item}
                                   busy={overrideBusyKey === overrideItemKey(item)}
@@ -565,40 +706,51 @@ export default function Dashboard() {
                         </div>
 
                         {hiddenOverdueItems.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-100">
-                            <button
+                          <div className="mt-4 border-t border-border pt-3">
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => setShowHiddenOverdue((prev) => !prev)}
-                              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors w-full"
+                              className="h-auto min-h-0 w-full justify-start px-0 text-caption text-muted hover:text-foreground"
                             >
-                              {showHiddenOverdue ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                              <span>{hiddenOverdueItems.length} hidden overdue {hiddenOverdueItems.length === 1 ? 'item' : 'items'}</span>
-                            </button>
+                              {showHiddenOverdue ? (
+                                <ChevronUp className="mr-1.5 h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronDown className="mr-1.5 h-3.5 w-3.5" />
+                              )}
+                              {hiddenOverdueItems.length} hidden overdue{' '}
+                              {hiddenOverdueItems.length === 1 ? 'item' : 'items'}
+                            </Button>
+
                             {showHiddenOverdue && (
-                              <div className="mt-2 space-y-1.5">
+                              <div className="mt-2 space-y-2">
                                 {hiddenOverdueItems.map((item) => {
                                   const key = `${item.item_type}_${item.id || item.item_id}`;
                                   const isHiding = !!hidingOverdue[item.id || item.item_id];
                                   return (
                                     <div
                                       key={key}
-                                      className="flex items-center gap-2 text-sm rounded-md px-1.5 py-1 -mx-1.5 bg-gray-50 opacity-60"
+                                      className="flex items-center gap-2 rounded-lg bg-surface-subtle px-3 py-2.5 text-sm opacity-70"
                                     >
-                                      <span className="shrink-0 w-4" />
-                                      <span className="flex-1 min-w-0 truncate text-gray-400">
+                                      <span className="w-4 shrink-0" />
+                                      <span className="min-w-0 flex-1 truncate text-muted">
                                         {item.name}
-                                        <span className="inline-flex items-center ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-500">Hidden</span>
+                                        <Badge variant="neutral" className="ml-1.5 normal-case px-1.5 py-0 text-[10px]">
+                                          Hidden
+                                        </Badge>
                                       </span>
-                                      <span className="shrink-0 text-right text-gray-400">
-                                        <CurrencyDisplay amount={item.amount} className="inline" />
-                                      </span>
-                                      <button
+                                      <CurrencyDisplay amount={item.amount} className="shrink-0 text-sm text-muted" />
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
                                         onClick={() => toggleHideOverdue(item.id || item.item_id, true)}
                                         disabled={isHiding}
-                                        className={`shrink-0 p-0.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${isHiding ? 'opacity-50' : ''}`}
+                                        className="min-h-8 shrink-0 px-1.5"
                                         title="Show overdue"
+                                        aria-label="Show overdue"
                                       >
-                                        <Eye className="w-3.5 h-3.5" />
-                                      </button>
+                                        <Eye className="h-3.5 w-3.5" />
+                                      </Button>
                                     </div>
                                   );
                                 })}
@@ -613,151 +765,182 @@ export default function Dashboard() {
               })()}
             </div>
           ) : (
-            <p className="text-gray-500 text-sm">No paycheck plan configured yet.</p>
+            <p className="text-body">No paycheck plan configured yet.</p>
           )}
+        </CollapsibleCard>
 
-        </CollapsibleSection>
-
-        <CollapsibleSection
+        <CollapsibleCard
           sectionKey="quick_stats"
           title="Quick Stats"
           icon={TrendingUp}
-          iconColor="text-green-500"
+          iconTone="brand"
           collapsed={collapsedSections}
           onToggle={toggleSection}
         >
           <div className="space-y-4">
-            {creditScore && (() => {
-              const pct = Number(creditScore.overall_utilization_pct || 0);
-              const getRating = (v) => {
-                if (v < 10) return { label: 'Excellent', bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500' };
-                if (v < 30) return { label: 'Good', bg: 'bg-blue-100', text: 'text-blue-700', bar: 'bg-blue-500' };
-                if (v < 50) return { label: 'Fair', bg: 'bg-yellow-100', text: 'text-yellow-700', bar: 'bg-yellow-500' };
-                if (v < 75) return { label: 'Poor', bg: 'bg-orange-100', text: 'text-orange-700', bar: 'bg-orange-500' };
-                return { label: 'Critical', bg: 'bg-red-100', text: 'text-red-700', bar: 'bg-red-500' };
-              };
-              const rating = getRating(pct);
-              return (
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-600">Credit Utilization</span>
-                    <span className="text-2xl font-bold text-gray-900">{creditScore.overall_utilization_pct != null ? `${creditScore.overall_utilization_pct}%` : '--'}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs text-gray-500">Utilization Rating</span>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${rating.bg} ${rating.text}`}>{rating.label}</span>
-                  </div>
-                  {creditScore.overall_utilization_pct != null && (
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-600">Credit Utilization</span>
-                        <span className="text-gray-900">{(isFinite(pct) ? pct : 0).toFixed(1)}%</span>
+            {creditScore ? (
+              (() => {
+                const pct = Number(creditScore.overall_utilization_pct || 0);
+                const rating = creditRatingMeta(pct);
+                return (
+                  <div>
+                    <div className="mb-3 flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-caption">Credit Utilization</p>
+                        <p className="text-money mt-1">
+                          {creditScore.overall_utilization_pct != null ? `${creditScore.overall_utilization_pct}%` : '--'}
+                        </p>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className={`${rating.bar} h-2 rounded-full`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                      </div>
+                      <Badge variant={rating.variant} className="normal-case">
+                        {rating.label}
+                      </Badge>
                     </div>
-                  )}
-                </div>
-              );
-            })()}
-            {!creditScore && <p className="text-gray-500 text-sm">Add debts to see credit card utilization.</p>}
+                    {creditScore.overall_utilization_pct != null && (
+                      <div>
+                        <div className="mb-1.5 flex justify-between text-caption">
+                          <span>Utilization</span>
+                          <span className="font-medium text-foreground">
+                            {(isFinite(pct) ? pct : 0).toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-subtle">
+                          <div
+                            className={cn('h-full rounded-full transition-all', rating.bar)}
+                            style={{ width: `${Math.min(pct, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
+            ) : (
+              <p className="text-body">Add debts to see credit card utilization.</p>
+            )}
 
-            <div className="pt-4 border-t border-gray-100">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Monthly Bills</span>
-                <span className="font-medium text-gray-900">{Array.isArray(bills) ? bills.filter(b => b.is_user_responsible !== false).length : 0}</span>
+            <Card variant="inset" className="divide-y divide-border p-0">
+              <div className="px-4">
+                <MetricRow
+                  label="Monthly Bills"
+                  value={Array.isArray(bills) ? bills.filter((b) => b.is_user_responsible !== false).length : 0}
+                />
               </div>
-              <div className="flex justify-between items-center mt-2">
-                <span className="text-gray-600">Active Debts</span>
-                <span className="font-medium text-gray-900">{activeDebts.length}</span>
+              <div className="px-4">
+                <MetricRow label="Active Debts" value={activeDebts.length} />
               </div>
               {totalBillCount > 0 && (
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-gray-600 flex items-center gap-1.5">
-                    <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                    Bills Paid This Month
-                  </span>
-                  <span className={`font-medium ${paidCount === totalBillCount ? 'text-green-600' : 'text-gray-900'}`}>
-                    {paidCount} of {totalBillCount}
-                  </span>
+                <div className="px-4">
+                  <MetricRow
+                    label={
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle className="h-3.5 w-3.5 text-brand-600" />
+                        Bills Paid This Month
+                      </span>
+                    }
+                    value={`${paidCount} of ${totalBillCount}`}
+                    valueClassName={paidCount === totalBillCount ? 'text-brand-600' : undefined}
+                  />
                 </div>
               )}
-            </div>
+            </Card>
           </div>
-        </CollapsibleSection>
+        </CollapsibleCard>
       </div>
 
-      <CollapsibleSection
+      <CollapsibleCard
         sectionKey="recent_payments"
         title="Recent Payments"
+        icon={DollarSign}
+        iconTone="brand"
         collapsed={collapsedSections}
         onToggle={toggleSection}
       >
         {Array.isArray(recentPayments) && recentPayments.length > 0 ? (
-          <div className="relative rounded-lg border border-gray-100 bg-white">
-            <div className="max-h-[min(22rem,52vh)] sm:max-h-72 overflow-y-auto overflow-x-auto overscroll-contain">
-              <table className="w-full text-sm min-w-[280px]">
-                <thead className="sticky top-0 z-[1] bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)]">
+          <div className="relative overflow-hidden rounded-xl border border-border bg-surface">
+            <div className="max-h-[min(22rem,52vh)] overflow-x-auto overflow-y-auto overscroll-contain sm:max-h-72">
+              <table className="w-full min-w-[280px] text-sm">
+                <thead className="sticky top-0 z-[1] bg-surface-subtle shadow-[0_1px_0_0_var(--color-border)]">
                   <tr>
-                    <th className="text-left py-2.5 px-1 sm:px-0 text-gray-600 font-medium">Date</th>
-                    <th className="text-left py-2.5 px-1 sm:px-0 text-gray-600 font-medium">Type</th>
-                    <th className="text-right py-2.5 px-1 sm:px-0 text-gray-600 font-medium">Amount</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted">Date</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted">Type</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted">Amount</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {recentPayments.map((payment) => (
-                    <tr key={payment.id} className="border-b border-gray-100 last:border-0">
-                      <td className="py-3 text-gray-900">
-                        {payment.paid_date ? formatDate(payment.paid_date, user?.date_format) : '--'}
-                      </td>
-                      <td className="py-3 text-gray-700">
-                        {payment.bill_id ? 'Bill' : payment.debt_id ? 'Debt' : 'Payment'}
-                        {payment.is_extra && <span className="ml-1 text-xs text-purple-600">(extra)</span>}
-                      </td>
-                      <td className="py-3 text-right">
-                        <CurrencyDisplay amount={payment.amount} className="font-medium text-gray-900" />
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-border">
+                  {recentPayments.map((payment) => {
+                    const typeBadge = paymentTypeBadge(payment);
+                    return (
+                      <tr key={payment.id} className="hover:bg-surface-subtle/60">
+                        <td className="px-4 py-3 text-foreground">
+                          {payment.paid_date ? formatDate(payment.paid_date, user?.date_format) : '--'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge variant={typeBadge.variant} className="normal-case">
+                              {typeBadge.label}
+                            </Badge>
+                            {payment.is_extra && (
+                              <Badge variant="purple" className="normal-case">
+                                Extra
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <CurrencyDisplay amount={payment.amount} className="font-medium text-foreground" />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white to-transparent rounded-b-lg" aria-hidden />
+            <div
+              className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 rounded-b-xl bg-gradient-to-t from-surface to-transparent"
+              aria-hidden
+            />
           </div>
         ) : (
-          <p className="text-gray-500 text-sm">No recent payments recorded.</p>
+          <p className="text-body">No recent payments recorded.</p>
         )}
-      </CollapsibleSection>
+      </CollapsibleCard>
 
       {household && recentActivity.length > 0 && (
-        <CollapsibleSection
+        <CollapsibleCard
           sectionKey="household_activity"
           title="Recent Household Activity"
           icon={Activity}
-          iconColor="text-blue-500"
+          iconTone="accent"
           collapsed={collapsedSections}
           onToggle={toggleSection}
         >
           <div className="space-y-3">
             {recentActivity.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 text-sm">
-                <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-medium shrink-0">
+              <div
+                key={item.id}
+                className="flex items-start gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-surface-subtle"
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-100 text-xs font-semibold text-accent-700">
                   {(item.user_first_name || '?')[0].toUpperCase()}
                 </div>
-                <span className="text-gray-700 flex-1">
-                  <span className="font-medium">{item.user_first_name}</span>
-                  {' '}{item.action}{' '}{item.entity_type.replace(/_/g, ' ')}{' '}
-                  &apos;{item.entity_name}&apos;
-                </span>
-                <span className="text-xs text-gray-400 flex items-center gap-1 shrink-0">
-                  <Clock className="w-3 h-3" />
-                  {item.created_at ? formatDistanceToNow(parseISO(item.created_at), { addSuffix: true }) : ''}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-foreground">
+                    <span className="font-semibold">{item.user_first_name}</span>
+                    {' '}{item.action}{' '}
+                    {item.entity_type.replace(/_/g, ' ')}
+                    {' '}&apos;{item.entity_name}&apos;
+                  </p>
+                  <p className="text-caption mt-0.5 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {item.created_at
+                      ? formatDistanceToNow(parseISO(item.created_at), { addSuffix: true })
+                      : ''}
+                  </p>
+                </div>
               </div>
             ))}
           </div>
-        </CollapsibleSection>
+        </CollapsibleCard>
       )}
     </div>
   );

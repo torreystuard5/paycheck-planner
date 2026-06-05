@@ -1,14 +1,25 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, ChevronDown, Receipt, CreditCard } from 'lucide-react';
+import { Plus, ChevronDown, CreditCard, FileText, TrendingDown, CheckCircle, Users } from 'lucide-react';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
+import DebtInterestPanel from '../components/DebtInterestPanel';
 import { formatLabel } from '../utils/formatLabel';
+import { formatFriendlyDate } from '../utils/formatDate';
+import { getCategoryColor } from '../utils/categoryColors';
 import Bills from './Bills';
 import Debts from './Debts';
+import {
+  Badge,
+  Button,
+  Card,
+  FilterChips,
+  IconStat,
+  PageHeader,
+  cn,
+} from '../components/ui';
 
 const TABS = [
   { key: 'all', label: 'All' },
@@ -23,18 +34,17 @@ const fmtCurrency = (val) => {
 };
 
 export default function BillsAndDebts() {
-  const { user } = useAuth();
   const { activeBudget, budgetVersion } = useBudget();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const activeTab = TABS.find(t => t.key === tabParam)?.key || 'all';
+  const activeTab = TABS.find((t) => t.key === tabParam)?.key || 'all';
 
   const [bills, setBills] = useState([]);
   const [debts, setDebts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
-  const [addType, setAddType] = useState(null); // 'bill' or 'debt'
+  const [addType, setAddType] = useState(null);
 
   const setTab = (key) => {
     if (key === 'all') {
@@ -70,28 +80,28 @@ export default function BillsAndDebts() {
     }
   }, [activeTab, fetchAll, budgetVersion]);
 
-  // Combined and sorted items for All tab
   const combinedItems = useMemo(() => {
-    const billItems = bills.map(b => ({
+    const billItems = bills.map((b) => ({
       ...b,
       _type: 'bill',
       _sortDate: b.next_due_date || (b.due_day ? `2099-01-${String(b.due_day).padStart(2, '0')}` : '2099-12-31'),
     }));
-    const debtItems = debts.map(d => ({
+    const debtItems = debts.map((d) => ({
       ...d,
       _type: 'debt',
       _sortDate: d.next_due_date || (d.due_day ? `2099-01-${String(d.due_day).padStart(2, '0')}` : '2099-12-31'),
     }));
-    return [...billItems, ...debtItems].sort((a, b) =>
-      new Date(a._sortDate) - new Date(b._sortDate)
+    return [...billItems, ...debtItems].sort(
+      (a, b) => new Date(a._sortDate) - new Date(b._sortDate),
     );
   }, [bills, debts]);
 
-  const totalBillsAmount = bills.filter(b => b.is_user_responsible !== false).reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0);
-  const activeDebts = debts.filter(d => Number(d.balance) > 0);
+  const totalBillsAmount = bills
+    .filter((b) => b.is_user_responsible !== false)
+    .reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0);
+  const activeDebts = debts.filter((d) => Number(d.balance) > 0);
   const totalDebtAmount = activeDebts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
 
-  // Close add menu on outside click
   useEffect(() => {
     if (!showAddMenu) return;
     const handler = () => setShowAddMenu(false);
@@ -102,69 +112,62 @@ export default function BillsAndDebts() {
   if (activeTab === 'all' && loading) return <LoadingSpinner />;
 
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
-      {/* Header */}
-      <div className="min-w-0">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Bills & Debts</h1>
-            <p className="text-sm text-gray-600 mt-1">Manage your bills and debts in one place</p>
-          </div>
+    <div className="page-container min-w-0">
+      <PageHeader
+        title="Bills & Debts"
+        description="Manage your bills and debts in one place"
+        actions={
           <div className="relative w-full sm:w-auto">
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu); }}
-              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 sm:w-auto"
+            <Button
+              variant="accent"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAddMenu(!showAddMenu);
+              }}
+              className="w-full sm:w-auto"
             >
               <Plus className="h-4 w-4" />
               Add
               <ChevronDown className="h-3 w-3" />
-            </button>
+            </Button>
             {showAddMenu && (
-              <div className="absolute left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 sm:left-auto sm:w-40">
+              <Card className="absolute left-0 right-0 z-50 mt-2 overflow-hidden py-1 sm:left-auto sm:w-44">
                 <button
-                  onClick={() => { setShowAddMenu(false); setAddType('bill'); setTab('bills'); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors min-h-[44px]"
+                  type="button"
+                  onClick={() => {
+                    setShowAddMenu(false);
+                    setAddType('bill');
+                    setTab('bills');
+                  }}
+                  className="flex min-h-[44px] w-full items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-surface-subtle"
                 >
-                  <Receipt className="w-4 h-4 text-blue-500" />
+                  <FileText className="h-4 w-4 text-accent-600" />
                   Add Bill
                 </button>
                 <button
-                  onClick={() => { setShowAddMenu(false); setAddType('debt'); setTab('debts'); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors min-h-[44px]"
+                  type="button"
+                  onClick={() => {
+                    setShowAddMenu(false);
+                    setAddType('debt');
+                    setTab('debts');
+                  }}
+                  className="flex min-h-[44px] w-full items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-surface-subtle"
                 >
-                  <CreditCard className="w-4 h-4 text-red-500" />
+                  <CreditCard className="h-4 w-4 text-debt-600" />
                   Add Debt
                 </button>
-              </div>
+              </Card>
             )}
           </div>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Tabs */}
-      <div className="w-full overflow-x-auto pb-1">
-        <div className="flex min-w-max gap-1 rounded-lg bg-gray-100 p-1 sm:w-fit">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setTab(tab.key)}
-            className={`px-5 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] ${
-              activeTab === tab.key
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-        </div>
-      </div>
+      <FilterChips options={TABS} value={activeTab} onChange={setTab} />
 
       {error && activeTab === 'all' && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">{error}</Card>
       )}
 
-      {/* All Tab */}
       {activeTab === 'all' && (
         <AllTabContent
           bills={bills}
@@ -172,50 +175,50 @@ export default function BillsAndDebts() {
           combinedItems={combinedItems}
           totalBillsAmount={totalBillsAmount}
           totalDebtAmount={totalDebtAmount}
-          onRefresh={() => fetchAll(false)}
-          user={user}
         />
       )}
 
-      {/* Bills Tab */}
-      {activeTab === 'bills' && <Bills autoOpenAdd={addType === 'bill'} onClearAutoOpen={() => setAddType(null)} />}
+      {activeTab === 'bills' && (
+        <Bills autoOpenAdd={addType === 'bill'} onClearAutoOpen={() => setAddType(null)} embedded />
+      )}
 
-      {/* Debts Tab */}
-      {activeTab === 'debts' && <Debts autoOpenAdd={addType === 'debt'} onClearAutoOpen={() => setAddType(null)} />}
+      {activeTab === 'debts' && (
+        <Debts autoOpenAdd={addType === 'debt'} onClearAutoOpen={() => setAddType(null)} embedded />
+      )}
     </div>
   );
 }
 
-/* ---------- All Tab Content ---------- */
-
-function AllTabContent({ bills, debts, combinedItems, totalBillsAmount, totalDebtAmount, onRefresh, user }) {
+function AllTabContent({ bills, debts, combinedItems, totalBillsAmount, totalDebtAmount }) {
   return (
     <div className="min-w-0 space-y-5 sm:space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Receipt className="w-4 h-4 text-blue-500" />
-            <p className="text-sm text-gray-600">Total Bills</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Card className="p-4 sm:p-5">
+          <div className="mb-2 flex items-center gap-2">
+            <IconStat icon={FileText} tone="accent" className="rounded-lg p-2" iconClassName="h-4 w-4" />
+            <p className="text-caption font-medium">Total Bills</p>
           </div>
-          <CurrencyDisplay amount={totalBillsAmount} className="text-2xl font-bold text-gray-900 block" />
-          <p className="text-xs text-gray-500 mt-1">{bills.length} bill{bills.length !== 1 ? 's' : ''}</p>
-        </div>
-        <div className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-          <div className="flex items-center gap-2 mb-1">
-            <CreditCard className="w-4 h-4 text-red-500" />
-            <p className="text-sm text-gray-600">Total Debt</p>
+          <CurrencyDisplay amount={totalBillsAmount} className="text-money block" />
+          <p className="text-caption mt-1">
+            {bills.length} bill{bills.length !== 1 ? 's' : ''}
+          </p>
+        </Card>
+        <Card className="p-4 sm:p-5">
+          <div className="mb-2 flex items-center gap-2">
+            <IconStat icon={CreditCard} tone="debt" className="rounded-lg p-2" iconClassName="h-4 w-4" />
+            <p className="text-caption font-medium">Total Debt</p>
           </div>
-          <CurrencyDisplay amount={totalDebtAmount} className="text-2xl font-bold text-gray-900 block" />
-          <p className="text-xs text-gray-500 mt-1">{debts.length} debt{debts.length !== 1 ? 's' : ''}</p>
-        </div>
+          <CurrencyDisplay amount={totalDebtAmount} className="text-money block" />
+          <p className="text-caption mt-1">
+            {debts.length} debt{debts.length !== 1 ? 's' : ''}
+          </p>
+        </Card>
       </div>
 
-      {/* Combined list */}
       {combinedItems.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-500 text-sm">No bills or debts found. Add one to get started.</p>
-        </div>
+        <Card className="py-12 text-center">
+          <p className="text-body">No bills or debts found. Add one to get started.</p>
+        </Card>
       ) : (
         <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {combinedItems.map((item) => (
@@ -226,12 +229,6 @@ function AllTabContent({ bills, debts, combinedItems, totalBillsAmount, totalDeb
     </div>
   );
 }
-
-/* ---------- Combined Card for All Tab ---------- */
-
-import { Edit, Trash2, ChevronUp, CheckCircle, Circle, Users, DollarSign } from 'lucide-react';
-import { formatFriendlyDate } from '../utils/formatDate';
-import { getCategoryColor } from '../utils/categoryColors';
 
 function CombinedCard({ item }) {
   const isBill = item._type === 'bill';
@@ -246,99 +243,118 @@ function CombinedCard({ item }) {
     : getCategoryColor(item.type === 'credit_card' ? 'debt' : item.type);
 
   const typeLabel = isBill ? item.category : formatLabel(item.type || 'debt');
+  const TypeIcon = isBill ? FileText : TrendingDown;
+  const iconTone = isBill ? 'accent' : 'debt';
 
   return (
-    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 ${isPaid ? 'opacity-60 bg-gray-50' : ''}`}>
-      <div className="p-4">
-        {/* Name + type badge */}
-        <div className="flex items-center justify-between gap-2">
-          <h3 className={`text-base font-semibold truncate ${isPaid ? 'text-gray-500' : 'text-gray-900'}`}>
-            {item.name || 'Untitled'}
-          </h3>
-          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${
-            isBill ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'
-          }`}>
-            {isBill ? 'Bill' : 'Debt'}
-          </span>
-        </div>
-
-        {/* Badges */}
-        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-          {isPaid && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-              <CheckCircle className="w-3 h-3" /> Paid
-            </span>
-          )}
-          {(item.is_household_bill) && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
-              <Users className="w-3 h-3" /> Shared
-            </span>
-          )}
-          {(isBill ? item.payment_mode === 'split' : item.is_split) && (
-            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-600">
-              Split
-            </span>
-          )}
-          {typeLabel && (
-            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${catColor}`}>
-              {isBill ? typeLabel : formatLabel(typeLabel)}
-            </span>
-          )}
-          {item.auto_pay && (
-            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-              Auto-pay
-            </span>
-          )}
-        </div>
-
-        {/* Amount */}
-        <div className="mt-2">
-          <CurrencyDisplay amount={displayAmount} className={`text-lg font-bold ${isPaid ? 'text-gray-400' : 'text-gray-900'}`} />
-          {isBill && item.payment_mode === 'split' && item.is_household_bill && (
-            <span className="block text-sm text-blue-600 mt-0.5">Your Share: {fmtCurrency(item.user_share ?? item.amount)}</span>
-          )}
-        </div>
-
-        {/* Debt-specific: progress bar */}
-        {!isBill && (
-          <div className="mt-2 flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                style={{ width: `${Math.min(item.percent_paid ?? 0, 100)}%` }}
-              />
+    <Card className={cn(isPaid && 'opacity-75', 'overflow-hidden')}>
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <IconStat icon={TypeIcon} tone={iconTone} className="rounded-lg p-2.5" iconClassName="h-5 w-5" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <h3
+                className={cn(
+                  'text-base font-semibold truncate',
+                  isPaid ? 'text-muted line-through' : 'text-foreground',
+                )}
+              >
+                {item.name || 'Untitled'}
+              </h3>
+              <Badge variant={isBill ? 'info' : 'debt'} className="shrink-0 normal-case">
+                {isBill ? 'Bill' : 'Debt'}
+              </Badge>
             </div>
-            <span className="text-xs font-medium text-gray-500 shrink-0">
-              {(item.percent_paid ?? 0) >= 100 ? 'Paid off!' : `${item.percent_paid ?? 0}% paid`}
-            </span>
-          </div>
-        )}
 
-        {/* Due info */}
-        <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm text-gray-500">
-          <span>
-            Due {item.next_due_date ? formatFriendlyDate(item.next_due_date) : (item.due_day ? `day ${item.due_day}` : '--')}
-          </span>
-          {!isBill && item.apr && (
-            <>
-              <span className="text-gray-300">·</span>
-              <span>{item.apr}% APR</span>
-            </>
-          )}
-          {!isBill && item.minimum_payment && (
-            <>
-              <span className="text-gray-300">·</span>
-              <span>Min: {fmtCurrency(item.minimum_payment)}</span>
-            </>
-          )}
-          {isBill && item.frequency && (
-            <>
-              <span className="text-gray-300">·</span>
-              <span className="capitalize">{formatLabel(item.frequency)}</span>
-            </>
-          )}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {isPaid && (
+                <Badge variant="success" className="normal-case gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  Paid
+                </Badge>
+              )}
+              {item.is_household_bill && (
+                <Badge variant="info" className="normal-case gap-1">
+                  <Users className="h-3 w-3" />
+                  Shared
+                </Badge>
+              )}
+              {(isBill ? item.payment_mode === 'split' : item.is_split) && (
+                <Badge variant="purple" className="normal-case">
+                  Split
+                </Badge>
+              )}
+              {typeLabel && (
+                <span className={cn('inline-flex rounded-full px-2 py-0.5 text-xs font-medium', catColor)}>
+                  {isBill ? typeLabel : formatLabel(typeLabel)}
+                </span>
+              )}
+              {item.auto_pay && (
+                <Badge variant="success" className="normal-case">
+                  Auto-pay
+                </Badge>
+              )}
+            </div>
+
+            <div className="mt-3">
+              <CurrencyDisplay
+                amount={displayAmount}
+                className={cn('text-lg font-bold sm:text-xl', isPaid ? 'text-muted' : 'text-foreground')}
+              />
+              {isBill && item.payment_mode === 'split' && item.is_household_bill && (
+                <span className="mt-0.5 block text-sm text-accent-600">
+                  Your share: {fmtCurrency(item.user_share ?? item.amount)}
+                </span>
+              )}
+            </div>
+
+            {!isBill && (
+              <div className="mt-3 flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-subtle">
+                  <div
+                    className="h-full rounded-full bg-brand-500 transition-all duration-300"
+                    style={{ width: `${Math.min(item.percent_paid ?? 0, 100)}%` }}
+                  />
+                </div>
+                <span className="w-[4.5rem] shrink-0 text-right text-caption font-medium">
+                  {(item.percent_paid ?? 0) >= 100 ? 'Paid off!' : `${item.percent_paid ?? 0}% paid`}
+                </span>
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
+              <span>
+                Due{' '}
+                {item.next_due_date
+                  ? formatFriendlyDate(item.next_due_date)
+                  : item.due_day
+                    ? `day ${item.due_day}`
+                    : '--'}
+              </span>
+              {isBill && item.frequency && (
+                <>
+                  <span className="text-muted">·</span>
+                  <span className="capitalize">{formatLabel(item.frequency)}</span>
+                </>
+              )}
+              {!isBill && item.minimum_payment && (
+                <>
+                  <span className="text-muted">·</span>
+                  <span>Min {fmtCurrency(item.minimum_payment)}</span>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+
+      {!isBill && (
+        <DebtInterestPanel
+          balance={item.balance}
+          apr={item.apr}
+          minimumPayment={item.minimum_payment}
+        />
+      )}
+    </Card>
   );
 }
