@@ -15,7 +15,8 @@ from app.database import get_db
 from app.models.support_ticket import SupportTicket
 from app.models.support_ticket_reply import SupportTicketReply
 from app.models.user import User
-from app.routers.admin import log_admin_action, _get_client_ip
+from app.services.admin_audit import get_client_ip as _get_client_ip
+from app.services.admin_audit import log_admin_action
 from app.schemas.support import (
     SupportTicketCreate,
     SupportTicketDetail,

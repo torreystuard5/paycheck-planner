@@ -13,6 +13,7 @@ import {
   Clock,
   CheckCircle,
   ChevronRight,
+  Rocket,
 } from 'lucide-react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
@@ -21,6 +22,7 @@ import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import WhatsNewBanner from '../components/WhatsNewBanner';
+import { WhatsNewUnseenBadge } from '../components/RecentUpdates';
 
 const PaycheckPlanEnvelope = lazy(() => import('../components/PaycheckPlanEnvelope'));
 const RecentUpdates = lazy(() => import('../components/RecentUpdates'));
@@ -419,8 +421,10 @@ export default function Dashboard() {
     return { label: 'Payment', variant: 'neutral' };
   };
 
+  const whatsNewExpanded = !collapsedSections.includes('whats_new');
+
   return (
-    <div className="page-container min-w-0">
+    <div className="page-container min-w-0 space-y-6">
       <PageHeader
         title={`Welcome back${user?.first_name ? `, ${user.first_name}` : ''}`}
         description="Here's your financial overview"
@@ -449,15 +453,24 @@ export default function Dashboard() {
 
       <WhatsNewBanner compact />
 
-      <div className="card-grid">
-        {summaryCards.map((card) => (
-          <SummaryStatCard
-            key={card.label}
-            {...card}
-            onClick={() => navigate(cardLinks[card.label])}
-          />
-        ))}
-      </div>
+      <CollapsibleCard
+        sectionKey="overview"
+        title="At a Glance"
+        icon={DollarSign}
+        iconTone="brand"
+        collapsed={collapsedSections}
+        onToggle={toggleSection}
+      >
+        <div className="card-grid !gap-4">
+          {summaryCards.map((card) => (
+            <SummaryStatCard
+              key={card.label}
+              {...card}
+              onClick={() => navigate(cardLinks[card.label])}
+            />
+          ))}
+        </div>
+      </CollapsibleCard>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
         <CollapsibleCard
@@ -568,8 +581,8 @@ export default function Dashboard() {
 
       <CollapsibleCard
         sectionKey="recent_payments"
-        title="Recent Payments"
-        icon={DollarSign}
+        title="Recent Activity"
+        icon={Activity}
         iconTone="brand"
         collapsed={collapsedSections}
         onToggle={toggleSection}
@@ -662,9 +675,19 @@ export default function Dashboard() {
         </CollapsibleCard>
       )}
 
-      <Suspense fallback={null}>
-        <RecentUpdates />
-      </Suspense>
+      <CollapsibleCard
+        sectionKey="whats_new"
+        title="What's New"
+        icon={Rocket}
+        iconTone="purple"
+        collapsed={collapsedSections}
+        onToggle={toggleSection}
+        badge={<WhatsNewUnseenBadge />}
+      >
+        <Suspense fallback={<LoadingSpinner label="Loading updates" />}>
+          <RecentUpdates embedded isExpanded={whatsNewExpanded} />
+        </Suspense>
+      </CollapsibleCard>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -82,3 +83,36 @@ async def reports_overview(
         ],
         "fund_balances": fund_balances,
     }
+
+
+@router.get("/analytics")
+async def reports_analytics(
+    months: int = Query(12, ge=3, le=24),
+    db: AsyncSession = Depends(get_db),
+    ctx: BusinessContext = Depends(get_business_ctx),
+):
+    """Monthly profit breakdown for charts (last N calendar months)."""
+    today = date.today()
+    rows = []
+    y, m = today.year, today.month
+    for _ in range(months):
+        last_day = calendar.monthrange(y, m)[1]
+        d0 = date(y, m, 1)
+        d1 = date(y, m, last_day)
+        if d1 > today:
+            d1 = today
+        profit = await compute_net_profit(db, ctx.owner_id, d0, d1)
+        rows.append({
+            "month": f"{y}-{m:02d}",
+            "label": date(y, m, 1).strftime("%b %Y"),
+            "sales": str(profit["total_sales"]),
+            "deductions": str(profit["total_deductions"]),
+            "staff_pay": str(profit["total_staff_pay"]),
+            "net_profit": str(profit["net_profit"]),
+        })
+        m -= 1
+        if m < 1:
+            m = 12
+            y -= 1
+    rows.reverse()
+    return {"months": rows}

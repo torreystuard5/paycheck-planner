@@ -1,5 +1,4 @@
 import json
-from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 from typing import Optional
@@ -12,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
-from app.models.transaction import Payment
 from app.models.user import User
 from app.schemas.debt import DebtCreate, DebtResponse, DebtUpdate
 from app.schemas.debt_calculator import (
@@ -20,6 +18,8 @@ from app.schemas.debt_calculator import (
     DebtPayoffRequest,
     ExtraPaymentRequest,
     ExtraPaymentSimulation,
+    ExtraPercentPaymentRequest,
+    ExtraPercentPaymentSimulation,
     InterestProjection,
     PaydownRecommendation,
     PaydownRecommendRequest,
@@ -30,7 +30,18 @@ from app.services.credit_efficiency import (
     project_interest_over_time,
     recommend_paydown_priority,
 )
-from app.services.debt_calculator import compare_strategies, simulate_extra_payments
+from app.services.debt_calculator import (
+    compare_strategies,
+    simulate_extra_payment_percents,
+    simulate_extra_payments,
+)
+from app.services.debt_payment_service import (
+    create_period_debt_payment,
+    dedupe_period_debt_payments,
+    fetch_period_debt_payments,
+    remove_period_debt_payments,
+)
+from app.utils.due_dates import next_monthly_due_date
 from app.services.household_service import log_activity, resolve_valid_household_id
 from app.utils.budget import apply_household_budget_filter, resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
@@ -40,30 +51,11 @@ router = APIRouter(prefix="/debts", tags=["Debts"])
 DEBT_SORT_FIELDS = {"name", "balance", "created_at", "due_date", "apr", "interest_rate"}
 
 
-def _compute_debt_next_due_date(due_day: int | None) -> date | None:
-    """Return the next upcoming due date for a monthly due_day."""
-    if not due_day:
-        return None
-    today = date.today()
-    _, max_day = monthrange(today.year, today.month)
-    clamped = min(due_day, max_day)
-    candidate = today.replace(day=clamped)
-    if candidate >= today:
-        return candidate
-    # Roll to next month
-    if today.month == 12:
-        y, m = today.year + 1, 1
-    else:
-        y, m = today.year, today.month + 1
-    _, max_day = monthrange(y, m)
-    return date(y, m, min(due_day, max_day))
-
-
 async def _debt_to_response(
     debt: Debt, db: AsyncSession, user_id: UUID
 ) -> DebtResponse:
     resp = DebtResponse.model_validate(debt)
-    resp.next_due_date = _compute_debt_next_due_date(debt.due_day)
+    resp.next_due_date = next_monthly_due_date(debt.due_day)
 
     today = date.today()
     # Check if ANY household member has paid this debt for the current period.
@@ -167,6 +159,22 @@ async def simulate_extra(
     return simulate_extra_payments(debt_dicts, extra_amounts=body.extra_amounts)
 
 
+@router.post("/simulate-extra-percent", response_model=list[ExtraPercentPaymentSimulation])
+async def simulate_extra_percent(
+    body: ExtraPercentPaymentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Estimate payoff timeline when paying X% more than minimum on each debt."""
+    debt_dicts = await _active_debts_as_dicts(db, current_user)
+    if not debt_dicts:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active debts found",
+        )
+    return simulate_extra_payment_percents(debt_dicts, extra_percents=body.extra_percents)
+
+
 @router.get("/credit-efficiency", response_model=CreditEfficiencyResponse)
 async def get_credit_efficiency(
     db: AsyncSession = Depends(get_db),
@@ -218,33 +226,10 @@ async def mark_debt_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     today = date.today()
-    # Check if ANY household member already paid this debt for the period.
-    # Use scalars().all() to find all rows and self-heal duplicates left by
-    # prior broken transactions.
-    existing_result = await db.execute(
-        select(DebtPayment).where(
-            DebtPayment.debt_id == debt_id,
-            DebtPayment.period_month == today.month,
-            DebtPayment.period_year == today.year,
-        )
+    existing_rows = await fetch_period_debt_payments(
+        db, debt_id, month=today.month, year=today.year
     )
-    existing_rows = existing_result.scalars().all()
-
-    # Self-heal: deduplicate rows per (debt_id, user_id, period) — keep the
-    # earliest row for each user_id, delete the rest.
-    if len(existing_rows) > 1:
-        seen: dict[str, object] = {}
-        for row in sorted(existing_rows, key=lambda r: r.created_at or r.payment_date):
-            key = str(row.user_id)
-            if key not in seen:
-                seen[key] = row
-            else:
-                # Duplicate — restore its amount to balance and delete
-                dup_amt = Decimal(str(row.amount))
-                debt.balance = Decimal(str(debt.balance or 0)) + dup_amt
-                await db.delete(row)
-        await db.flush()
-        existing_rows = list(seen.values())
+    existing_rows = await dedupe_period_debt_payments(db, debt, existing_rows)
 
     if existing_rows:
         raise HTTPException(
@@ -262,17 +247,14 @@ async def mark_debt_paid(
     current_balance = Decimal(str(debt.balance or 0))
     if pay_amount > current_balance and current_balance > 0:
         pay_amount = current_balance
-    payment = DebtPayment(
-        debt_id=debt_id,
-        user_id=current_user.id,
-        amount=pay_amount,
-        period_month=today.month,
-        period_year=today.year,
+    await create_period_debt_payment(
+        db,
+        current_user,
+        debt,
+        pay_amount,
+        auto_log_source="debts_page",
+        today=today,
     )
-    db.add(payment)
-
-    # Subtract from balance
-    debt.balance = max(current_balance - pay_amount, Decimal("0"))
 
     await db.flush()
     await db.refresh(debt)
@@ -290,21 +272,6 @@ async def mark_debt_paid(
             )
         except Exception:
             pass
-
-    # Auto-log payment record
-    try:
-        auto_payment = Payment(
-            user_id=current_user.id,
-            debt_id=debt.id,
-            amount=pay_amount,
-            paid_date=date.today(),
-            source="debts_page",
-            auto_logged=True,
-        )
-        db.add(auto_payment)
-        await db.flush()
-    except Exception:
-        pass
 
     return await _debt_to_response(debt, db, current_user.id)
 
@@ -327,52 +294,25 @@ async def unmark_debt_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     today = date.today()
-    # Find ALL payments for this period (handles household case where
-    # multiple members may each have a DebtPayment row).
-    # Use scalars().all() to avoid MultipleResultsFound from scalar_one_or_none().
-    payment_result = await db.execute(
-        select(DebtPayment).where(
-            DebtPayment.debt_id == debt_id,
-            DebtPayment.period_month == today.month,
-            DebtPayment.period_year == today.year,
-        )
+    all_payments = await fetch_period_debt_payments(
+        db, debt_id, month=today.month, year=today.year
     )
-    all_payments = payment_result.scalars().all()
     if not all_payments:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No payment found for this period",
         )
 
-    # Restore balance using sum of ALL matching payments
-    restore_total = sum(Decimal(str(p.amount)) for p in all_payments)
-    current_balance = Decimal(str(debt.balance or 0))
-    debt.balance = current_balance + restore_total
-
-    for p in all_payments:
-        await db.delete(p)
+    await remove_period_debt_payments(
+        db,
+        current_user,
+        debt,
+        all_payments,
+        remove_auto_logged=True,
+        today=today,
+    )
     await db.flush()
     await db.refresh(debt)
-
-    # Remove auto-logged payment records for this debt, scoped to current month
-    try:
-        from calendar import monthrange as _mr
-        _month_start = date(today.year, today.month, 1)
-        _, _last_day = _mr(today.year, today.month)
-        _month_end = date(today.year, today.month, _last_day)
-        auto_result = await db.execute(
-            select(Payment).where(
-                Payment.debt_id == debt.id,
-                Payment.auto_logged.is_(True),
-                Payment.paid_date >= _month_start,
-                Payment.paid_date <= _month_end,
-            )
-        )
-        for auto_pay in auto_result.scalars().all():
-            await db.delete(auto_pay)
-        await db.flush()
-    except Exception:
-        pass
 
     return await _debt_to_response(debt, db, current_user.id)
 

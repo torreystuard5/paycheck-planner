@@ -54,19 +54,9 @@ def _debt_next_due(debt: Debt) -> date | None:
         if hasattr(postpone, "date"):
             return postpone.date()
         return postpone
-    due_day = debt.due_day or 1
-    today = date.today()
-    _, max_day = monthrange(today.year, today.month)
-    clamped = min(int(due_day), max_day)
-    candidate = today.replace(day=clamped)
-    if candidate >= today:
-        return candidate
-    if today.month == 12:
-        y, m = today.year + 1, 1
-    else:
-        y, m = today.year, today.month + 1
-    _, max_day = monthrange(y, m)
-    return date(y, m, min(int(due_day), max_day))
+    from app.utils.due_dates import next_monthly_due_date
+
+    return next_monthly_due_date(debt.due_day or 1)
 
 
 def _debt_user_share(

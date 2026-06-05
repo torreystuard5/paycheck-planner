@@ -322,8 +322,11 @@ def _find_header_data_row_in_text(text: str) -> dict[str, Any] | None:
 def _company_from_name_company_prefix(prefix: str) -> str | None:
     """Company column: text after the Name column (typically first + last name)."""
     parts = prefix.split()
-    if len(parts) <= 2:
+    if len(parts) <= 1:
         return None
+    if len(parts) == 2:
+        # Single-token name + company (e.g. "Torrey Acme LLC")
+        return parts[1].strip()[:200] or None
     company = " ".join(parts[2:]).strip()[:200]
     return company or None
 
@@ -427,18 +430,31 @@ def parse_paystub_text(text: str) -> dict[str, Any]:
         _find_header_data_row_in_text(t),
     )
 
+    employer_line: str | None = None
+    for line in t.splitlines():
+        if _line_looks_like_header_labels(line):
+            continue
+        m = re.search(
+            r"(?:Employer|Company|Employer Name)\s*:\s*(.+?)(?:\n|$)",
+            line,
+            re.I,
+        )
+        if m:
+            employer_line = m.group(1).strip()[:200]
+            break
+
     employer = header.get("company") if header else None
-    if employer is None and header is None:
+    if employer_line:
+        # Explicit label beats heuristic table parsing (often just a surname).
+        if not employer or len(str(employer).split()) < 2:
+            employer = employer_line
+    elif not employer:
         for line in t.splitlines():
             if _line_looks_like_header_labels(line):
                 continue
-            m = re.search(
-                r"(?:Employer|Company|Employer Name)\s*:\s*(.+?)(?:\n|$)",
-                line,
-                re.I,
-            )
-            if m:
-                employer = m.group(1).strip()[:200]
+            parsed = _parse_data_row_trailing(line)
+            if parsed and parsed.get("company"):
+                employer = parsed["company"]
                 break
 
     pay_date = header.get("check_date") if header else None

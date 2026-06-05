@@ -2,22 +2,25 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, Home, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
+import { businessEdition } from '../../services/businessApi';
+import { useEditionSwitch } from '../../hooks/useEditionSwitch';
 import {
   canSwitchAppMode,
   hasBusinessAccess,
   hasPersonalHomeAccess,
   normalizePlanTier,
 } from '../../utils/tierAccess';
+import { Badge, Card, IconStat, PageHeader, cn } from '../../components/ui';
 
 export default function EditionChooser() {
-  const { user, subscription, updateUser, fetchSubscription } = useAuth();
+  const { user, subscription, fetchSubscription } = useAuth();
   const navigate = useNavigate();
+  const { switching, switchToBusiness, switchToPersonal } = useEditionSwitch();
   const [access, setAccess] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    api.get('/api/v1/business/edition/access').then(({ data }) => setAccess(data)).catch(() => {});
+    businessEdition.getAccess().then(({ data }) => setAccess(data)).catch(() => {});
     fetchSubscription?.();
   }, [fetchSubscription]);
 
@@ -27,15 +30,9 @@ export default function EditionChooser() {
 
   const enterPersonal = async () => {
     setLoading(true);
-    try {
-      const { data } = await api.post('/api/v1/business/edition/enter-personal');
-      updateUser(data);
-      navigate('/dashboard');
-    } catch {
-      navigate('/dashboard');
-    } finally {
-      setLoading(false);
-    }
+    const result = await switchToPersonal();
+    if (!result?.ok) navigate('/dashboard');
+    setLoading(false);
   };
 
   const enterBusiness = async () => {
@@ -48,66 +45,79 @@ export default function EditionChooser() {
       return;
     }
     setLoading(true);
-    try {
-      const { data } = await api.post('/api/v1/business/edition/activate', { accept_trial: false });
-      updateUser(data);
-      navigate('/business/dashboard');
-    } catch {
-      navigate('/business/start');
-    } finally {
-      setLoading(false);
-    }
+    const result = await switchToBusiness();
+    if (!result?.ok) navigate('/business/start');
+    setLoading(false);
   };
 
-  return (
-    <div className="max-w-3xl mx-auto py-8 px-4 space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Choose your edition</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          PayDrift Home and Business are separate experiences. Bundle includes both.
-        </p>
-      </div>
+  const busy = loading || switching;
 
-      <div className="grid sm:grid-cols-2 gap-4">
+  return (
+    <div className="page-container mx-auto max-w-3xl space-y-8 py-4">
+      <div className="h-1 w-full rounded-full bg-gradient-to-r from-purple-600 via-accent-500 to-brand-500/50" aria-hidden />
+
+      <PageHeader
+        title="Choose your edition"
+        description="PayDrift Home and Business are separate experiences. Bundle includes both."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <button
           type="button"
-          disabled={!personalOk || loading}
+          disabled={!personalOk || busy}
           onClick={enterPersonal}
-          className="text-left rounded-xl border-2 border-gray-200 p-6 hover:border-blue-500 hover:bg-blue-50/50 transition disabled:opacity-50 min-h-[160px]"
+          className={cn(
+            'text-left transition disabled:opacity-50',
+            'rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30',
+          )}
         >
-          <Home className="w-8 h-8 text-blue-600 mb-3" />
-          <h2 className="font-semibold text-lg text-gray-900">Personal / Home</h2>
-          <p className="text-sm text-gray-600 mt-2">Budgets, bills, debts, paycheck planning, household.</p>
+          <Card
+            variant="interactive"
+            className={cn(
+              'min-h-[160px] p-6',
+              personalOk && 'hover:border-accent-400',
+            )}
+          >
+            <IconStat icon={Home} tone="accent" className="mb-3 rounded-lg p-2.5" iconClassName="h-6 w-6" />
+            <h2 className="text-title">Personal / Home</h2>
+            <p className="text-body mt-2">Budgets, bills, debts, paycheck planning, household.</p>
+          </Card>
         </button>
 
         <button
           type="button"
-          disabled={loading}
+          disabled={busy}
           onClick={enterBusiness}
-          className="text-left rounded-xl border-2 border-purple-200 p-6 hover:border-purple-500 hover:bg-purple-50/50 transition min-h-[160px] relative"
-        >
-          <Briefcase className="w-8 h-8 text-purple-600 mb-3" />
-          <h2 className="font-semibold text-lg text-gray-900">Business</h2>
-          <p className="text-sm text-gray-600 mt-2">
-            Sales, deductions, staff pay, funds, tax prep, paystub OCR.
-          </p>
-          {!businessOk && (
-            <span className="absolute top-3 right-3 text-xs font-medium bg-purple-100 text-purple-800 px-2 py-0.5 rounded">
-              Try free
-            </span>
+          className={cn(
+            'relative text-left transition',
+            'rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/30',
           )}
+        >
+          <Card variant="interactive" className="min-h-[160px] border-purple-200/60 p-6 hover:border-purple-400">
+            {!businessOk && (
+              <Badge variant="purple" className="absolute right-3 top-3 normal-case">
+                Try free
+              </Badge>
+            )}
+            <IconStat icon={Briefcase} tone="purple" className="mb-3 rounded-lg p-2.5" iconClassName="h-6 w-6" />
+            <h2 className="text-title">Business</h2>
+            <p className="text-body mt-2">
+              Sales, deductions, staff pay, funds, tax prep, paystub OCR.
+            </p>
+          </Card>
         </button>
       </div>
 
       {canSwitchAppMode(tier) && (
-        <p className="text-xs text-center text-gray-500">
-          Bundle plan — switch editions anytime from the sidebar.
+        <p className="text-caption text-center">
+          Bundle plan — switch editions anytime from the sidebar or Settings.
         </p>
       )}
 
-      {loading && (
-        <p className="flex items-center justify-center gap-2 text-sm text-gray-500">
-          <Loader2 className="w-4 h-4 animate-spin" /> Switching…
+      {busy && (
+        <p className="flex items-center justify-center gap-2 text-body">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Switching…
         </p>
       )}
     </div>

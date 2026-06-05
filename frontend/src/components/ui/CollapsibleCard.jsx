@@ -12,6 +12,7 @@ export default function CollapsibleCard({
   onToggle,
   children,
   className,
+  badge = null,
 }) {
   const isCollapsed = collapsed.includes(sectionKey);
   const panelId = `section-panel-${sectionKey}`;
@@ -35,6 +36,7 @@ export default function CollapsibleCard({
             />
           )}
           <h2 className="text-title truncate">{title}</h2>
+          {badge}
         </div>
         <ChevronDown
           className={cn(

@@ -188,6 +188,49 @@ def get_pay_period_window(
     return pay_date, next_pay_date - timedelta(days=1)
 
 
+def previous_period_bounds(
+    current_period_start: date,
+    pay_frequency: str,
+    *,
+    anchor_pay_date: date | None = None,
+) -> tuple[date, date] | None:
+    """Return (prev_start, prev_end) for the pay period before *current_period_start*.
+
+    When *anchor_pay_date* is supplied, walk the generated pay schedule so
+    semi-monthly and irregular anchors align with income.  Falls back to
+    fixed calendar steps when no anchor match is found.
+    """
+    prev_start: date | None = None
+    if anchor_pay_date is not None:
+        dates = generate_pay_dates(anchor_pay_date, pay_frequency, 48)
+        for i, d in enumerate(dates):
+            if d == current_period_start and i > 0:
+                prev_start = dates[i - 1]
+                break
+
+    if prev_start is None:
+        if pay_frequency == "biweekly":
+            prev_start = current_period_start - timedelta(days=14)
+        elif pay_frequency == "weekly":
+            prev_start = current_period_start - timedelta(days=7)
+        elif pay_frequency == "semi_monthly":
+            prev_start = current_period_start - timedelta(days=15)
+        elif pay_frequency == "monthly":
+            m = current_period_start.month - 1 or 12
+            y = current_period_start.year - (1 if current_period_start.month == 1 else 0)
+            d = min(
+                current_period_start.day,
+                calendar.monthrange(y, m)[1],
+            )
+            prev_start = date(y, m, d)
+        else:
+            return None
+
+    if prev_start >= current_period_start:
+        return None
+    return prev_start, current_period_start - timedelta(days=1)
+
+
 # ── Due-date helpers ───────────────────────────────────────────────
 
 

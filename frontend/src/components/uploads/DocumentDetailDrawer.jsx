@@ -315,7 +315,12 @@ export default function DocumentDetailDrawer({
 
     const net = parseMoney(paystubForm.net_amount);
 
-    if (!paystubForm.source_name?.trim() || !net) {
+    const employer =
+      paystubForm.source_name?.trim()
+      || doc?.parsed_json?.employer_name?.trim()
+      || '';
+
+    if (!employer || !net) {
 
       toast('Employer and a valid net pay amount are required', 'error');
 
@@ -335,7 +340,7 @@ export default function DocumentDetailDrawer({
 
       await confirmPaystubFromDocument(documentId, {
 
-        source_name: paystubForm.source_name.trim(),
+        source_name: employer,
 
         pay_date: paystubForm.pay_date,
 

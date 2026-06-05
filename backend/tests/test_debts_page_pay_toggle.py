@@ -154,7 +154,7 @@ class TestSoloDebtPayFromDebtsPage(unittest.TestCase):
             _FakeResult([]),         # DebtPayment existing → none
         ])
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             mark_debt_paid(debt.id, amount=Decimal("50"), db=session, current_user=user)
         )
 
@@ -191,7 +191,7 @@ class TestSoloDebtUndoFromDebtsPage(unittest.TestCase):
             _FakeResult([]),                # auto-logged Payments
         ])
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             unmark_debt_paid(debt.id, db=session, current_user=user)
         )
 
@@ -238,7 +238,7 @@ class TestSharedDebtPayFromDebtsPage(unittest.TestCase):
         ])
 
         with self.assertRaises(HTTPException) as ctx:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 mark_debt_paid(debt.id, amount=Decimal("50"), db=session, current_user=user_a)
             )
         self.assertEqual(ctx.exception.status_code, 409)
@@ -272,7 +272,7 @@ class TestSharedDebtPayFromDebtsPage(unittest.TestCase):
 
         # Must raise 409 (already paid), NOT 500 (MultipleResultsFound)
         with self.assertRaises(HTTPException) as ctx:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 mark_debt_paid(debt.id, amount=Decimal("50"), db=session, current_user=user_a)
             )
         self.assertEqual(ctx.exception.status_code, 409)
@@ -309,7 +309,7 @@ class TestSharedDebtUndoFromDebtsPage(unittest.TestCase):
             _FakeResult([]),              # auto-logged Payments
         ])
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             unmark_debt_paid(debt.id, db=session, current_user=user_a)
         )
 
@@ -349,7 +349,7 @@ class TestPreviouslyPaidDebtUndone(unittest.TestCase):
             _FakeResult([]),
         ])
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             unmark_debt_paid(debt.id, db=session, current_user=user)
         )
 
@@ -380,7 +380,7 @@ class TestUnpaidDebtCanBePaid(unittest.TestCase):
             _FakeResult([]),     # No existing payments
         ])
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             mark_debt_paid(debt.id, amount=Decimal("100"), db=session, current_user=user)
         )
 
@@ -424,7 +424,7 @@ class TestNo500OnPay(unittest.TestCase):
 
         # Must raise HTTPException (409), NOT an unhandled 500
         try:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 mark_debt_paid(debt.id, amount=Decimal("50"), db=session, current_user=user_a)
             )
             self.fail("Expected HTTPException")
@@ -472,7 +472,7 @@ class TestNo500OnUndo(unittest.TestCase):
 
         # Must NOT raise unhandled exception
         try:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 unmark_debt_paid(debt.id, db=session, current_user=user_a)
             )
         except HTTPException:
@@ -512,7 +512,7 @@ class TestPaidStateConsistency(unittest.TestCase):
             _FakeResult([Decimal("50")]),  # total_paid sum
         ])
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             _debt_to_response(debt, session, user.id)
         )
 
@@ -533,7 +533,7 @@ class TestPaidStateConsistency(unittest.TestCase):
             _FakeResult([Decimal("0")]),   # total_paid sum
         ])
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             _debt_to_response(debt, session, user.id)
         )
 
@@ -561,7 +561,7 @@ class TestPaidStateConsistency(unittest.TestCase):
         ])
 
         # Must NOT raise MultipleResultsFound
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             _debt_to_response(debt, session, user_a.id)
         )
 
@@ -603,7 +603,7 @@ class TestBillsUnchanged(unittest.TestCase):
             _FakeResult([bill]),    # Bill lookup
         ])
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             _sync_bill_payment(session, user, bill.id, True)
         )
 
@@ -643,7 +643,7 @@ class TestDuplicateDebtPaymentSelfHealing(unittest.TestCase):
         ])
 
         with self.assertRaises(HTTPException) as ctx:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 mark_debt_paid(debt.id, amount=Decimal("50"), db=session, current_user=user)
             )
 

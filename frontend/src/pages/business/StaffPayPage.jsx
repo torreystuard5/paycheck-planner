@@ -8,9 +8,11 @@ import CurrencyDisplay from '../../components/CurrencyDisplay';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import BusinessPageShell from '../../components/business/BusinessPageShell';
 import { useToast } from '../../components/Toast';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
+import { useBusinessAccess } from '../../hooks/useBusinessAccess';
+import { Button } from '../../components/ui';
 import { payPeriodContaining, formatDateISO, PAY_PERIODS_PER_YEAR } from '../../utils/payPeriods';
 
 const ROLE_PRESETS = ['Manager', 'Cashier', 'Server', 'Cook', 'Driver', 'Associate', 'Supervisor', 'Owner', 'Other'];
@@ -353,42 +355,47 @@ export default function StaffPayPage() {
 
   const autoCls = (on) => (on ? 'bg-sky-50/80 border-sky-100 border rounded-lg' : '');
 
-  if (loading) return <LoadingSpinner />;
+  const { teamRole } = useBusinessAccess();
 
   return (
-    <div className="space-y-8 max-w-5xl">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Staff pay</h1>
-          <p className="text-sm text-gray-600 mt-1">Team and payroll runs</p>
-        </div>
-        <button
+    <BusinessPageShell
+      title="Staff Pay"
+      description="Team and payroll runs"
+      loading={loading}
+      teamRole={teamRole}
+      maxWidth="max-w-5xl"
+      actions={(
+        <Button
           type="button"
           onClick={() => openStaffModal(null)}
-          {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700' })}
+          disabled={write.disabled}
+          title={write.title}
+          className="bg-accent-600 text-white hover:bg-accent-700"
         >
-          <Plus className="w-4 h-4" /> Add staff
-        </button>
-      </div>
-
+          <Plus className="h-4 w-4" />
+          Add staff
+        </Button>
+      )}
+    >
+      <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Staff</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Staff</h2>
         {staff.length === 0 ? (
           <EmptyState title="No staff yet" message="Add employees or contractors." actionLabel={write.allowed ? 'Add staff' : undefined} onAction={write.allowed ? () => openStaffModal(null) : undefined} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {staff.map((s) => (
-              <div key={s.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex justify-between gap-2">
+              <div key={s.id} className="bg-surface border border-border rounded-lg p-4 shadow-sm flex justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-medium text-gray-900 truncate">{s.name}</p>
-                  <p className="text-xs text-gray-500">{formatLabel(s.pay_type)}{s.pay_rate != null ? ` · $${Number(s.pay_rate).toFixed(2)}` : ''}</p>
-                  {s.role && <p className="text-xs text-gray-600 truncate">{formatLabel(s.role)}</p>}
+                  <p className="font-medium text-foreground truncate">{s.name}</p>
+                  <p className="text-xs text-muted">{formatLabel(s.pay_type)}{s.pay_rate != null ? ` · $${Number(s.pay_rate).toFixed(2)}` : ''}</p>
+                  {s.role && <p className="text-xs text-muted truncate">{formatLabel(s.role)}</p>}
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
                   <button type="button" onClick={() => openPayModal(s, null)} {...write.props({ className: 'text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700' })}>Pay run</button>
                   <div className="flex gap-1">
-                    <button type="button" onClick={() => openStaffModal(s)} className="p-1 text-gray-500 hover:text-blue-600"><Pencil className="w-4 h-4" /></button>
-                    <button type="button" onClick={() => setDelStaff(s)} className="p-1 text-gray-500 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                    <button type="button" onClick={() => openStaffModal(s)} className="p-1 text-muted hover:text-accent-600"><Pencil className="w-4 h-4" /></button>
+                    <button type="button" onClick={() => setDelStaff(s)} className="p-1 text-muted hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               </div>
@@ -399,22 +406,22 @@ export default function StaffPayPage() {
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <h2 className="text-lg font-semibold text-gray-900">Pay runs</h2>
-          <select value={range} onChange={(e) => setRange(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <h2 className="text-lg font-semibold text-foreground">Pay runs</h2>
+          <select value={range} onChange={(e) => setRange(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-sm">
             <option value="month">This month</option>
             <option value="quarter">This quarter</option>
             <option value="ytd">YTD</option>
           </select>
         </div>
         {summary && (
-          <p className="text-sm text-gray-600 mb-3">Total paid ({range}): <CurrencyDisplay amount={summary.total_paid} className="inline font-semibold text-gray-900" /></p>
+          <p className="text-sm text-muted mb-3">Total paid ({range}): <CurrencyDisplay amount={summary.total_paid} className="inline font-semibold text-foreground" /></p>
         )}
         {runs.length === 0 ? (
-          <p className="text-sm text-gray-500">No pay runs yet.</p>
+          <p className="text-sm text-muted">No pay runs yet.</p>
         ) : (
-          <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto shadow-sm max-w-[100vw] sm:max-w-none">
+          <div className="bg-surface border border-border rounded-lg overflow-x-auto shadow-sm max-w-[100vw] sm:max-w-none">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600">
+              <thead className="bg-surface-subtle text-left text-muted">
                 <tr>
                   <th className="px-3 py-2">Staff</th>
                   <th className="px-3 py-2">Period</th>
@@ -424,17 +431,17 @@ export default function StaffPayPage() {
               </thead>
               <tbody>
                 {runs.map((r) => (
-                  <tr key={r.id} className="border-t border-gray-100">
+                  <tr key={r.id} className="border-t border-border">
                     <td className="px-3 py-2">{r.staffName}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{formatFriendlyDate(r.period_start)} – {formatFriendlyDate(r.period_end)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-muted">{formatFriendlyDate(r.period_start)} – {formatFriendlyDate(r.period_end)}</td>
                     <td className="px-3 py-2 font-medium"><CurrencyDisplay amount={r.net_pay} /></td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
                         <button type="button" onClick={() => {
                           const st = staff.find((x) => x.id === r.staff_id);
                           openPayModal(st, r);
-                        }} className="p-1 text-gray-500 hover:text-blue-600"><Pencil className="w-4 h-4" /></button>
-                        <button type="button" onClick={() => setDelPay(r)} className="p-1 text-gray-500 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                        }} className="p-1 text-muted hover:text-accent-600"><Pencil className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => setDelPay(r)} className="p-1 text-muted hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -448,11 +455,11 @@ export default function StaffPayPage() {
       <Modal isOpen={staffModal} onClose={() => setStaffModal(false)} title={editingStaff ? 'Edit staff' : 'Add staff'}>
         <form onSubmit={saveStaff} className="space-y-3 max-h-[75vh] overflow-y-auto">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Name</label>
             <input required value={staffForm.name} onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Role</label>
             <select
               value={staffForm.roleSelect}
               onChange={(e) => setStaffForm({ ...staffForm, roleSelect: e.target.value })}
@@ -474,7 +481,7 @@ export default function StaffPayPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Pay type</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Pay type</label>
               <select value={staffForm.pay_type} onChange={(e) => setStaffForm({ ...staffForm, pay_type: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
                 <option value="hourly">Hourly</option>
                 <option value="salary">Salary</option>
@@ -482,12 +489,12 @@ export default function StaffPayPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Pay rate</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Pay rate</label>
               <input type="number" step="0.01" value={staffForm.pay_rate} onChange={(e) => setStaffForm({ ...staffForm, pay_rate: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder={staffForm.pay_type === 'salary' ? 'Annual salary' : 'Rate'} />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Pay frequency</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Pay frequency</label>
             <select value={staffForm.pay_frequency} onChange={(e) => setStaffForm({ ...staffForm, pay_frequency: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
               <option value="">—</option>
               <option value="weekly">Weekly</option>
@@ -497,18 +504,18 @@ export default function StaffPayPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">First pay date (anchor)</label>
+            <label className="block text-xs font-medium text-foreground mb-1">First pay date (anchor)</label>
             <input type="date" value={staffForm.anchor_date} onChange={(e) => setStaffForm({ ...staffForm, anchor_date: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Tax rate (%)</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Tax rate (%)</label>
             <div className="flex items-center gap-2">
               <input type="number" step="0.01" value={staffForm.tax_rate} onChange={(e) => setStaffForm({ ...staffForm, tax_rate: e.target.value })} className="flex-1 border rounded-lg px-3 py-2 text-sm" />
-              <span className="text-sm text-gray-500">%</span>
+              <span className="text-sm text-muted">%</span>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setStaffModal(false)} disabled={saving} className="px-4 py-2 text-sm rounded-lg hover:bg-gray-100">Cancel</button>
+            <button type="button" onClick={() => setStaffModal(false)} disabled={saving} className="px-4 py-2 text-sm rounded-lg hover:bg-surface-subtle">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </form>
@@ -518,17 +525,17 @@ export default function StaffPayPage() {
         <form onSubmit={savePay} className="space-y-3 max-h-[80vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div className={autoCls(payAuto.period)}>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Period start {payAuto.period && <span className="text-sky-600 font-normal">(auto)</span>}</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Period start {payAuto.period && <span className="text-sky-600 font-normal">(auto)</span>}</label>
               <input type="date" required value={payForm.period_start} onChange={(e) => onPayField('period_start', e.target.value, 'period')} className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div className={autoCls(payAuto.period)}>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Period end</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Period end</label>
               <input type="date" required value={payForm.period_end} onChange={(e) => onPayField('period_end', e.target.value, 'period')} className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Hours</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Hours</label>
               <input type="number" step="0.01" value={payForm.hours} onChange={(e) => {
                 const v = e.target.value;
                 setPayForm((prev) => recalcFromHoursAndGross(
@@ -541,7 +548,7 @@ export default function StaffPayPage() {
               }} className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div className={autoCls(payAuto.gross)}>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Gross pay {payAuto.gross && <span className="text-sky-600 font-normal">(auto)</span>}</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Gross pay {payAuto.gross && <span className="text-sky-600 font-normal">(auto)</span>}</label>
               <input type="number" step="0.01" value={payForm.gross_pay} onChange={(e) => {
                 const v = e.target.value;
                 setPayAuto((a) => ({ ...a, gross: false, taxes: true, net: !netOverride }));
@@ -563,31 +570,31 @@ export default function StaffPayPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className={autoCls(payAuto.taxes)}>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Taxes withheld {payAuto.taxes && <span className="text-sky-600 font-normal">(auto)</span>}</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Taxes withheld {payAuto.taxes && <span className="text-sky-600 font-normal">(auto)</span>}</label>
               <input type="number" step="0.01" value={payForm.taxes_withheld} onChange={(e) => { onPayField('taxes_withheld', e.target.value, 'taxes'); setPayAuto((a) => ({ ...a, taxes: false, net: false })); }} className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div className={autoCls(payAuto.net && !netOverride)}>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-medium text-gray-700">Net pay {payAuto.net && !netOverride && <span className="text-sky-600 font-normal">(auto)</span>}</label>
+                <label className="block text-xs font-medium text-foreground">Net pay {payAuto.net && !netOverride && <span className="text-sky-600 font-normal">(auto)</span>}</label>
                 {!netOverride ? (
                   <button type="button" className="text-xs text-blue-600 hover:underline" onClick={() => setNetOverride(true)}>Override</button>
                 ) : (
                   <button type="button" className="text-xs text-blue-600 hover:underline" onClick={() => { setNetOverride(false); setPayAuto((a) => ({ ...a, net: true })); }}>Use auto</button>
                 )}
               </div>
-              <input type="number" step="0.01" required readOnly={!netOverride} value={payForm.net_pay} onChange={(e) => onPayField('net_pay', e.target.value, 'net')} className="w-full border rounded-lg px-3 py-2 text-sm read-only:bg-gray-50" />
+              <input type="number" step="0.01" required readOnly={!netOverride} value={payForm.net_pay} onChange={(e) => onPayField('net_pay', e.target.value, 'net')} className="w-full border rounded-lg px-3 py-2 text-sm read-only:bg-surface-subtle" />
             </div>
           </div>
           <div className={autoCls(payAuto.paidOn)}>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Paid on {payAuto.paidOn && <span className="text-sky-600 font-normal">(auto)</span>}</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Paid on {payAuto.paidOn && <span className="text-sky-600 font-normal">(auto)</span>}</label>
             <input type="date" value={payForm.paid_on} onChange={(e) => onPayField('paid_on', e.target.value, 'paidOn')} className="w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
             <textarea value={payForm.notes} onChange={(e) => setPayForm({ ...payForm, notes: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setPayModal(false)} disabled={saving} className="px-4 py-2 text-sm rounded-lg hover:bg-gray-100">Cancel</button>
+            <button type="button" onClick={() => setPayModal(false)} disabled={saving} className="px-4 py-2 text-sm rounded-lg hover:bg-surface-subtle">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </form>
@@ -595,6 +602,7 @@ export default function StaffPayPage() {
 
       <ConfirmDialog isOpen={!!delStaff} onClose={() => setDelStaff(null)} onConfirm={confirmDelStaff} title="Remove staff" message={`Remove ${delStaff?.name}?`} confirmText="Remove" danger />
       <ConfirmDialog isOpen={!!delPay} onClose={() => setDelPay(null)} onConfirm={confirmDelPay} title="Delete pay run" message="Delete this pay run?" confirmText="Delete" danger />
-    </div>
+      </div>
+    </BusinessPageShell>
   );
 }

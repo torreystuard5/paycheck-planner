@@ -8,10 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.debt import Debt
-from app.models.debt_payment import DebtPayment
 from app.models.paycheck_checklist import PaycheckChecklist
-from app.models.transaction import Payment
 from app.models.user import User
+from app.services.debt_payment_service import (
+    create_period_debt_payment,
+    dedupe_period_debt_payments,
+    fetch_period_debt_payments,
+    remove_period_debt_payments,
+)
 from app.schemas.paycheck_checklist import ChecklistItemOut, ChecklistToggle
 from app.utils.security import get_current_user
 
@@ -89,97 +93,37 @@ async def _sync_debt_payment(
 ):
     """Create or remove a DebtPayment record to stay in sync."""
     today = date.today()
-    # Check for payment by ANY household member (not just current user).
-    # Use scalars().all() so we can self-heal duplicates and handle household
-    # rows without triggering MultipleResultsFound.
-    existing_result = await db.execute(
-        select(DebtPayment).where(
-            DebtPayment.debt_id == debt_id,
-            DebtPayment.period_month == today.month,
-            DebtPayment.period_year == today.year,
-        )
+    existing_rows = await fetch_period_debt_payments(
+        db, debt_id, month=today.month, year=today.year
     )
-    existing_rows = existing_result.scalars().all()
 
-    # Self-heal: deduplicate rows per (debt_id, user_id, period) — keep the
-    # earliest row for each user_id, delete the rest.
-    if len(existing_rows) > 1:
-        seen: dict[str, object] = {}
-        for row in sorted(existing_rows, key=lambda r: getattr(r, "created_at", None) or getattr(r, "payment_date", today)):
-            key = str(row.user_id)
-            if key not in seen:
-                seen[key] = row
-            else:
-                # Duplicate — restore its amount to balance before deleting
-                # (fetch debt first so we can adjust)
-                await db.delete(row)
-        await db.flush()
-        existing_rows = list(seen.values())
-
-    existing = existing_rows[0] if existing_rows else None
-
-    # Fetch the debt to get the minimum_payment amount
     debt_result = await db.execute(select(Debt).where(Debt.id == debt_id))
     debt = debt_result.scalar_one_or_none()
     if not debt:
         return
 
-    # If duplicates were cleaned, restore their amounts to balance
-    # (we deleted dups above but didn't have the debt object yet)
+    existing_rows = await dedupe_period_debt_payments(db, debt, existing_rows)
+    existing = existing_rows[0] if existing_rows else None
 
     if is_checked and not existing:
         amount = Decimal(str(debt.minimum_payment or 0))
-        payment = DebtPayment(
-            debt_id=debt_id,
-            user_id=user.id,
-            amount=amount,
-            period_month=today.month,
-            period_year=today.year,
+        await create_period_debt_payment(
+            db,
+            user,
+            debt,
+            amount,
+            auto_log_source="dashboard",
+            today=today,
         )
-        db.add(payment)
-        # Subtract from balance
-        current_balance = Decimal(str(debt.balance or 0))
-        debt.balance = max(current_balance - amount, Decimal("0"))
-        # Auto-log payment record
-        try:
-            auto_payment = Payment(
-                user_id=user.id,
-                debt_id=debt_id,
-                amount=amount,
-                paid_date=today,
-                source="dashboard",
-                auto_logged=True,
-            )
-            db.add(auto_payment)
-        except Exception:
-            pass
     elif not is_checked and existing:
-        # Restore balance using sum of ALL matching payments (handles
-        # household case where multiple members each have a row).
-        restore_total = sum(Decimal(str(p.amount)) for p in existing_rows)
-        current_balance = Decimal(str(debt.balance or 0))
-        debt.balance = current_balance + restore_total
-        for p in existing_rows:
-            await db.delete(p)
-        # Remove auto-logged payment records scoped to current month
-        try:
-            from calendar import monthrange
-            month_start = date(today.year, today.month, 1)
-            _, last_day = monthrange(today.year, today.month)
-            month_end = date(today.year, today.month, last_day)
-            auto_result = await db.execute(
-                select(Payment).where(
-                    Payment.debt_id == debt_id,
-                    Payment.user_id == user.id,
-                    Payment.auto_logged.is_(True),
-                    Payment.paid_date >= month_start,
-                    Payment.paid_date <= month_end,
-                )
-            )
-            for auto_pay in auto_result.scalars().all():
-                await db.delete(auto_pay)
-        except Exception:
-            pass
+        await remove_period_debt_payments(
+            db,
+            user,
+            debt,
+            existing_rows,
+            remove_auto_logged=True,
+            today=today,
+        )
 
     if not is_checked:
         # Scope cleanup to this pay period only — do not wipe checklist rows

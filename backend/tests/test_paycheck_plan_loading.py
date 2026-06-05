@@ -272,27 +272,28 @@ class TestRentCarryover(unittest.TestCase):
 
     # ── _prev_period_start helper ─────────────────────────────────────────
 
-    def test_prev_period_start_biweekly(self):
-        from app.services.paycheck_planning_state import _prev_period_start
-        self.assertEqual(
-            _prev_period_start(date(2026, 6, 4), "biweekly"), date(2026, 5, 21)
-        )
+    def test_previous_period_bounds_biweekly(self):
+        from app.services.paycheck_engine import previous_period_bounds
 
-    def test_prev_period_start_weekly(self):
-        from app.services.paycheck_planning_state import _prev_period_start
-        self.assertEqual(
-            _prev_period_start(date(2026, 6, 4), "weekly"), date(2026, 5, 28)
-        )
+        bounds = previous_period_bounds(date(2026, 6, 4), "biweekly")
+        self.assertEqual(bounds, (date(2026, 5, 21), date(2026, 6, 3)))
 
-    def test_prev_period_start_monthly(self):
-        from app.services.paycheck_planning_state import _prev_period_start
-        self.assertEqual(
-            _prev_period_start(date(2026, 6, 4), "monthly"), date(2026, 5, 4)
-        )
+    def test_previous_period_bounds_weekly(self):
+        from app.services.paycheck_engine import previous_period_bounds
 
-    def test_prev_period_start_unknown_returns_none(self):
-        from app.services.paycheck_planning_state import _prev_period_start
-        self.assertIsNone(_prev_period_start(date(2026, 6, 4), "unknown_freq"))
+        bounds = previous_period_bounds(date(2026, 6, 4), "weekly")
+        self.assertEqual(bounds, (date(2026, 5, 28), date(2026, 6, 3)))
+
+    def test_previous_period_bounds_monthly(self):
+        from app.services.paycheck_engine import previous_period_bounds
+
+        bounds = previous_period_bounds(date(2026, 6, 4), "monthly")
+        self.assertEqual(bounds, (date(2026, 5, 4), date(2026, 6, 3)))
+
+    def test_previous_period_bounds_unknown_returns_none(self):
+        from app.services.paycheck_engine import previous_period_bounds
+
+        self.assertIsNone(previous_period_bounds(date(2026, 6, 4), "unknown_freq"))
 
     # ── assign_bills_to_paycheck engine-level checks ──────────────────────
 
@@ -399,7 +400,7 @@ class TestRentCarryover(unittest.TestCase):
                 new_callable=AsyncMock,
                 return_value=set(),
             ), patch(
-                "app.services.pay_period_planner._apply_effective_lists",
+                "app.services.paycheck_assignment.apply_effective_lists",
                 side_effect=lambda nc, nn, cs, ns, ovr: (list(nc), list(nn)),
             ):
                 result = await build_paycheck_planning_state(
@@ -471,7 +472,7 @@ class TestRentCarryover(unittest.TestCase):
                 new_callable=AsyncMock,
                 return_value=set(),
             ), patch(
-                "app.services.pay_period_planner._apply_effective_lists",
+                "app.services.paycheck_assignment.apply_effective_lists",
                 side_effect=lambda nc, nn, cs, ns, ovr: (list(nc), list(nn)),
             ):
                 result = await build_paycheck_planning_state(

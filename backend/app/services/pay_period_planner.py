@@ -24,56 +24,22 @@ from app.services.paycheck_data import (
     resolve_anchor_income,
 )
 from app.services.bill_cycles import local_today
+from app.services.paycheck_assignment import (
+    apply_effective_lists,
+    enrich_assigned_item,
+    parse_item_due_date,
+)
 from app.services.paycheck_engine import (
     assign_bills_to_paycheck,
     build_paycheck_plan,
     generate_pay_dates,
     get_pay_period_window,
-    normalize_paycheck_line_item,
     occurrence_key,
 )
 from app.services.paycheck_planning_state import (
     build_current_paycheck_plan,
     build_paycheck_planning_state,
 )
-
-
-def _parse_due(item: dict) -> date:
-    d = item["due_date"]
-    if isinstance(d, date):
-        return d
-    if isinstance(d, datetime):
-        return d.date()
-    return date.fromisoformat(str(d)[:10])
-
-
-def _enrich_item(
-    item: dict,
-    *,
-    natural_period_start: date,
-    effective_period_start: date,
-    pulled_forward: bool,
-    override_row: PayPeriodItemOverride | None = None,
-    can_pull_forward: bool = False,
-) -> dict:
-    out = dict(item)
-    due = _parse_due(item)
-    out["occurrence_due_date"] = due
-    out["natural_period_start"] = natural_period_start
-    out["effective_period_start"] = effective_period_start
-    out["pulled_forward"] = pulled_forward
-    out["pay_period_start"] = effective_period_start
-    out["is_overridden"] = pulled_forward
-    out["original_pay_period_start"] = natural_period_start if pulled_forward else None
-    out["override_id"] = override_row.id if override_row else None
-    out["can_revert_override"] = pulled_forward and override_row is not None
-    out["can_pull_forward"] = (
-        can_pull_forward
-        and not pulled_forward
-        and not bool(item.get("is_paid"))
-        and not bool(item.get("is_overdue"))
-    )
-    return normalize_paycheck_line_item(out)
 
 
 async def load_active_overrides(
@@ -93,76 +59,6 @@ async def load_active_overrides(
 
     result = await db.execute(select(PayPeriodItemOverride).where(and_(*clauses)))
     return list(result.scalars().all())
-
-
-def _override_map(
-    overrides: list[PayPeriodItemOverride],
-) -> dict[str, PayPeriodItemOverride]:
-    return {
-        occurrence_key(o.item_type, o.item_id, o.occurrence_due_date): o
-        for o in overrides
-    }
-
-
-def _apply_effective_lists(
-    natural_current: list[dict],
-    natural_next: list[dict],
-    current_start: date,
-    next_start: date | None,
-    overrides: list[PayPeriodItemOverride],
-) -> tuple[list[dict], list[dict]]:
-    """Build effective current and next item lists (no double counting)."""
-    omap = _override_map(overrides)
-    pulled_keys = {
-        k
-        for k, o in omap.items()
-        if o.effective_period_start == current_start
-        and o.natural_period_start == next_start
-    }
-
-    current_effective: list[dict] = []
-    for item in natural_current:
-        key = occurrence_key(item["item_type"], item["id"], _parse_due(item))
-        if key in pulled_keys:
-            continue
-        current_effective.append(
-            _enrich_item(
-                item,
-                natural_period_start=current_start,
-                effective_period_start=current_start,
-                pulled_forward=False,
-            )
-        )
-
-    for item in natural_next:
-        key = occurrence_key(item["item_type"], item["id"], _parse_due(item))
-        if key in pulled_keys:
-            current_effective.append(
-                _enrich_item(
-                    item,
-                    natural_period_start=next_start,
-                    effective_period_start=current_start,
-                    pulled_forward=True,
-                    override_row=omap.get(key),
-                )
-            )
-
-    next_effective: list[dict] = []
-    for item in natural_next:
-        key = occurrence_key(item["item_type"], item["id"], _parse_due(item))
-        if key in pulled_keys:
-            continue
-        next_effective.append(
-            _enrich_item(
-                item,
-                natural_period_start=next_start,
-                effective_period_start=next_start,
-                pulled_forward=False,
-                can_pull_forward=True,
-            )
-        )
-
-    return current_effective, next_effective
 
 
 async def _build_natural_for_period(
@@ -334,7 +230,7 @@ async def build_period_view(
         )
 
     overrides = await load_active_overrides(db, user, budget_id)
-    current_items, next_items = _apply_effective_lists(
+    current_items, next_items = apply_effective_lists(
         natural_current,
         natural_next,
         current_start,
@@ -437,7 +333,7 @@ async def pull_forward(
 
     key = occurrence_key(item_type, item_id, occurrence_due_date)
     natural_by_key = {
-        occurrence_key(i["item_type"], i["id"], _parse_due(i)): i for i in natural_next
+        occurrence_key(i["item_type"], i["id"], parse_item_due_date(i)): i for i in natural_next
     }
     if key not in natural_by_key:
         raise HTTPException(
@@ -652,7 +548,7 @@ async def build_full_paycheck_plan_response(
                         paid_d,
                     )
                     items = [
-                        _enrich_item(
+                        enrich_assigned_item(
                             it,
                             natural_period_start=pc["paycheck_date"],
                             effective_period_start=pc["paycheck_date"],

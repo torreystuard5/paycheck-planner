@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { Edit, Trash2, ChevronDown, ChevronUp, DollarSign, Clock, Archive, Calendar, Upload } from 'lucide-react';
+import { Edit, Trash2, ChevronDown, ChevronUp, DollarSign, Clock, Archive, Calendar, Upload, LayoutDashboard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ProFeatureGate from '../components/ProFeatureGate';
 import { formatFriendlyDate } from '../utils/formatDate';
-import { formatApiError } from '../utils/formatApiError';
-import { augmentPaycheckPlan } from '../utils/paycheckPlanItems';
 import api from '../services/api';
 import { useBudget } from '../context/BudgetContext';
 import Modal from '../components/Modal';
@@ -16,7 +14,6 @@ import { Badge, Button, Card, IconStat, PageHeader } from '../components/ui';
 
 const UploadDropzone = lazy(() => import('../components/uploads/UploadDropzone'));
 const DocumentDetailDrawer = lazy(() => import('../components/uploads/DocumentDetailDrawer'));
-const PaycheckPlanEnvelope = lazy(() => import('../components/PaycheckPlanEnvelope'));
 
 const defaultEntryForm = {
   source_name: '',
@@ -44,13 +41,6 @@ export default function Income() {
   const [showArchive, setShowArchive] = useState(false);
   const [firstLoad, setFirstLoad] = useState(true);
   const [paystubDetailId, setPaystubDetailId] = useState(null);
-  const [paycheckPlan, setPaycheckPlan] = useState(null);
-  const [planError, setPlanError] = useState(null);
-  const [checklist, setChecklist] = useState({});
-  const [checklistLoading, setChecklistLoading] = useState({});
-  const [showHiddenOverdue, setShowHiddenOverdue] = useState(false);
-  const [hidingOverdue, setHidingOverdue] = useState({});
-  const [overrideBusyKey, setOverrideBusyKey] = useState(null);
 
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -101,112 +91,9 @@ export default function Income() {
     }
   }, [selectedMonth, selectedYear, firstLoad, activeBudget?.id]);
 
-  const fetchPaycheckPlan = useCallback(async () => {
-    setPlanError(null);
-    const bq = activeBudget?.id ? `budget_id=${activeBudget.id}` : '';
-    const planUrl = bq
-      ? `/api/v1/paycheck-plan?periods=4&${bq}`
-      : '/api/v1/paycheck-plan?periods=4';
-    try {
-      const res = await api.get(planUrl);
-      const planData = augmentPaycheckPlan(res.data);
-      setPaycheckPlan(planData);
-      setChecklist({});
-    } catch (err) {
-      setPlanError(formatApiError(err) || 'Failed to load paycheck plan.');
-    }
-  }, [activeBudget?.id]);
-
   useEffect(() => {
     fetchData(true);
-    fetchPaycheckPlan();
-  }, [fetchData, fetchPaycheckPlan, budgetVersion]);
-
-  const assignItemKey = useCallback((item) => `${item.item_type}_${item.id || item.item_id}`, []);
-  const assignItemPaid = useCallback(
-    (item) => Boolean(item.is_paid) || Boolean(checklist[assignItemKey(item)]),
-    [assignItemKey, checklist],
-  );
-  const overrideItemKey = (item) =>
-    `${item.item_type}_${item.id || item.item_id}_${item.occurrence_due_date || item.due_date}`;
-
-  const toggleChecklistItem = async (item, payPeriodStart) => {
-    const key = assignItemKey(item);
-    const currentState = Boolean(item.is_paid) || !!checklist[key];
-    const newState = !currentState;
-    setChecklist((prev) => ({ ...prev, [key]: newState }));
-    setChecklistLoading((prev) => ({ ...prev, [key]: true }));
-    try {
-      await api.put('/api/v1/paycheck-checklist', {
-        item_type: item.item_type,
-        item_id: item.id || item.item_id,
-        pay_period_start: payPeriodStart,
-        is_checked: newState,
-      });
-      await fetchPaycheckPlan();
-      bumpBudgetVersion();
-    } catch {
-      setChecklist((prev) => ({ ...prev, [key]: currentState }));
-    } finally {
-      setChecklistLoading((prev) => ({ ...prev, [key]: false }));
-    }
-  };
-
-  const handlePullForward = async (item) => {
-    const key = overrideItemKey(item);
-    setOverrideBusyKey(key);
-    try {
-      await api.post('/api/v1/paycheck-plan/overrides', {
-        item_type: item.item_type,
-        item_id: item.id || item.item_id,
-        occurrence_due_date: item.occurrence_due_date || item.due_date,
-        budget_id: activeBudget?.id || undefined,
-        target_pay_period_start: paycheckPlan?.paychecks?.[0]?.pay_period_start
-          || paycheckPlan?.paychecks?.[0]?.paycheck_date,
-      });
-      await fetchPaycheckPlan();
-      bumpBudgetVersion();
-    } catch (err) {
-      setPlanError(formatApiError(err) || 'Could not pull item into current paycheck.');
-    } finally {
-      setOverrideBusyKey(null);
-    }
-  };
-
-  const handleRevertOverride = async (item) => {
-    const key = overrideItemKey(item);
-    setOverrideBusyKey(key);
-    try {
-      if (item.override_id) {
-        const bq = activeBudget?.id ? `?budget_id=${activeBudget.id}` : '';
-        await api.delete(`/api/v1/paycheck-plan/overrides/${item.override_id}${bq}`);
-      } else {
-        await api.post('/api/v1/pay-periods/revert-pull-forward', {
-          item_type: item.item_type,
-          item_id: item.id || item.item_id,
-          occurrence_due_date: item.occurrence_due_date || item.due_date,
-          budget_id: activeBudget?.id || undefined,
-        });
-      }
-      await fetchPaycheckPlan();
-      bumpBudgetVersion();
-    } catch (err) {
-      setPlanError(formatApiError(err) || 'Could not return item to original paycheck.');
-    } finally {
-      setOverrideBusyKey(null);
-    }
-  };
-
-  const toggleHideOverdue = async (billId, currentlyHidden) => {
-    const action = currentlyHidden ? 'unhide-overdue' : 'hide-overdue';
-    setHidingOverdue((prev) => ({ ...prev, [billId]: true }));
-    try {
-      await api.patch(`/api/v1/bills/${billId}/${action}`);
-      await fetchPaycheckPlan();
-    } catch { /* ignore */ } finally {
-      setHidingOverdue((prev) => ({ ...prev, [billId]: false }));
-    }
-  };
+  }, [fetchData, budgetVersion]);
 
   // ── Paycheck entry handlers ──
   const openAddEntry = () => {
@@ -292,7 +179,7 @@ export default function Income() {
     <div className="page-container min-w-0 space-y-6">
       <PageHeader
         title="Income & Paychecks"
-        description="Log pay and allocate your current paycheck envelope"
+        description="Log paychecks, upload paystubs, and review your monthly income"
         actions={
           <Button variant="primary" onClick={openAddEntry} className="w-full sm:w-auto">
             <DollarSign className="h-4 w-4" />
@@ -304,9 +191,21 @@ export default function Income() {
       {error && (
         <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" role="alert">{error}</Card>
       )}
-      {planError && (
-        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" role="alert">{planError}</Card>
-      )}
+      <Card className="flex flex-col gap-3 border-accent-200/60 bg-accent-50/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">Paycheck planning lives on your Dashboard</p>
+          <p className="text-body mt-1">
+            After you log income here, open the Dashboard to see your envelope allocation and bill checklist.
+          </p>
+        </div>
+        <Link
+          to="/"
+          className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-subtle sm:w-auto"
+        >
+          <LayoutDashboard className="h-4 w-4" />
+          Go to Dashboard
+        </Link>
+      </Card>
 
       <ProFeatureGate featureKey="receipt_ocr">
         <Card className="space-y-3 p-4 sm:p-5">
@@ -350,30 +249,6 @@ export default function Income() {
           />
         </Suspense>
       )}
-
-      <section aria-labelledby="income-paycheck-plan-heading">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <h2 id="income-paycheck-plan-heading" className="text-title">Current Paycheck Plan</h2>
-          <Badge variant="success" className="normal-case">Envelope view</Badge>
-        </div>
-        <Suspense fallback={<LoadingSpinner label="Loading paycheck plan" />}>
-          <PaycheckPlanEnvelope
-            paycheckPlan={paycheckPlan}
-            assignItemPaid={assignItemPaid}
-            assignItemKey={assignItemKey}
-            checklistLoading={checklistLoading}
-            onToggleItem={toggleChecklistItem}
-            onPullForward={handlePullForward}
-            onRevertOverride={handleRevertOverride}
-            overrideBusyKey={overrideBusyKey}
-            overrideItemKey={overrideItemKey}
-            hidingOverdue={hidingOverdue}
-            onHideOverdue={toggleHideOverdue}
-            showHiddenOverdue={showHiddenOverdue}
-            onToggleShowHidden={() => setShowHiddenOverdue((prev) => !prev)}
-          />
-        </Suspense>
-      </section>
 
       {/* Monthly income summary */}
       <Card className="p-5 sm:p-6">
@@ -430,13 +305,13 @@ export default function Income() {
                     <div className="flex min-w-0 items-center gap-3">
                       <IconStat icon={DollarSign} tone="brand" className="rounded-lg p-2" iconClassName="h-4 w-4" />
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{entry.source_name || 'Paycheck'}</p>
-                        <p className="text-xs text-gray-500">{formatFriendlyDate(entry.pay_date)}</p>
+                        <p className="truncate text-sm font-medium text-foreground">{entry.source_name || 'Paycheck'}</p>
+                        <p className="text-caption">{formatFriendlyDate(entry.pay_date)}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <CurrencyDisplay amount={entry.net_amount} className="text-base font-bold text-gray-900" />
-                      {isExpEntry ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      <CurrencyDisplay amount={entry.net_amount} className="text-base font-bold text-foreground" />
+                      {isExpEntry ? <ChevronUp className="h-4 w-4 text-muted" /> : <ChevronDown className="h-4 w-4 text-muted" />}
                     </div>
                   </button>
                   <div
@@ -446,37 +321,47 @@ export default function Income() {
                     <div className="px-4 pb-4 sm:px-5">
                       <div className="space-y-2 border-t border-border pt-3 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Pay Date</span>
-                          <span className="text-gray-700">{formatFriendlyDate(entry.pay_date)}</span>
+                          <span className="text-muted">Pay Date</span>
+                          <span className="text-foreground">{formatFriendlyDate(entry.pay_date)}</span>
                         </div>
                         {entry.source_name && (
                           <div className="flex justify-between">
-                            <span className="text-gray-500">Source</span>
-                            <span className="text-gray-700">{entry.source_name}</span>
+                            <span className="text-muted">Source</span>
+                            <span className="text-foreground">{entry.source_name}</span>
                           </div>
                         )}
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Net (Take-Home)</span>
-                          <CurrencyDisplay amount={entry.net_amount} className="font-medium text-gray-900" />
+                          <span className="text-muted">Net (Take-Home)</span>
+                          <CurrencyDisplay amount={entry.net_amount} className="font-medium text-foreground" />
                         </div>
                         {entry.gross_amount && (
                           <div className="flex justify-between">
-                            <span className="text-gray-500">Gross</span>
-                            <CurrencyDisplay amount={entry.gross_amount} className="font-medium text-gray-700" />
+                            <span className="text-muted">Gross</span>
+                            <CurrencyDisplay amount={entry.gross_amount} className="font-medium text-foreground" />
                           </div>
                         )}
                         {entry.memo && (
                           <div className="flex justify-between">
-                            <span className="text-gray-500">Memo</span>
-                            <span className="text-gray-700">{entry.memo}</span>
+                            <span className="text-muted">Memo</span>
+                            <span className="text-foreground">{entry.memo}</span>
                           </div>
                         )}
                         <div className="flex justify-end gap-2 pt-2">
-                          <button onClick={(e) => { e.stopPropagation(); openEditEntry(entry); }} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
-                            <Edit className="w-4 h-4" />
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openEditEntry(entry); }}
+                            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-accent-50 hover:text-accent-600"
+                            aria-label="Edit paycheck"
+                          >
+                            <Edit className="h-4 w-4" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); setDeleteEntryTarget(entry); }} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                            <Trash2 className="w-4 h-4" />
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setDeleteEntryTarget(entry); }}
+                            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-danger-50 hover:text-danger-600"
+                            aria-label="Delete paycheck"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </div>
@@ -487,22 +372,24 @@ export default function Income() {
             })}
           </div>
           {!showArchive && allEntries.length > 10 && (
-            <button
+            <Button
+              variant="secondary"
+              className="mt-3 w-full"
               onClick={() => setShowArchive(true)}
-              className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <Archive className="h-4 w-4" />
               View Archive ({allEntries.length - 10} older)
-            </button>
+            </Button>
           )}
           {showArchive && allEntries.length > 10 && (
-            <button
+            <Button
+              variant="secondary"
+              className="mt-3 w-full"
               onClick={() => setShowArchive(false)}
-              className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <ChevronUp className="h-4 w-4" />
               Hide Archive
-            </button>
+            </Button>
           )}
         </div>
       )}

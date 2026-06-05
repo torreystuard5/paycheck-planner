@@ -19,7 +19,9 @@ export default function PersonalModeRoute() {
   const sharedAccountPaths =
     path.startsWith('/settings') ||
     path.startsWith('/support') ||
-    path.startsWith('/supporter');
+    path.startsWith('/supporter') ||
+    path.startsWith('/edition') ||
+    path.startsWith('/business/start');
 
   useEffect(() => {
     if (!user || adminPath || sharedAccountPaths) return;

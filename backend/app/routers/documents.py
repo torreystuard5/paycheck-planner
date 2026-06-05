@@ -8,7 +8,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -22,6 +22,7 @@ from app.schemas.document_upload import (
     PresignedUploadResponse,
 )
 from app.schemas.paycheck_entry import PaycheckEntryResponse
+from app.services.document_constants import ALLOWED_DOCUMENT_CONTENT_TYPES
 from app.services.document_link import validate_personal_link_target
 from app.services.document_responses import document_detail_response
 from app.services.document_scope import document_access_scope, get_document_for_user
@@ -65,14 +66,7 @@ async def _ensure_document_access(
         },
     )
 
-ALLOWED_CONTENT_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/heic",
-    "image/heif",
-    "application/pdf",
-}
+ALLOWED_CONTENT_TYPES = ALLOWED_DOCUMENT_CONTENT_TYPES
 
 
 def _extension_from_filename(filename: str) -> str:
@@ -323,7 +317,7 @@ class DocumentLinkRequest(BaseModel):
 
 
 class PaystubConfirmFromDocumentRequest(BaseModel):
-    source_name: str = Field(..., max_length=150)
+    source_name: str | None = Field(default=None, max_length=150)
     pay_date: date
     net_amount: Decimal = Field(..., max_digits=12, decimal_places=2)
     gross_amount: Decimal | None = Field(default=None, max_digits=12, decimal_places=2)
@@ -376,6 +370,7 @@ async def confirm_paystub_from_document(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "upgrade_required", "feature": "receipt_ocr"},
         )
+    from app.models.income import IncomeSource
     from app.models.paycheck_entry import PaycheckEntry
     from app.utils.budget import resolve_budget_id
 
@@ -390,10 +385,42 @@ async def confirm_paystub_from_document(
             detail="This paystub is already linked to a paycheck entry",
         )
 
+    parsed = doc.parsed_json or {}
+    employer = (body.source_name or parsed.get("employer_name") or "").strip()
+    if not employer:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Employer name is required (enter manually or re-run OCR on the paystub).",
+        )
+
     budget_id = await resolve_budget_id(current_user, db, body.budget_id)
+
+    income_source_id = None
+    income_result = await db.execute(
+        select(IncomeSource).where(
+            IncomeSource.user_id == current_user.id,
+            IncomeSource.budget_id == budget_id,
+            IncomeSource.is_active.is_(True),
+            func.lower(IncomeSource.name) == employer.lower(),
+        )
+    )
+    income_source = income_result.scalar_one_or_none()
+    if income_source is None:
+        income_source = IncomeSource(
+            user_id=current_user.id,
+            name=employer[:100],
+            amount=body.net_amount,
+            budget_id=budget_id,
+            is_active=True,
+        )
+        db.add(income_source)
+        await db.flush()
+    income_source_id = income_source.id
+
     entry = PaycheckEntry(
         user_id=current_user.id,
-        source_name=body.source_name[:150],
+        income_source_id=income_source_id,
+        source_name=employer[:150],
         pay_date=body.pay_date,
         gross_amount=body.gross_amount,
         net_amount=body.net_amount,

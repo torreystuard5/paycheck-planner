@@ -9,9 +9,11 @@ import CurrencyDisplay from '../../components/CurrencyDisplay';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import BusinessPageShell from '../../components/business/BusinessPageShell';
 import { useToast } from '../../components/Toast';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
+import { useBusinessAccess } from '../../hooks/useBusinessAccess';
+import { Button } from '../../components/ui';
 
 const DEFAULT_CATEGORIES = ['Products', 'Services', 'Labor & Supplies', 'Consulting', 'Subscriptions', 'Wholesale', 'Retail', 'Other'];
 const CUSTOM_CAT = '__custom__';
@@ -32,6 +34,7 @@ const emptyForm = {
 export default function SalesPage() {
   const toast = useToast();
   const write = useBusinessWrite('manage_sales');
+  const { teamRole } = useBusinessAccess();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -209,38 +212,39 @@ export default function SalesPage() {
     total: Number(m.total) || 0,
   }));
 
-  if (loading && !rows.length) return <LoadingSpinner />;
-
   return (
-    <div className="space-y-6 max-w-5xl min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sales</h1>
-          <p className="text-sm text-gray-600 mt-1">Track revenue</p>
-        </div>
-        <button
+    <BusinessPageShell
+      title="Sales"
+      description="Track revenue"
+      loading={loading && !rows.length}
+      error={error}
+      teamRole={teamRole}
+      maxWidth="max-w-5xl"
+      actions={(
+        <Button
           type="button"
           onClick={openAdd}
-          {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:hover:bg-green-600' })}
+          disabled={write.disabled}
+          title={write.title}
+          className="bg-brand-600 text-white hover:bg-brand-700"
         >
-          <Plus className="w-4 h-4" /> Add sale
-        </button>
-      </div>
-
-      {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
-
+          <Plus className="h-4 w-4" />
+          Add sale
+        </Button>
+      )}
+    >
       <div className="flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Range</label>
-          <select value={range} onChange={(e) => setRange(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <label className="block text-xs text-muted mb-1">Range</label>
+          <select value={range} onChange={(e) => setRange(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-sm">
             <option value="month">This month</option>
             <option value="quarter">This quarter</option>
             <option value="ytd">Year to date</option>
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Category</label>
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[10rem]">
+          <label className="block text-xs text-muted mb-1">Category</label>
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-sm min-w-[10rem]">
             <option value="">All Categories</option>
             {filterCategoryOptions.filter(Boolean).map((c) => (
               <option key={c} value={c}>{formatLabel(c)}</option>
@@ -248,19 +252,19 @@ export default function SalesPage() {
           </select>
         </div>
         <div className="flex-1 min-w-[140px]">
-          <label className="block text-xs text-gray-500 mb-1">Search</label>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} onBlur={() => load()} className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full" placeholder="Source, notes…" />
+          <label className="block text-xs text-muted mb-1">Search</label>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} onBlur={() => load()} className="border border-border rounded-lg px-3 py-2 text-sm w-full" placeholder="Source, notes…" />
         </div>
-        <button type="button" onClick={() => { setLoading(true); load(); }} className="px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200">Apply</button>
+        <button type="button" onClick={() => { setLoading(true); load(); }} className="px-3 py-2 text-sm bg-surface-subtle rounded-lg hover:bg-surface-subtle">Apply</button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-          <p className="text-xs text-gray-500 uppercase">Total ({range})</p>
-          <CurrencyDisplay amount={summary?.total} className="text-2xl font-bold text-gray-900 mt-1 block" />
+        <div className="bg-surface rounded-lg border border-border p-4 shadow-sm">
+          <p className="text-xs text-muted uppercase">Total ({range})</p>
+          <CurrencyDisplay amount={summary?.total} className="text-2xl font-bold text-foreground mt-1 block" />
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-          <p className="text-xs text-gray-500 uppercase mb-2">By category</p>
+        <div className="bg-surface rounded-lg border border-border p-4 shadow-sm">
+          <p className="text-xs text-muted uppercase mb-2">By category</p>
           <ul className="text-sm space-y-1 max-h-28 overflow-y-auto">
             {Object.entries(summary?.by_category || {}).map(([k, v]) => (
               <li key={k} className="flex justify-between gap-2">
@@ -269,14 +273,14 @@ export default function SalesPage() {
               </li>
             ))}
             {!summary?.by_category || !Object.keys(summary.by_category).length ? (
-              <li className="text-gray-500">No data</li>
+              <li className="text-muted">No data</li>
             ) : null}
           </ul>
         </div>
       </div>
 
       {chartData.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm h-64 min-h-[200px]">
+        <div className="bg-surface rounded-lg border border-border p-4 shadow-sm h-64 min-h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
@@ -296,10 +300,10 @@ export default function SalesPage() {
           onAction={write.allowed ? openAdd : undefined}
         />
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm max-w-[100vw] sm:max-w-none">
+        <div className="bg-surface rounded-lg border border-border overflow-hidden shadow-sm max-w-[100vw] sm:max-w-none">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600">
+              <thead className="bg-surface-subtle text-left text-muted">
                 <tr>
                   <th className="px-3 py-2">Date</th>
                   <th className="px-3 py-2">Amount</th>
@@ -310,15 +314,15 @@ export default function SalesPage() {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id} className="border-t border-gray-100">
+                  <tr key={r.id} className="border-t border-border">
                     <td className="px-3 py-2 whitespace-nowrap">{formatFriendlyDate(r.date)}</td>
                     <td className="px-3 py-2 font-medium"><CurrencyDisplay amount={r.amount} /></td>
-                    <td className="px-3 py-2 hidden sm:table-cell text-gray-600 truncate max-w-[120px]">{r.customer_name || r.source || '—'}</td>
+                    <td className="px-3 py-2 hidden sm:table-cell text-muted truncate max-w-[120px]">{r.customer_name || r.source || '—'}</td>
                     <td className="px-3 py-2">{formatLabel(r.category) || '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
-                        <button type="button" onClick={() => openEdit(r)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-blue-600 rounded disabled:hover:text-gray-500' })} aria-label="Edit"><Pencil className="w-4 h-4" /></button>
-                        <button type="button" onClick={() => setDel(r)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-red-600 rounded disabled:hover:text-gray-500' })} aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => openEdit(r)} {...write.props({ className: 'p-1.5 text-muted hover:text-accent-600 rounded disabled:hover:text-muted' })} aria-label="Edit"><Pencil className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => setDel(r)} {...write.props({ className: 'p-1.5 text-muted hover:text-red-600 rounded disabled:hover:text-muted' })} aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -333,16 +337,16 @@ export default function SalesPage() {
         <form onSubmit={submit} className="space-y-3 max-h-[80vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Date</label>
               <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Amount</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Amount</label>
               <input type="number" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>
           <div className="relative">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Source / customer</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Source / customer</label>
             <input
               autoComplete="off"
               value={form.source}
@@ -357,12 +361,12 @@ export default function SalesPage() {
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
             {custOpen && (custHits.length > 0 || form.source) && (
-              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto text-sm">
+              <div className="absolute z-20 mt-1 w-full bg-surface border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto text-sm">
                 {custHits.map((c) => (
                   <button
                     key={c.id}
                     type="button"
-                    className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                    className="w-full text-left px-3 py-2 hover:bg-surface-subtle border-b border-gray-50 last:border-0"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
                       setForm({ ...form, customer_id: c.id, source: c.name });
@@ -385,7 +389,7 @@ export default function SalesPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Category</label>
               <select value={form.categorySelect} onChange={(e) => setForm({ ...form, categorySelect: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
                 {mergedCategories.map((c) => (
                   <option key={c} value={c}>{formatLabel(c)}</option>
@@ -397,7 +401,7 @@ export default function SalesPage() {
               )}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Payment method</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Payment method</label>
               <select value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
                 {PAYMENT_METHODS.map((p) => (
                   <option key={p} value={p}>{formatLabel(p)}</option>
@@ -406,7 +410,7 @@ export default function SalesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
             <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
           </div>
           <label className="flex items-center gap-2 text-sm">
@@ -414,7 +418,7 @@ export default function SalesPage() {
             Taxable
           </label>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setModal(false)} disabled={saving} className="px-4 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
+            <button type="button" onClick={() => setModal(false)} disabled={saving} className="px-4 py-2 text-sm text-foreground rounded-lg hover:bg-surface-subtle">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </form>
@@ -423,17 +427,17 @@ export default function SalesPage() {
       <Modal isOpen={quickAdd} onClose={() => setQuickAdd(false)} title="New customer">
         <form onSubmit={quickAddCustomer} className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Name</label>
             <input required value={quickName} onChange={(e) => setQuickName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setQuickAdd(false)} className="px-4 py-2 text-sm rounded-lg hover:bg-gray-100">Cancel</button>
+            <button type="button" onClick={() => setQuickAdd(false)} className="px-4 py-2 text-sm rounded-lg hover:bg-surface-subtle">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">{saving ? 'Saving…' : 'Create'}</button>
           </div>
         </form>
       </Modal>
 
       <ConfirmDialog isOpen={!!del} onClose={() => setDel(null)} onConfirm={confirmDelete} title="Delete sale" message="Remove this sale record?" confirmText="Delete" danger />
-    </div>
+    </BusinessPageShell>
   );
 }

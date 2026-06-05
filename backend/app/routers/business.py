@@ -387,7 +387,34 @@ async def delete_sale(
     await db.flush()
 
 
-# ── Business settings (mileage, etc.) ───────────────────────────────
+# ── Business settings (profile, mileage, fiscal year) ───────────────
+
+
+async def _get_or_create_owner_pref(db: AsyncSession, owner_id: UUID) -> UserUIPreference:
+    r = await db.execute(
+        select(UserUIPreference).where(UserUIPreference.user_id == owner_id)
+    )
+    pref = r.scalar_one_or_none()
+    if not pref:
+        pref = UserUIPreference(user_id=owner_id, collapsed_sections=[])
+        db.add(pref)
+        await db.flush()
+    return pref
+
+
+def _pref_to_settings(pref: UserUIPreference | None) -> BusinessSettingsResponse:
+    rate = Decimal("0.7000")
+    if pref and pref.business_mileage_rate_per_mile is not None:
+        rate = Decimal(str(pref.business_mileage_rate_per_mile))
+    fiscal = 1
+    if pref and getattr(pref, "fiscal_year_start_month", None):
+        fiscal = int(pref.fiscal_year_start_month)
+    return BusinessSettingsResponse(
+        mileage_rate_per_mile=rate,
+        business_name=getattr(pref, "business_name", None) if pref else None,
+        business_tagline=getattr(pref, "business_tagline", None) if pref else None,
+        fiscal_year_start_month=fiscal,
+    )
 
 
 @router.get("/settings", response_model=BusinessSettingsResponse)
@@ -396,13 +423,10 @@ async def get_business_settings(
     ctx: BusinessContext = Depends(get_business_ctx),
 ):
     r = await db.execute(
-        select(UserUIPreference).where(UserUIPreference.user_id == ctx.actor.id)
+        select(UserUIPreference).where(UserUIPreference.user_id == ctx.owner_id)
     )
     pref = r.scalar_one_or_none()
-    rate = Decimal("0.7000")
-    if pref and pref.business_mileage_rate_per_mile is not None:
-        rate = Decimal(str(pref.business_mileage_rate_per_mile))
-    return BusinessSettingsResponse(mileage_rate_per_mile=rate)
+    return _pref_to_settings(pref)
 
 
 @router.patch("/settings", response_model=BusinessSettingsResponse)
@@ -412,21 +436,18 @@ async def patch_business_settings(
     ctx: BusinessContext = Depends(get_business_ctx),
 ):
     ctx.require_owner()
-    r = await db.execute(
-        select(UserUIPreference).where(UserUIPreference.user_id == ctx.actor.id)
-    )
-    pref = r.scalar_one_or_none()
-    if not pref:
-        pref = UserUIPreference(user_id=ctx.actor.id, collapsed_sections=[])
-        db.add(pref)
+    pref = await _get_or_create_owner_pref(db, ctx.owner_id)
     if data.mileage_rate_per_mile is not None:
         pref.business_mileage_rate_per_mile = data.mileage_rate_per_mile
+    if data.business_name is not None:
+        pref.business_name = data.business_name.strip() or None
+    if data.business_tagline is not None:
+        pref.business_tagline = data.business_tagline.strip() or None
+    if data.fiscal_year_start_month is not None:
+        pref.fiscal_year_start_month = data.fiscal_year_start_month
     await db.flush()
     await db.refresh(pref)
-    rate = Decimal("0.7000")
-    if pref.business_mileage_rate_per_mile is not None:
-        rate = Decimal(str(pref.business_mileage_rate_per_mile))
-    return BusinessSettingsResponse(mileage_rate_per_mile=rate)
+    return _pref_to_settings(pref)
 
 
 # ── Customers ──────────────────────────────────────────────────────

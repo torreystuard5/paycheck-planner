@@ -1,15 +1,28 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Eye, Trash2, FileText } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Eye, Trash2, FileText, Filter } from 'lucide-react';
 import { deleteBusinessDocument, listBusinessDocuments } from '../../services/api';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import BusinessPageShell from '../../components/business/BusinessPageShell';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import UploadDropzone from '../../components/uploads/UploadDropzone';
 import DocumentDetailDrawer from '../../components/uploads/DocumentDetailDrawer';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
+import { useBusinessAccess } from '../../hooks/useBusinessAccess';
 import { useToast } from '../../components/Toast';
 import { getStatusPill } from '../../lib/uploadStatus';
+import { Badge, Button, Card, FilterChips } from '../../components/ui';
 
-const TYPES = ['paystub', 'receipt', 'invoice', 'bill', 'vendor', 'tax', 'other'];
+const TYPE_OPTIONS = [
+  { key: 'all', label: 'All' },
+  { key: 'receipt', label: 'Receipts' },
+  { key: 'invoice', label: 'Invoices' },
+  { key: 'paystub', label: 'Paystubs' },
+  { key: 'tax', label: 'Tax' },
+  { key: 'vendor', label: 'Vendor' },
+  { key: 'other', label: 'Other' },
+];
+
+const UPLOAD_TYPES = ['paystub', 'receipt', 'invoice', 'bill', 'vendor', 'tax', 'other'];
 
 function parsedSummary(parsed, documentType) {
   if (!parsed) return null;
@@ -22,23 +35,28 @@ function parsedSummary(parsed, documentType) {
 
 export default function BusinessDocuments() {
   const write = useBusinessWrite('manage_deductions');
+  const { teamRole } = useBusinessAccess();
   const toast = useToast();
   const [docs, setDocs] = useState([]);
-  const [type, setType] = useState('receipt');
+  const [uploadType, setUploadType] = useState('receipt');
+  const [filterType, setFilterType] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [detailId, setDetailId] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    listBusinessDocuments()
+    setError(null);
+    const params = filterType !== 'all' ? { document_type: filterType } : {};
+    listBusinessDocuments(params)
       .then(({ data }) => setDocs(Array.isArray(data) ? data : []))
       .catch(() => {
-        toast('Failed to load documents', 'error');
+        setError('Failed to load documents.');
         setDocs([]);
       })
       .finally(() => setLoading(false));
-  }, [toast]);
+  }, [filterType]);
 
   useEffect(() => {
     load();
@@ -57,32 +75,49 @@ export default function BusinessDocuments() {
     }
   };
 
-  if (loading && !docs.length) return <LoadingSpinner />;
-
   return (
-    <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Business documents</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Paystubs, receipts, invoices, and tax supporting documents — stored in secure cloud storage.
-        </p>
-      </div>
-
-      <div className="bg-white border rounded-lg p-4 space-y-3">
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          disabled={write.disabled}
-          className="w-full border rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-50"
+    <BusinessPageShell
+      title="Business Documents"
+      description="Paystubs, receipts, invoices, and tax supporting documents"
+      loading={loading && docs.length === 0}
+      error={error}
+      teamRole={teamRole}
+      maxWidth="max-w-3xl"
+      actions={(
+        <Link
+          to="/business/tax-prep"
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-subtle"
         >
-          {TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
+          <FileText className="h-4 w-4" />
+          Tax prep
+        </Link>
+      )}
+    >
+      <FilterChips
+        options={TYPE_OPTIONS}
+        value={filterType}
+        onChange={setFilterType}
+        aria-label="Document type filter"
+      />
+
+      <Card className="space-y-3 p-4 sm:p-5">
+        <h2 className="text-title flex items-center gap-2">
+          <Filter className="h-4 w-4 text-purple-600" />
+          Upload document
+        </h2>
+        <select
+          value={uploadType}
+          onChange={(e) => setUploadType(e.target.value)}
+          disabled={write.disabled}
+          className="form-input"
+          aria-label="Upload document type"
+        >
+          {UPLOAD_TYPES.map((t) => (
+            <option key={t} value={t}>{t}</option>
           ))}
         </select>
         <UploadDropzone
-          documentType={type}
+          documentType={uploadType}
           scope="business"
           compact
           disabled={write.disabled}
@@ -92,53 +127,56 @@ export default function BusinessDocuments() {
             if (doc?.id) setDetailId(doc.id);
           }}
         />
-      </div>
+      </Card>
 
-      <ul className="text-sm divide-y border rounded-lg bg-white">
+      <Card className="divide-y divide-border p-0">
         {docs.length === 0 ? (
-          <li className="p-6 text-center text-gray-500">No documents yet.</li>
+          <p className="p-6 text-center text-body">No documents yet.</p>
         ) : (
           docs.map((d) => {
             const status = getStatusPill(d.status);
             const summary = parsedSummary(d.parsed_json, d.document_type);
             return (
-              <li key={d.id} className="p-3 flex items-center justify-between gap-3">
+              <div key={d.id} className="flex items-center justify-between gap-3 p-3 sm:p-4">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-gray-900 truncate">
+                  <p className="truncate font-medium text-foreground">
                     {d.original_filename || d.document_type}
                   </p>
-                  {summary && <p className="text-xs text-gray-600 truncate">{summary}</p>}
-                  <div className="flex gap-2 mt-1 flex-wrap">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${status.color}`}>
+                  {summary && <p className="truncate text-caption">{summary}</p>}
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${status.color}`}>
                       {status.label}
                     </span>
-                    <span className="text-xs text-gray-400 capitalize">{d.document_type}</span>
+                    <Badge variant="neutral" className="normal-case capitalize">{d.document_type}</Badge>
                   </div>
                 </div>
-                <div className="flex gap-1 shrink-0">
-                  <button
+                <div className="flex shrink-0 gap-1">
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setDetailId(d.id)}
-                    className="p-2 text-gray-400 hover:text-purple-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
-                    title="Details"
+                    aria-label="View details"
                   >
                     <Eye className="h-4 w-4" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    onClick={() => setDeleteTarget(d)}
+                    variant="ghost"
+                    size="sm"
                     disabled={write.disabled}
-                    className="p-2 text-gray-400 hover:text-red-600 min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
-                    title="Delete"
+                    onClick={() => setDeleteTarget(d)}
+                    className="text-danger-600 hover:text-danger-700"
+                    aria-label="Delete"
                   >
                     <Trash2 className="h-4 w-4" />
-                  </button>
+                  </Button>
                 </div>
-              </li>
+              </div>
             );
           })
         )}
-      </ul>
+      </Card>
 
       <ConfirmDialog
         isOpen={!!deleteTarget}
@@ -158,6 +196,6 @@ export default function BusinessDocuments() {
           onUpdated={load}
         />
       )}
-    </div>
+    </BusinessPageShell>
   );
 }

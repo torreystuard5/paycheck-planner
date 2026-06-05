@@ -55,6 +55,8 @@ from app.schemas.updates import (
     ComingSoonOut,
     ComingSoonUpdate,
 )
+from app.services.admin_audit import get_client_ip as _get_client_ip
+from app.services.admin_audit import log_admin_action
 from app.services.tier_access import (
     allowed_override_feature_keys_for_tier,
     deactivate_user_feature_overrides,
@@ -65,38 +67,6 @@ from app.utils.security import get_current_user, hash_password
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 USER_SORT_FIELDS = {"email", "created_at", "last_login", "is_admin"}
-
-
-# ── Helpers ────────────────────────────────────────────────────────
-
-
-def log_admin_action(
-    db: AsyncSession,
-    admin_id: UUID,
-    action: str,
-    target_type: str | None = None,
-    target_id: str | None = None,
-    details: str | None = None,
-    ip_address: str | None = None,
-):
-    log = AdminAuditLog(
-        admin_id=admin_id,
-        action=action,
-        target_type=target_type,
-        target_id=str(target_id) if target_id is not None else None,
-        details=details,
-        ip_address=ip_address,
-    )
-    db.add(log)
-
-
-def _get_client_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None
 
 
 # ── Stats ──────────────────────────────────────────────────────────

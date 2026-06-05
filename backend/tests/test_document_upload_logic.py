@@ -71,6 +71,26 @@ def test_parse_paystub_single_space_header_company_and_check_date():
     assert parsed["pay_date"] != "2026-05-03"
 
 
+def test_parse_paystub_employer_line_when_header_has_check_date_only():
+    text = (
+        "Name Company Employee ID Pay Period Begin Pay Period End Check Date Check Number\n"
+        "Torrey Stuard 0150776 05/03/2026 05/16/2026 05/22/2026 000123\n"
+        "Employer: Vanderbilt University Medical Center\n"
+        "Net Pay: $1,046.54"
+    )
+    parsed = parse_document_text(text, "paystub")
+    assert parsed["employer_name"] == "Vanderbilt University Medical Center"
+
+
+def test_parse_paystub_single_name_company_prefix():
+    text = (
+        "Name Company Employee ID Pay Period Begin Pay Period End Check Date Check Number\n"
+        "Torrey AcmeLLC 0150776 05/03/2026 05/16/2026 05/22/2026 000123\n"
+    )
+    parsed = parse_document_text(text, "paystub")
+    assert parsed["employer_name"] == "AcmeLLC"
+
+
 def test_parse_paystub_split_label_row_vanderbilt():
     text = (
         "Name Company Employee ID\n"

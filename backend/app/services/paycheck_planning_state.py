@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import calendar as _calendar
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -21,34 +20,16 @@ from app.services.paycheck_data import (
     get_paid_debt_ids_in_window,
 )
 from app.services.bill_cycles import occurrence_dates_for_bill
+from app.services.paycheck_assignment import apply_effective_lists
 from app.services.paycheck_engine import (
+    _bill_due_dates_in_window,
     apply_planning_due_labels,
     assign_bills_to_paycheck,
     normalize_paycheck_line_item,
     normalize_planning_item,
     occurrence_key,
+    previous_period_bounds,
 )
-
-
-def _prev_period_start(current_start: date, pay_freq: str) -> date | None:
-    """Return the pay-period start that immediately precedes *current_start*.
-
-    Used to carry forward unpaid-overdue items (e.g. Rent due before the
-    current window) into the current paycheck plan.
-    """
-    if pay_freq == "biweekly":
-        return current_start - timedelta(days=14)
-    if pay_freq == "weekly":
-        return current_start - timedelta(days=7)
-    if pay_freq == "semi_monthly":
-        # Semi-monthly periods are ~15 days; use 15 as a safe step.
-        return current_start - timedelta(days=15)
-    if pay_freq == "monthly":
-        m = current_start.month - 1 or 12
-        y = current_start.year - (1 if current_start.month == 1 else 0)
-        d = min(current_start.day, _calendar.monthrange(y, m)[1])
-        return date(y, m, d)
-    return None
 
 
 async def _checked_items_for_period(
@@ -76,9 +57,12 @@ async def build_paycheck_planning_state(
     today: date,
 ) -> dict[str, Any]:
     """Compute assigned items and paid state for the current paycheck plan."""
-    from app.services.pay_period_planner import _apply_effective_lists
-
-    bills = ctx["bills"]
+    bills = [
+        b
+        for b in ctx["bills"]
+        if getattr(b, "is_active", True) is not False
+        and getattr(b, "is_user_responsible", True)
+    ]
     debts = ctx["debts"]
     current_start = ctx["current_start"]
     current_end = ctx["current_end"]
@@ -138,7 +122,7 @@ async def build_paycheck_planning_state(
         else []
     )
 
-    current_assigned, next_period = _apply_effective_lists(
+    current_assigned, next_period = apply_effective_lists(
         natural_current,
         natural_next,
         current_start,
@@ -219,9 +203,21 @@ async def build_paycheck_planning_state(
     # assign_bills_to_paycheck for the current window.  Fetch the immediately
     # preceding period and inject any items that were not paid.
     pay_freq = ctx.get("pay_frequency", "biweekly")
-    prev_start = _prev_period_start(current_start, pay_freq)
-    if prev_start is not None and prev_start < current_start:
-        prev_end = current_start - timedelta(days=1)
+    anchor = None
+    income_sources = ctx.get("income_sources") or []
+    if income_sources:
+        raw_anchor = getattr(income_sources[0], "next_pay_date", None)
+        if isinstance(raw_anchor, datetime):
+            anchor = raw_anchor.date()
+        elif isinstance(raw_anchor, date):
+            anchor = raw_anchor
+    bounds = previous_period_bounds(
+        current_start,
+        pay_freq,
+        anchor_pay_date=anchor,
+    )
+    if bounds is not None:
+        prev_start, prev_end = bounds
         prev_paid_bill_map = await get_paid_bill_map(
             db,
             ctx["member_ids"],
@@ -245,9 +241,12 @@ async def build_paycheck_planning_state(
         )
         existing_planning_keys = {i.get("planning_key") for i in current_assigned}
         for raw in prev_natural:
-            # Only carry forward items that were NOT paid in the previous period
-            # and that assign_bills_to_paycheck already flagged as overdue.
-            if not (raw.get("is_overdue") and not raw.get("is_paid")):
+            if raw.get("is_paid"):
+                continue
+            due = raw.get("due_date")
+            if isinstance(due, datetime):
+                due = due.date()
+            if isinstance(due, date) and due >= current_start:
                 continue
             normalized = normalize_planning_item(
                 apply_planning_due_labels(
@@ -280,6 +279,73 @@ async def build_paycheck_planning_state(
             if normalized.get("planning_key") not in existing_planning_keys:
                 current_assigned.append(normalized)
                 existing_planning_keys.add(normalized.get("planning_key"))
+
+    # ── Early-in-month unpaid bills (fallback when period boundaries miss a due date) ──
+    month_start = date(cycle_year, cycle_month, 1)
+    if current_start > month_start:
+        early_end = current_start - timedelta(days=1)
+        early_paid_map = await get_paid_bill_map(
+            db,
+            ctx["member_ids"],
+            [b.id for b in bills],
+            month_start,
+            early_end,
+            bills=bills,
+            user=user,
+        )
+        existing_planning_keys = {i.get("planning_key") for i in current_assigned}
+        for bill in bills:
+            for due_dt in _bill_due_dates_in_window(bill, month_start, early_end):
+                if due_dt >= current_start:
+                    continue
+                key = occurrence_key("bill", bill.id, due_dt)
+                if key in existing_planning_keys:
+                    continue
+                paid_for_due = False
+                for marker in early_paid_map.get(bill.id, []):
+                    if isinstance(marker, dict) and marker.get("due_date") == due_dt:
+                        paid_for_due = True
+                        break
+                if paid_for_due:
+                    continue
+                extra = assign_bills_to_paycheck(
+                    [bill],
+                    [],
+                    month_start,
+                    early_end,
+                    today,
+                    paid_debt_ids=set(),
+                    paid_bill_map=early_paid_map,
+                )
+                for raw in extra:
+                    if raw.get("due_date") != due_dt:
+                        continue
+                    normalized = normalize_planning_item(
+                        apply_planning_due_labels(
+                            normalize_paycheck_line_item(raw),
+                            today=today,
+                            cycle_year=cycle_year,
+                            cycle_month=cycle_month,
+                        )
+                    )
+                    normalized["is_overdue"] = due_dt < today
+                    if (normalized["item_type"], normalized["item_id"]) in checked_items:
+                        normalized["is_paid"] = True
+                    normalized.update(
+                        {
+                            "natural_period_start": month_start,
+                            "effective_period_start": current_start,
+                            "pulled_forward": False,
+                            "pay_period_start": current_start,
+                            "is_overridden": False,
+                            "original_pay_period_start": None,
+                            "override_id": None,
+                            "can_revert_override": False,
+                            "can_pull_forward": False,
+                        }
+                    )
+                    current_assigned.append(normalized)
+                    existing_planning_keys.add(key)
 
     assigned_paid_count = sum(1 for i in current_assigned if i.get("is_paid"))
     assigned_total_count = len(current_assigned)

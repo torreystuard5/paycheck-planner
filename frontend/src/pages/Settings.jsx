@@ -19,6 +19,7 @@ import {
   SettingsSection,
   cn,
 } from '../components/ui';
+import { useEditionSwitch } from '../hooks/useEditionSwitch';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const SCHEDULE_FREQUENCIES = ['weekly', 'biweekly', 'semi_monthly', 'monthly'];
@@ -32,6 +33,43 @@ const defaultScheduleForm = {
   day_of_month: '1',
   income_source_name: '',
 };
+
+function EditionModeToggle() {
+  const { appMode, switching, switchToBusiness, switchToPersonal } = useEditionSwitch();
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <button
+        type="button"
+        disabled={switching}
+        onClick={() => switchToPersonal()}
+        className={cn(
+          'flex min-h-[52px] items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all disabled:opacity-60',
+          appMode === 'personal'
+            ? 'border-accent-500 bg-accent-50 text-accent-700 shadow-sm'
+            : 'border-border bg-surface text-muted hover:border-border hover:bg-surface-subtle',
+        )}
+      >
+        <User className="h-4 w-4" />
+        Personal
+      </button>
+      <button
+        type="button"
+        disabled={switching}
+        onClick={() => switchToBusiness()}
+        className={cn(
+          'flex min-h-[52px] items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all disabled:opacity-60',
+          appMode === 'business'
+            ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm'
+            : 'border-border bg-surface text-muted hover:border-border hover:bg-surface-subtle',
+        )}
+      >
+        <Briefcase className="h-4 w-4" />
+        Business
+      </button>
+    </div>
+  );
+}
 
 function describeSchedule(schedule) {
   switch (schedule.frequency) {
@@ -464,46 +502,7 @@ export default function Settings() {
             icon={Briefcase}
             iconTone="purple"
           >
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'personal' });
-                    updateUser(data);
-                    navigate('/dashboard');
-                  } catch {}
-                }}
-                className={cn(
-                  'flex min-h-[52px] items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all',
-                  user?.app_mode === 'personal' || !user?.app_mode
-                    ? 'border-accent-500 bg-accent-50 text-accent-700 shadow-sm'
-                    : 'border-border bg-surface text-muted hover:border-border hover:bg-surface-subtle',
-                )}
-              >
-                <User className="h-4 w-4" />
-                Personal
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'business' });
-                    updateUser(data);
-                    navigate('/business/dashboard');
-                  } catch {}
-                }}
-                className={cn(
-                  'flex min-h-[52px] items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all',
-                  user?.app_mode === 'business'
-                    ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm'
-                    : 'border-border bg-surface text-muted hover:border-border hover:bg-surface-subtle',
-                )}
-              >
-                <Briefcase className="h-4 w-4" />
-                Business
-              </button>
-            </div>
+            <EditionModeToggle />
           </SettingsSection>
 
           <SettingsSection title="Subscription" description="Your current plan and billing">
@@ -537,6 +536,18 @@ export default function Settings() {
               </Button>
             </div>
           </SettingsSection>
+
+          {user?.app_mode === 'business' && (
+            <SettingsSection title="Business workspace" description="Branding, fiscal year, and expense defaults">
+              <Link
+                to="/business/settings"
+                className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-lg border border-purple-200 bg-purple-50/50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50"
+              >
+                <Briefcase className="h-4 w-4" />
+                Open Business Settings
+              </Link>
+            </SettingsSection>
+          )}
 
           {user?.app_mode === 'business' && (
             <SettingsSection title="Business expense defaults" description="Mileage reimbursement rate per mile">

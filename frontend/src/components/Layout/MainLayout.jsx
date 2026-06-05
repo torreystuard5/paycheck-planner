@@ -36,7 +36,8 @@ const businessMobileTabs = [
 ];
 
 function MobileBottomNav({ user, onMenu }) {
-  const tabs = user?.app_mode === 'business' ? businessMobileTabs : personalMobileTabs;
+  const isBusiness = user?.app_mode === 'business';
+  const tabs = isBusiness ? businessMobileTabs : personalMobileTabs;
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-surface/95 shadow-[var(--pd-shadow-nav)] backdrop-blur-md supports-[backdrop-filter]:bg-surface/90 lg:hidden"
@@ -52,7 +53,9 @@ function MobileBottomNav({ user, onMenu }) {
             className={({ isActive }) =>
               cn(
                 'flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-semibold transition-all',
-                isActive ? 'text-accent-700' : 'text-muted',
+                isActive
+                  ? isBusiness ? 'text-purple-700' : 'text-accent-700'
+                  : 'text-muted',
               )
             }
           >
@@ -61,7 +64,11 @@ function MobileBottomNav({ user, onMenu }) {
                 <span
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-xl transition-all',
-                    isActive && 'bg-accent-100 text-accent-700 shadow-sm',
+                    isActive && (
+                      isBusiness
+                        ? 'bg-purple-100 text-purple-700 shadow-sm'
+                        : 'bg-accent-100 text-accent-700 shadow-sm'
+                    ),
                   )}
                 >
                   <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
@@ -91,8 +98,16 @@ export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
 
+  const isBusiness = user?.app_mode === 'business';
+
   return (
-    <div className="min-h-screen overflow-x-hidden bg-surface-subtle">
+    <div
+      className={cn(
+        'min-h-screen overflow-x-hidden bg-surface-subtle',
+        isBusiness && 'business-edition',
+      )}
+      data-app-mode={user?.app_mode || 'personal'}
+    >
       <SkipToContent />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 

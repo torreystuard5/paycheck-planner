@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildExtraPercentPayoffScenarios,
   computeMonthlyInterest,
   estimatePayoffMonths,
+  estimatePayoffMonthsExtraPercent,
   formatPayoffEstimate,
 } from './debtInterest';
 
@@ -33,5 +35,31 @@ describe('estimatePayoffMonths', () => {
 describe('formatPayoffEstimate', () => {
   it('describes null as min payment too low', () => {
     expect(formatPayoffEstimate(null)).toMatch(/too low/i);
+  });
+});
+
+describe('estimatePayoffMonthsExtraPercent', () => {
+  it('pays off faster with 25% above minimum', () => {
+    const base = estimatePayoffMonths({ balance: 1000, apr: 12, minimumPayment: 100 });
+    const boosted = estimatePayoffMonthsExtraPercent({
+      balance: 1000,
+      apr: 12,
+      minimumPayment: 100,
+      extraPercent: 25,
+    });
+    expect(boosted).toBeLessThan(base);
+  });
+});
+
+describe('buildExtraPercentPayoffScenarios', () => {
+  it('returns minimum and boosted scenarios', () => {
+    const scenarios = buildExtraPercentPayoffScenarios({
+      balance: 1000,
+      apr: 12,
+      minimumPayment: 100,
+    });
+    expect(scenarios).toHaveLength(4);
+    expect(scenarios[0].extraPercent).toBe(0);
+    expect(scenarios[1].extraPercent).toBe(10);
   });
 });

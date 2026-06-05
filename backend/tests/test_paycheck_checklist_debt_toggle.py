@@ -110,7 +110,7 @@ class TestPaycheckChecklistPayAndUnpayDebtRoundtrip(unittest.TestCase):
             _FakeResult([debt]),  # Debt lookup
         ])
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             _sync_debt_payment(session, user, debt.id, True)
         )
 
@@ -150,7 +150,7 @@ class TestPaycheckChecklistPayAndUnpayDebtRoundtrip(unittest.TestCase):
             _FakeResult([]),               # checklist bulk delete
         ])
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             _sync_debt_payment(session, user, debt.id, False)
         )
 
@@ -182,7 +182,7 @@ class TestPaycheckChecklistPayAndUnpayDebtRoundtrip(unittest.TestCase):
         ])
 
         # Must NOT raise MultipleResultsFound
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             _sync_debt_payment(session, user_a, debt.id, True)
         )
         # existing is truthy → is_checked and not existing → False → no creation
@@ -212,7 +212,7 @@ class TestPaycheckChecklistPayAndUnpayDebtRoundtrip(unittest.TestCase):
             _FakeResult([]),            # checklist bulk delete
         ])
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             _sync_debt_payment(session, user_a, debt.id, False)
         )
 

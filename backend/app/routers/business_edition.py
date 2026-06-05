@@ -230,6 +230,45 @@ async def update_team_member(
     return {"ok": True}
 
 
+@router.get("/team/permissions-matrix")
+async def team_permissions_matrix():
+    """Reference permissions by role for UI."""
+    return {
+        "roles": list(DEFAULT_PERMISSIONS.keys()),
+        "permissions": sorted(
+            {k for perms in DEFAULT_PERMISSIONS.values() for k in perms}
+        ),
+        "matrix": DEFAULT_PERMISSIONS,
+    }
+
+
+@router.get("/team/audit-log")
+async def team_audit_log(
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    ctx: BusinessContext = Depends(get_business_ctx),
+):
+    ctx.require("manage_team")
+    result = await db.execute(
+        select(BusinessTeamAuditLog)
+        .where(BusinessTeamAuditLog.owner_user_id == ctx.owner_id)
+        .order_by(BusinessTeamAuditLog.created_at.desc())
+        .limit(min(limit, 100))
+    )
+    rows = result.scalars().all()
+    return [
+        {
+            "id": str(r.id),
+            "action": r.action,
+            "details": r.details or {},
+            "actor_user_id": str(r.actor_user_id) if r.actor_user_id else None,
+            "target_user_id": str(r.target_user_id) if r.target_user_id else None,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
 @router.post("/team/accept")
 async def accept_team_invites(
     db: AsyncSession = Depends(get_db),

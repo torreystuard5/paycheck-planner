@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import api from '../../services/api';
 import { formatApiError } from '../../utils/formatApiError';
+import BusinessPageShell from '../../components/business/BusinessPageShell';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
-import LoadingSpinner from '../../components/LoadingSpinner';
 import { useToast } from '../../components/Toast';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
+import { useBusinessAccess } from '../../hooks/useBusinessAccess';
+import { Button, Card } from '../../components/ui';
 
 const emptyForm = {
   name: '',
@@ -21,8 +23,10 @@ const emptyForm = {
 export default function CustomersPage() {
   const toast = useToast();
   const write = useBusinessWrite('manage_sales');
+  const { teamRole } = useBusinessAccess();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [q, setQ] = useState('');
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -31,13 +35,14 @@ export default function CustomersPage() {
   const [del, setDel] = useState(null);
 
   const load = async () => {
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set('q', q.trim());
       const { data } = await api.get(`/api/v1/business/customers?${params.toString()}`);
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
-      toast(formatApiError(e), 'error');
+      setError(formatApiError(e));
     } finally {
       setLoading(false);
     }
@@ -111,33 +116,44 @@ export default function CustomersPage() {
     }
   };
 
-  if (loading && !rows.length) return <LoadingSpinner />;
-
   return (
-    <div className="space-y-6 max-w-5xl min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
-          <p className="text-sm text-gray-600 mt-1">Track clients for sales</p>
-        </div>
-        <button
+    <BusinessPageShell
+      title="Customers"
+      description="Track clients for sales"
+      loading={loading && !rows.length}
+      error={error}
+      teamRole={teamRole}
+      maxWidth="max-w-5xl"
+      actions={(
+        <Button
           type="button"
           onClick={openAdd}
-          {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:hover:bg-indigo-600' })}
+          disabled={write.disabled}
+          title={write.title}
+          className="bg-purple-600 text-white hover:bg-purple-700"
         >
-          <Plus className="w-4 h-4" /> Add customer
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-3 items-end max-w-xl">
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs text-gray-500 mb-1">Search</label>
+          <Plus className="h-4 w-4" />
+          Add customer
+        </Button>
+      )}
+    >
+      <div className="flex max-w-xl flex-wrap items-end gap-3">
+        <div className="min-w-[200px] flex-1">
+          <label className="form-label">Search</label>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (setLoading(true), load())} className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm" placeholder="Name, email, company…" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (setLoading(true), load())}
+              className="form-input pl-9"
+              placeholder="Name, email, company…"
+            />
           </div>
         </div>
-        <button type="button" onClick={() => { setLoading(true); load(); }} className="px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200">Search</button>
+        <Button type="button" variant="secondary" onClick={() => { setLoading(true); load(); }}>
+          Search
+        </Button>
       </div>
 
       {rows.length === 0 ? (
@@ -148,60 +164,74 @@ export default function CustomersPage() {
           onAction={write.allowed ? openAdd : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {rows.map((c) => (
-            <div key={c.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex justify-between gap-2 min-w-0">
+            <Card key={c.id} className="flex justify-between gap-2 p-4">
               <div className="min-w-0">
-                <p className="font-medium text-gray-900 truncate">{c.name}</p>
-                {c.company && <p className="text-xs text-gray-600 truncate">{c.company}</p>}
-                {c.email && <p className="text-xs text-gray-500 truncate">{c.email}</p>}
-                {c.phone && <p className="text-xs text-gray-500">{c.phone}</p>}
+                <p className="truncate font-medium text-foreground">{c.name}</p>
+                {c.company && <p className="truncate text-caption">{c.company}</p>}
+                {c.email && <p className="truncate text-caption">{c.email}</p>}
+                {c.phone && <p className="text-caption">{c.phone}</p>}
               </div>
-              <div className="flex gap-1 shrink-0">
-                <button type="button" onClick={() => openEdit(c)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-blue-600 rounded' })} aria-label="Edit"><Pencil className="w-4 h-4" /></button>
-                <button type="button" onClick={() => setDel(c)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-red-600 rounded' })} aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
+              <div className="flex shrink-0 gap-1">
+                <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(c)} disabled={write.disabled} aria-label="Edit">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setDel(c)} disabled={write.disabled} className="text-danger-600" aria-label="Delete">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
       <Modal isOpen={modal} onClose={() => setModal(false)} title={editing ? 'Edit customer' : 'Add customer'}>
-        <form onSubmit={submit} className="space-y-3 max-h-[75vh] overflow-y-auto">
+        <form onSubmit={submit} className="max-h-[75vh] space-y-3 overflow-y-auto">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
+            <label className="form-label">Name</label>
+            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="form-input" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
-              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
+              <label className="form-label">Email</label>
+              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="form-input" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
+              <label className="form-label">Phone</label>
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="form-input" />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Company</label>
-            <input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
+            <label className="form-label">Company</label>
+            <input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className="form-input" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Address</label>
-            <textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
+            <label className="form-label">Address</label>
+            <textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="form-input" rows={2} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
-            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
+            <label className="form-label">Notes</label>
+            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="form-input" rows={2} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setModal(false)} disabled={saving} className="px-4 py-2 text-sm rounded-lg hover:bg-gray-100">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
+            <Button type="button" variant="secondary" onClick={() => setModal(false)} disabled={saving}>Cancel</Button>
+            <Button type="submit" disabled={saving} className="bg-purple-600 text-white hover:bg-purple-700">
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
           </div>
         </form>
       </Modal>
 
-      <ConfirmDialog isOpen={!!del} onClose={() => setDel(null)} onConfirm={confirmDelete} title="Remove customer" message={del ? `Remove ${del.name}? Linked sales keep their text.` : ''} confirmText="Remove" danger />
-    </div>
+      <ConfirmDialog
+        isOpen={!!del}
+        onClose={() => setDel(null)}
+        onConfirm={confirmDelete}
+        title="Remove customer"
+        message={del ? `Remove ${del.name}? Linked sales keep their text.` : ''}
+        confirmText="Remove"
+        danger
+      />
+    </BusinessPageShell>
   );
 }

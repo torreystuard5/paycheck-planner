@@ -1,96 +1,118 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api, { listBusinessDocuments } from '../../services/api';
+import { listBusinessDocuments } from '../../services/api';
 import CurrencyDisplay from '../../components/CurrencyDisplay';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import BusinessPageShell from '../../components/business/BusinessPageShell';
 import UploadDropzone from '../../components/uploads/UploadDropzone';
+import { useBusinessAccess } from '../../hooks/useBusinessAccess';
+import { businessData, downloadBusinessTaxCsv } from '../../services/businessApi';
+import { Button, Card } from '../../components/ui';
 
 const YEAR = new Date().getFullYear();
 
 export default function BusinessTaxPrep() {
+  const { teamRole } = useBusinessAccess();
   const [year, setYear] = useState(YEAR);
   const [data, setData] = useState(null);
   const [taxDocs, setTaxDocs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     Promise.all([
-      api.get('/api/v1/business/tax-prep/summary', { params: { year } }),
+      businessData.getTaxSummary(year),
       listBusinessDocuments({ document_type: 'tax' }),
     ])
       .then(([summaryRes, docsRes]) => {
         setData(summaryRes.data);
         setTaxDocs(Array.isArray(docsRes.data) ? docsRes.data : []);
       })
+      .catch(() => setError('Failed to load tax prep data.'))
       .finally(() => setLoading(false));
   }, [year]);
 
-  const exportCsv = () => {
-    window.open(`/api/v1/business/tax-prep/export.csv?year=${year}`, '_blank');
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      await downloadBusinessTaxCsv(year);
+    } catch {
+      setError('CSV export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
   };
 
-  if (loading) return <LoadingSpinner />;
-
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900">Business Tax Prep</h1>
-        <div className="flex gap-2 items-center">
+    <BusinessPageShell
+      title="Business Tax Prep"
+      description="Year-end deduction summary and supporting documents"
+      loading={loading}
+      error={error}
+      teamRole={teamRole}
+      maxWidth="max-w-4xl"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-[44px]"
+            className="form-input min-h-11 w-auto"
+            aria-label="Tax year"
           >
             {[YEAR, YEAR - 1, YEAR - 2].map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-          <button
+          <Button
             type="button"
             onClick={exportCsv}
-            className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg min-h-[44px]"
+            disabled={exporting}
+            className="bg-purple-600 text-white hover:bg-purple-700"
           >
-            Export CSV
-          </button>
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </Button>
         </div>
-      </div>
+      )}
+    >
+      {data?.disclaimer && (
+        <Card className="border-warning-200 bg-warning-50 p-4">
+          <p className="text-sm text-warning-800">{data.disclaimer}</p>
+        </Card>
+      )}
 
-      <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
-        {data?.disclaimer}
-      </p>
-
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <Card className="overflow-hidden p-0">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left">
+          <thead className="bg-surface-subtle text-left">
             <tr>
-              <th className="px-4 py-3 font-medium text-gray-600">Category</th>
-              <th className="px-4 py-3 font-medium text-gray-600 text-right">Amount</th>
+              <th className="px-4 py-3 font-medium text-muted">Category</th>
+              <th className="px-4 py-3 text-right font-medium text-muted">Amount</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border">
             {data?.categories?.map((c) => (
-              <tr key={c.key} className="border-t border-gray-100">
-                <td className="px-4 py-3">{c.label}</td>
+              <tr key={c.key}>
+                <td className="px-4 py-3 text-foreground">{c.label}</td>
                 <td className="px-4 py-3 text-right">
                   <CurrencyDisplay amount={c.total} />
                 </td>
               </tr>
             ))}
-            <tr className="border-t-2 border-gray-200 font-semibold">
-              <td className="px-4 py-3">Total</td>
+            <tr className="font-semibold">
+              <td className="px-4 py-3 text-foreground">Total</td>
               <td className="px-4 py-3 text-right">
                 <CurrencyDisplay amount={data?.total_deductions} />
               </td>
             </tr>
           </tbody>
         </table>
-      </div>
+      </Card>
 
-      <section className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+      <Card className="space-y-3 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-gray-900">Supporting tax documents</h2>
-          <Link to="/business/documents" className="text-sm text-purple-600 hover:underline">
+          <h2 className="text-title">Supporting tax documents</h2>
+          <Link to="/business/documents" className="text-sm font-medium text-purple-600 hover:text-purple-700">
             All business documents
           </Link>
         </div>
@@ -100,42 +122,42 @@ export default function BusinessTaxPrep() {
           compact
           onUploaded={() => {
             listBusinessDocuments({ document_type: 'tax' }).then(({ data: d }) =>
-              setTaxDocs(Array.isArray(d) ? d : [])
+              setTaxDocs(Array.isArray(d) ? d : []),
             );
           }}
         />
         {taxDocs.length > 0 ? (
-          <ul className="text-sm divide-y border rounded-lg">
+          <ul className="divide-y divide-border rounded-lg border border-border text-sm">
             {taxDocs.map((doc) => (
-              <li key={doc.id} className="px-3 py-2 flex justify-between gap-2">
-                <span className="truncate">{doc.original_filename || 'Tax document'}</span>
-                <span className="text-gray-500 shrink-0">{doc.status}</span>
+              <li key={doc.id} className="flex justify-between gap-2 px-3 py-2">
+                <span className="truncate text-foreground">{doc.original_filename || 'Tax document'}</span>
+                <span className="shrink-0 text-muted">{doc.status}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-gray-500">No tax documents uploaded yet for this workspace.</p>
+          <p className="text-body">No tax documents uploaded yet for this workspace.</p>
         )}
-      </section>
+      </Card>
 
       {data?.contractors_1099?.length > 0 && (
-        <section>
-          <h2 className="font-semibold text-gray-900 mb-2">1099 contractors</h2>
-          <ul className="text-sm space-y-1">
+        <Card className="p-4 sm:p-5">
+          <h2 className="text-title mb-2">1099 contractors</h2>
+          <ul className="space-y-1 text-sm">
             {data.contractors_1099.map((c) => (
               <li key={c.vendor} className="flex justify-between gap-2">
-                <span>{c.vendor}</span>
+                <span className="text-foreground">{c.vendor}</span>
                 <span>
                   <CurrencyDisplay amount={c.total} />
                   {c.requires_1099 && (
-                    <span className="ml-2 text-xs text-purple-700">1099</span>
+                    <span className="ml-2 text-xs font-medium text-purple-700">1099</span>
                   )}
                 </span>
               </li>
             ))}
           </ul>
-        </section>
+        </Card>
       )}
-    </div>
+    </BusinessPageShell>
   );
 }

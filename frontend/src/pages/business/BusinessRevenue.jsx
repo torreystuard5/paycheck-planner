@@ -1,18 +1,37 @@
 import { useEffect, useState } from 'react';
 import api from '../../services/api';
+import { formatApiError } from '../../utils/formatApiError';
 import CurrencyDisplay from '../../components/CurrencyDisplay';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import BusinessPageShell from '../../components/business/BusinessPageShell';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
+import { useBusinessAccess } from '../../hooks/useBusinessAccess';
+import { useToast } from '../../components/Toast';
+import { Badge, Button, Card } from '../../components/ui';
+
+const STATUS_VARIANT = {
+  draft: 'neutral',
+  sent: 'info',
+  paid: 'success',
+  cancelled: 'warning',
+};
 
 export default function BusinessRevenue() {
   const write = useBusinessWrite('manage_subscription');
+  const { teamRole } = useBusinessAccess();
+  const toast = useToast();
   const [rows, setRows] = useState([]);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [creating, setCreating] = useState(false);
 
   const load = () => {
-    api.get('/api/v1/business/revenue/payment-requests').then(({ data }) => setRows(data)).finally(() => setLoading(false));
+    setError(null);
+    api.get('/api/v1/business/revenue/payment-requests')
+      .then(({ data }) => setRows(Array.isArray(data) ? data : []))
+      .catch(() => setError('Failed to load payment requests.'))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -21,64 +40,101 @@ export default function BusinessRevenue() {
 
   const create = async (e) => {
     e.preventDefault();
-    await api.post('/api/v1/business/revenue/payment-requests', {
-      amount: Number(amount),
-      description,
-    });
-    setAmount('');
-    setDescription('');
-    load();
+    if (!write.allowed) return;
+    setCreating(true);
+    try {
+      await api.post('/api/v1/business/revenue/payment-requests', {
+        amount: Number(amount),
+        description,
+      });
+      setAmount('');
+      setDescription('');
+      toast('Payment request created.', 'success');
+      load();
+    } catch (err) {
+      toast(formatApiError(err), 'error');
+    } finally {
+      setCreating(false);
+    }
   };
 
-  if (loading) return <LoadingSpinner />;
-
   return (
-    <div className="max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Payment requests</h1>
-      <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
-        Scaffold: invoice/payment link tracking is in place. Stripe Connect payment link generation is not wired yet.
-      </p>
+    <BusinessPageShell
+      title="Payment Requests"
+      description="Track invoices and payment links for clients"
+      loading={loading}
+      error={error}
+      teamRole={teamRole}
+      maxWidth="max-w-2xl"
+    >
+      <Card className="border-warning-200 bg-warning-50 p-4">
+        <p className="text-sm text-warning-800">
+          Payment request tracking is live. Stripe Connect payment link generation is coming in a future update.
+        </p>
+      </Card>
 
       {!write.allowed && (
-        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
-          Payment requests are limited to the business owner.
-        </p>
+        <Card className="border-warning-200 bg-warning-50 p-4">
+          <p className="text-sm text-warning-800">
+            Payment requests are limited to the business owner.
+          </p>
+        </Card>
       )}
-      <form onSubmit={create} className="space-y-2 bg-white border rounded-lg p-4">
-        <input
-          type="number"
-          step="0.01"
-          required
-          placeholder="Amount"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          disabled={write.disabled}
-          className="w-full border rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-50"
-        />
-        <input
-          type="text"
-          placeholder="Description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          disabled={write.disabled}
-          className="w-full border rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-50"
-        />
-        <button type="submit" {...write.props({ className: 'w-full py-2 bg-purple-600 text-white rounded-lg min-h-[44px]' })}>
-          Create draft
-        </button>
-      </form>
 
-      <ul className="divide-y border rounded-lg bg-white text-sm">
+      <Card className="p-4 sm:p-5">
+        <form onSubmit={create} className="space-y-3">
+          <div>
+            <label htmlFor="pay-amount" className="form-label">Amount</label>
+            <input
+              id="pay-amount"
+              type="number"
+              step="0.01"
+              required
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={write.disabled || creating}
+              className="form-input"
+            />
+          </div>
+          <div>
+            <label htmlFor="pay-desc" className="form-label">Description</label>
+            <input
+              id="pay-desc"
+              type="text"
+              placeholder="Invoice for consulting — March"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={write.disabled || creating}
+              className="form-input"
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={write.disabled || creating}
+            className="w-full bg-purple-600 text-white hover:bg-purple-700"
+          >
+            {creating ? 'Creating…' : 'Create draft'}
+          </Button>
+        </form>
+      </Card>
+
+      <Card className="divide-y divide-border p-0">
+        {rows.length === 0 && (
+          <p className="p-4 text-body">No payment requests yet.</p>
+        )}
         {rows.map((r) => (
-          <li key={r.id} className="p-3 flex justify-between gap-2">
-            <span>{r.description || 'Payment request'}</span>
+          <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
+            <span className="text-foreground">{r.description || 'Payment request'}</span>
             <span className="flex items-center gap-2">
-              <CurrencyDisplay amount={r.amount} />
-              <span className="text-gray-500 capitalize">{r.status}</span>
+              <CurrencyDisplay amount={r.amount} className="font-medium text-foreground" />
+              <Badge variant={STATUS_VARIANT[r.status] || 'neutral'} className="normal-case capitalize">
+                {r.status}
+              </Badge>
             </span>
-          </li>
+          </div>
         ))}
-      </ul>
-    </div>
+      </Card>
+    </BusinessPageShell>
   );
 }

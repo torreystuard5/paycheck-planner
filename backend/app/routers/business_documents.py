@@ -29,19 +29,13 @@ from app.services.ocr_service import run_document_ocr
 from app.services.storage.r2_client import R2NotConfiguredError, R2OperationError
 from app.services.storage.r2_provider import get_storage_provider
 from app.services.business_context import BusinessContext, get_business_ctx
+from app.services.document_constants import ALLOWED_DOCUMENT_CONTENT_TYPES
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/business/documents", tags=["Business Documents"])
 
-ALLOWED_CONTENT_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/heic",
-    "image/heif",
-    "application/pdf",
-}
+ALLOWED_CONTENT_TYPES = ALLOWED_DOCUMENT_CONTENT_TYPES
 BUSINESS_DOC_TYPES = frozenset(
     {"paystub", "receipt", "invoice", "bill", "vendor", "tax", "other"}
 )

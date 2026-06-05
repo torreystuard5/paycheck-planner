@@ -29,6 +29,7 @@ export const BUSINESS_NAV_LINKS = [
   { to: '/business/reports', label: 'Reports', icon: BarChart3, permission: 'view_dashboard' },
   { to: '/business/documents', label: 'Documents', icon: Upload, permission: 'manage_deductions' },
   { to: '/business/team', label: 'Team', icon: Users, permission: 'manage_team' },
+  { to: '/business/settings', label: 'Business Settings', icon: Settings, permission: 'manage_subscription' },
   { to: '/business/revenue', label: 'Payments', icon: DollarSign, permission: 'manage_subscription' },
   { to: '/edition', label: 'Switch edition', icon: Briefcase, small: true, permission: null },
   { to: '/settings', label: 'Settings', icon: Settings, permission: null },

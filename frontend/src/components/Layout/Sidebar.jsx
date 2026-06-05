@@ -36,7 +36,7 @@ import { useBudget } from '../../context/BudgetContext';
 import { APP_VERSION } from '../../config';
 import { BUSINESS_NAV_LINKS, filterBusinessNavLinks } from '../../config/businessNav';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
-import api from '../../services/api';
+import { useEditionSwitch } from '../../hooks/useEditionSwitch';
 import { cn } from '../ui';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
@@ -148,12 +148,10 @@ function BudgetSwitcher({ onClose }) {
 }
 
 export default function Sidebar({ open, onClose }) {
-  const { user, logout, updateUser } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [switching, setSwitching] = useState(false);
-  const { can, loading: accessLoading, refresh: refreshBusinessAccess } = useBusinessAccess();
-
-  const appMode = user?.app_mode || 'personal';
+  const { can, loading: accessLoading } = useBusinessAccess();
+  const { appMode, switching, switchToBusiness, switchToPersonal } = useEditionSwitch();
   const businessLinks =
     appMode === 'business'
       ? accessLoading
@@ -166,49 +164,10 @@ export default function Sidebar({ open, onClose }) {
 
   const handleModeSwitch = async (mode) => {
     if (mode === appMode || switching) return;
-    setSwitching(true);
-    try {
-      if (mode === 'business') {
-        let data;
-        try {
-          ({ data } = await api.post('/api/v1/business/edition/activate', { accept_trial: false }));
-        } catch (err) {
-          const detail = err.response?.data?.detail;
-          const code = typeof detail === 'object' ? detail?.code : null;
-          if (code === 'business_upgrade_required') {
-            ({ data } = await api.post('/api/v1/business/edition/activate', { accept_trial: true }));
-          } else {
-            throw err;
-          }
-        }
-        updateUser(data);
-        await refreshBusinessAccess();
-        navigate('/business/dashboard');
-        onClose();
-        return;
-      }
-      const { data } = await api.post('/api/v1/business/edition/enter-personal');
-      updateUser(data);
-      navigate('/dashboard');
-      onClose();
-    } catch (err) {
-      const detail = err.response?.data?.detail;
-      const code = typeof detail === 'object' ? detail?.code : null;
-      if (mode === 'business' && code === 'business_upgrade_required') {
-        navigate('/upgrade');
-      } else if (mode === 'personal') {
-        try {
-          const { data } = await api.patch('/api/v1/users/me/app-mode', { app_mode: 'personal' });
-          updateUser(data);
-          navigate('/dashboard');
-          onClose();
-        } catch {
-          /* ignore */
-        }
-      }
-    } finally {
-      setSwitching(false);
-    }
+    const result = mode === 'business'
+      ? await switchToBusiness()
+      : await switchToPersonal();
+    if (result?.ok) onClose();
   };
 
   const content = (

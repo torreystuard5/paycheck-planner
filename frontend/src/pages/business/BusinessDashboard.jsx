@@ -1,211 +1,186 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase, TrendingUp, Receipt, Banknote, PieChart, Plus } from 'lucide-react';
-import api from '../../services/api';
-import { formatApiError } from '../../utils/formatApiError';
+import {
+  TrendingUp,
+  Receipt,
+  Banknote,
+  PieChart,
+  Plus,
+} from 'lucide-react';
 import { formatFriendlyDate } from '../../utils/formatDate';
+import { formatApiError } from '../../utils/formatApiError';
 import CurrencyDisplay from '../../components/CurrencyDisplay';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import BusinessPageShell from '../../components/business/BusinessPageShell';
+import BusinessStatCard from '../../components/business/BusinessStatCard';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
+import { useBusinessAccess } from '../../hooks/useBusinessAccess';
+import { businessData } from '../../services/businessApi';
+import { Button, Card, cn } from '../../components/ui';
 
 export default function BusinessDashboard() {
   const salesWrite = useBusinessWrite('manage_sales');
   const dedWrite = useBusinessWrite('manage_deductions');
   const payWrite = useBusinessWrite('manage_staff_pay');
   const fundWrite = useBusinessWrite('manage_funds');
+  const { teamRole } = useBusinessAccess();
+
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
-    setError(null);
-    try {
-      const { data: d } = await api.get('/api/v1/business/dashboard');
-      setData(d);
-    } catch (e) {
-      setError(formatApiError(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    load();
+    businessData.getDashboard()
+      .then(({ data: d }) => setData(d))
+      .catch((e) => setError(formatApiError(e)))
+      .finally(() => setLoading(false));
   }, []);
-
-  if (loading) return <LoadingSpinner />;
 
   const pct = (fund) => {
     if (!fund?.target_amount || Number(fund.target_amount) <= 0) return null;
     return Math.min(100, Math.round((Number(fund.current_balance) / Number(fund.target_amount)) * 100));
   };
 
+  const quickAction = (write, to, label, variant) => {
+    const btn = (
+      <>
+        <Plus className="h-4 w-4" />
+        {label}
+      </>
+    );
+    if (write.allowed) {
+      return (
+        <Link to={to} className="inline-flex">
+          <Button variant={variant} type="button">{btn}</Button>
+        </Link>
+      );
+    }
+    return (
+      <Button variant={variant} disabled title={write.title}>{btn}</Button>
+    );
+  };
+
   return (
-    <div className="space-y-6 max-w-6xl">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Briefcase className="w-7 h-7 text-purple-600" />
-          Business Dashboard
-        </h1>
-        <p className="text-sm text-gray-600 mt-1">Sales, profit, and funds at a glance</p>
+    <BusinessPageShell
+      title="Business Dashboard"
+      description="Sales, profit, and funds at a glance"
+      loading={loading}
+      error={error}
+      teamRole={teamRole}
+    >
+      <div className="card-grid !gap-4">
+        <BusinessStatCard
+          label="Today / week / MTD sales"
+          amount={data?.mtd_sales}
+          tone="brand"
+          subAmounts={[
+            { amount: data?.today_sales, className: 'text-brand-600 font-medium' },
+            { amount: data?.week_sales, className: 'text-muted' },
+          ]}
+        />
+        <BusinessStatCard label="MTD Deductions" amount={data?.mtd_deductions} tone="warning" />
+        <BusinessStatCard label="MTD Staff Pay" amount={data?.mtd_staff_pay} tone="accent" />
+        <BusinessStatCard label="MTD Net Profit" amount={data?.mtd_net_profit} tone="purple" />
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Today / week / MTD sales</p>
-          <CurrencyDisplay amount={data?.today_sales} className="text-lg font-semibold text-green-700 mt-1 block" />
-          <CurrencyDisplay amount={data?.week_sales} className="text-sm text-green-600 block" />
-          <CurrencyDisplay amount={data?.mtd_sales} className="text-2xl font-bold text-green-700 mt-1 block" />
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">MTD Deductions</p>
-          <CurrencyDisplay amount={data?.mtd_deductions} className="text-2xl font-bold text-orange-700 mt-1 block" />
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">MTD Staff Pay</p>
-          <CurrencyDisplay amount={data?.mtd_staff_pay} className="text-2xl font-bold text-blue-700 mt-1 block" />
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">MTD Net Profit</p>
-          <CurrencyDisplay amount={data?.mtd_net_profit} className="text-2xl font-bold text-purple-700 mt-1 block" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {['contingency_fund', 'upgrade_fund'].map((key) => {
           const fund = data?.[key];
           const label = key === 'contingency_fund' ? 'Contingency Fund' : 'Upgrade Fund';
           const to = key === 'contingency_fund' ? '/business/contingency-fund' : '/business/upgrade-fund';
           const p = pct(fund);
           return (
-            <div key={key} className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <h2 className="font-semibold text-gray-900">{label}</h2>
-                <Link to={to} className="text-xs font-medium text-blue-600 hover:text-blue-800">Manage</Link>
+            <Card key={key} className="p-4 sm:p-5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h2 className="text-title">{label}</h2>
+                <Link to={to} className="text-caption font-medium text-purple-600 hover:text-purple-700">
+                  Manage
+                </Link>
               </div>
               {fund ? (
                 <>
-                  <CurrencyDisplay amount={fund.current_balance} className="text-xl font-bold text-gray-900" />
+                  <CurrencyDisplay amount={fund.current_balance} className="text-money text-foreground" />
                   {fund.target_amount != null && (
-                    <p className="text-xs text-gray-500 mt-1">Target <CurrencyDisplay amount={fund.target_amount} className="inline font-medium" /></p>
+                    <p className="text-caption mt-1">
+                      Target <CurrencyDisplay amount={fund.target_amount} className="inline font-medium" />
+                    </p>
                   )}
                   {p != null && (
                     <div className="mt-3">
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${p}%` }} />
+                      <div className="h-2 overflow-hidden rounded-full bg-surface-subtle">
+                        <div
+                          className="h-full rounded-full bg-purple-500 transition-all"
+                          style={{ width: `${p}%` }}
+                        />
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{p}% of target</p>
+                      <p className="text-caption mt-1">{p}% of target</p>
                     </div>
                   )}
                 </>
               ) : (
-                <p className="text-sm text-gray-500">No fund yet</p>
+                <p className="text-body">No fund yet</p>
               )}
-            </div>
+            </Card>
           );
         })}
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {salesWrite.allowed ? (
-          <Link to="/business/sales" className="inline-flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
-            <Plus className="w-4 h-4" /> Add Sale
-          </Link>
-        ) : (
-          <span {...salesWrite.props({ className: 'inline-flex items-center gap-1.5 px-3 py-2 bg-green-600/50 text-white rounded-lg text-sm font-medium cursor-not-allowed' })} title={salesWrite.title}>
-            <Plus className="w-4 h-4" /> Add Sale
-          </span>
-        )}
-        {dedWrite.allowed ? (
-          <Link to="/business/deductions" className="inline-flex items-center gap-1.5 px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700">
-            <Plus className="w-4 h-4" /> Add Deduction
-          </Link>
-        ) : (
-          <span {...dedWrite.props({ className: 'inline-flex items-center gap-1.5 px-3 py-2 bg-orange-600/50 text-white rounded-lg text-sm font-medium cursor-not-allowed' })} title={dedWrite.title}>
-            <Plus className="w-4 h-4" /> Add Deduction
-          </span>
-        )}
-        {payWrite.allowed ? (
-          <Link to="/business/staff-pay" className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-            <Plus className="w-4 h-4" /> Pay Run
-          </Link>
-        ) : (
-          <span {...payWrite.props({ className: 'inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600/50 text-white rounded-lg text-sm font-medium cursor-not-allowed' })} title={payWrite.title}>
-            <Plus className="w-4 h-4" /> Pay Run
-          </span>
-        )}
-        {fundWrite.allowed ? (
-          <Link to="/business/contingency-fund" className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
-            <Plus className="w-4 h-4" /> Fund Tx
-          </Link>
-        ) : (
-          <span {...fundWrite.props({ className: 'inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600/50 text-white rounded-lg text-sm font-medium cursor-not-allowed' })} title={fundWrite.title}>
-            <Plus className="w-4 h-4" /> Fund Tx
-          </span>
-        )}
+        {quickAction(salesWrite, '/business/sales', 'Add Sale', 'primary')}
+        {quickAction(dedWrite, '/business/deductions', 'Add Deduction', 'secondary')}
+        {quickAction(payWrite, '/business/staff-pay', 'Pay Run', 'secondary')}
+        {quickAction(fundWrite, '/business/contingency-fund', 'Fund Tx', 'secondary')}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3">
-            <TrendingUp className="w-4 h-4 text-green-600" /> Recent sales
-          </h3>
-          <ul className="space-y-2 text-sm">
-            {(data?.recent_sales || []).map((s) => (
-              <li key={s.id} className="flex justify-between gap-2 border-b border-gray-50 pb-2">
-                <span className="text-gray-700 truncate">{s.source || s.category || 'Sale'}</span>
-                <span className="shrink-0 flex flex-col items-end text-xs">
-                  <CurrencyDisplay amount={s.amount} className="font-semibold text-gray-900" />
-                  <span className="text-gray-500">{formatFriendlyDate(s.date)}</span>
-                </span>
-              </li>
-            ))}
-            {(!data?.recent_sales || data.recent_sales.length === 0) && (
-              <li className="text-gray-500 text-sm">No sales yet</li>
-            )}
-          </ul>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3">
-            <Receipt className="w-4 h-4 text-orange-600" /> Recent deductions
-          </h3>
-          <ul className="space-y-2 text-sm">
-            {(data?.recent_deductions || []).map((d) => (
-              <li key={d.id} className="flex justify-between gap-2 border-b border-gray-50 pb-2">
-                <span className="text-gray-700 truncate">{d.category}</span>
-                <span className="shrink-0 text-gray-500">{formatFriendlyDate(d.date)}</span>
-              </li>
-            ))}
-            {(!data?.recent_deductions || data.recent_deductions.length === 0) && (
-              <li className="text-gray-500 text-sm">No deductions yet</li>
-            )}
-          </ul>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3">
-            <Banknote className="w-4 h-4 text-blue-600" /> Recent pay runs
-          </h3>
-          <ul className="space-y-2 text-sm">
-            {(data?.recent_pay_runs || []).map((p) => (
-              <li key={p.id} className="flex justify-between gap-2 border-b border-gray-50 pb-2">
-                <span className="text-gray-700">Net pay</span>
-                <CurrencyDisplay amount={p.net_pay} className="shrink-0 font-medium text-gray-900" />
-              </li>
-            ))}
-            {(!data?.recent_pay_runs || data.recent_pay_runs.length === 0) && (
-              <li className="text-gray-500 text-sm">No pay runs yet</li>
-            )}
-          </ul>
-        </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {[
+          { key: 'recent_sales', title: 'Recent sales', icon: TrendingUp, tone: 'text-brand-600', items: data?.recent_sales, render: (s) => (
+            <>
+              <span className="truncate text-foreground">{s.source || s.category || 'Sale'}</span>
+              <span className="flex shrink-0 flex-col items-end text-xs">
+                <CurrencyDisplay amount={s.amount} className="font-semibold text-foreground" />
+                <span className="text-muted">{formatFriendlyDate(s.date)}</span>
+              </span>
+            </>
+          ) },
+          { key: 'recent_deductions', title: 'Recent deductions', icon: Receipt, tone: 'text-warning-600', items: data?.recent_deductions, render: (d) => (
+            <>
+              <span className="truncate text-foreground">{d.category}</span>
+              <span className="shrink-0 text-muted">{formatFriendlyDate(d.date)}</span>
+            </>
+          ) },
+          { key: 'recent_pay_runs', title: 'Recent pay runs', icon: Banknote, tone: 'text-accent-600', items: data?.recent_pay_runs, render: (p) => (
+            <>
+              <span className="text-foreground">Net pay</span>
+              <CurrencyDisplay amount={p.net_pay} className="shrink-0 font-medium text-foreground" />
+            </>
+          ) },
+        ].map(({ key, title, icon: Icon, tone, items, render }) => (
+          <Card key={key} className="p-4">
+            <h3 className={cn('text-title mb-3 flex items-center gap-2')}>
+              <Icon className={cn('h-4 w-4', tone)} />
+              {title}
+            </h3>
+            <ul className="space-y-2 text-sm">
+              {(items || []).map((item) => (
+                <li key={item.id} className="flex justify-between gap-2 border-b border-border pb-2 last:border-0">
+                  {render(item)}
+                </li>
+              ))}
+              {(!items || items.length === 0) && (
+                <li className="text-body">Nothing recorded yet</li>
+              )}
+            </ul>
+          </Card>
+        ))}
       </div>
 
-      <Link to="/business/net-profit" className="inline-flex items-center gap-2 text-sm font-medium text-purple-700 hover:text-purple-900">
-        <PieChart className="w-4 h-4" /> View net profit report
+      <Link
+        to="/business/net-profit"
+        className="inline-flex items-center gap-2 text-sm font-medium text-purple-700 hover:text-purple-900"
+      >
+        <PieChart className="h-4 w-4" />
+        View net profit report
       </Link>
-    </div>
+    </BusinessPageShell>
   );
 }

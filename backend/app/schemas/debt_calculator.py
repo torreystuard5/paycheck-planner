@@ -58,6 +58,21 @@ class ExtraPaymentSimulation(BaseModel):
     interest_saved_vs_minimum: Decimal
 
 
+class ExtraPercentPaymentRequest(BaseModel):
+    extra_percents: list[Decimal] = Field(
+        default=[Decimal("0"), Decimal("10"), Decimal("25"), Decimal("50")],
+    )
+
+
+class ExtraPercentPaymentSimulation(BaseModel):
+    extra_percent: Decimal
+    effective_extra_amount: Decimal
+    months_to_payoff: int
+    total_interest: Decimal
+    interest_saved_vs_minimum: Decimal
+    months_saved_vs_minimum: int
+
+
 # ── Credit efficiency ──────────────────────────────────────────────
 
 

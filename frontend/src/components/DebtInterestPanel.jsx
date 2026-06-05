@@ -1,8 +1,10 @@
 import CurrencyDisplay from './CurrencyDisplay';
 import { Badge, Card, cn } from './ui';
 import {
+  buildExtraPercentPayoffScenarios,
   computeMonthlyInterest,
   estimatePayoffMonths,
+  formatExtraPercentScenario,
   formatPayoffEstimate,
   formatRatePercent,
 } from '../utils/debtInterest';
@@ -17,6 +19,7 @@ export default function DebtInterestPanel({
   const interest = computeMonthlyInterest({ balance, apr });
   const payoffMonths = estimatePayoffMonths({ balance, apr, minimumPayment });
   const payoffLabel = formatPayoffEstimate(payoffMonths);
+  const extraScenarios = buildExtraPercentPayoffScenarios({ balance, apr, minimumPayment });
 
   if (!interest.hasData || !interest.apr || interest.apr <= 0) {
     return null;
@@ -64,11 +67,28 @@ export default function DebtInterestPanel({
       </p>
 
       {minimumPayment && (
-        <div className="mt-3 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-          <Badge variant="debt" className="w-fit normal-case">
-            {payoffLabel}
-          </Badge>
-          <span className="text-caption text-muted">if only minimum payment is made</span>
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+            <Badge variant="debt" className="w-fit normal-case">
+              {payoffLabel}
+            </Badge>
+            <span className="text-caption text-muted">if only minimum payment is made</span>
+          </div>
+          {extraScenarios.length > 1 && (
+            <ul className="space-y-1 text-caption text-muted">
+              {extraScenarios
+                .filter((s) => s.extraPercent > 0)
+                .map((scenario) => (
+                  <li key={scenario.extraPercent} className="flex flex-wrap items-baseline gap-x-1.5">
+                    <span className="font-medium text-foreground">{scenario.label}:</span>
+                    <span>{formatExtraPercentScenario(scenario)}</span>
+                    {scenario.monthsSaved != null && scenario.monthsSaved > 0 && (
+                      <span className="text-success-600">({scenario.monthsSaved} mo sooner)</span>
+                    )}
+                  </li>
+                ))}
+            </ul>
+          )}
         </div>
       )}
     </div>
@@ -79,6 +99,7 @@ export default function DebtInterestPanel({
 export function DebtInterestPreview({ balance, apr, minimumPayment, className }) {
   const interest = computeMonthlyInterest({ balance, apr });
   const payoffMonths = estimatePayoffMonths({ balance, apr, minimumPayment });
+  const extraScenarios = buildExtraPercentPayoffScenarios({ balance, apr, minimumPayment });
 
   const bal = Number(balance);
   const aprNum = Number(apr);
@@ -138,6 +159,30 @@ export function DebtInterestPreview({ balance, apr, minimumPayment, className })
         >
           <span className="text-base font-semibold text-foreground">{payoffLabel}</span>
         </PreviewMetric>
+
+        {hasMinPay && extraScenarios.length > 1 && (
+          <div className="px-4 py-3">
+            <p className="text-sm font-medium text-foreground">Pay more than minimum</p>
+            <p className="text-caption mt-0.5 text-muted">
+              Estimated months if you add 10%, 25%, or 50% to the minimum each month
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {extraScenarios
+                .filter((s) => s.extraPercent > 0)
+                .map((scenario) => (
+                  <li
+                    key={scenario.extraPercent}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="text-muted">{scenario.label}</span>
+                    <span className="font-semibold text-foreground tabular-nums">
+                      {formatExtraPercentScenario(scenario)}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
       </dl>
 
       {(hasApr || hasBalance || hasMinPay) && (

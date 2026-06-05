@@ -8,9 +8,11 @@ import CurrencyDisplay from '../../components/CurrencyDisplay';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import BusinessPageShell from '../../components/business/BusinessPageShell';
 import { useToast } from '../../components/Toast';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
+import { useBusinessAccess } from '../../hooks/useBusinessAccess';
+import { Button } from '../../components/ui';
 import UploadDropzone from '../../components/uploads/UploadDropzone';
 import { linkBusinessDocument } from '../../services/api';
 
@@ -214,38 +216,41 @@ export default function DeductionsPage() {
     ? `${form.miles} miles × $${mileageRate.toFixed(2)} = $${ma.toFixed(2)}`
     : null;
 
-  if (loading && !rows.length) return <LoadingSpinner />;
+  const { teamRole } = useBusinessAccess();
 
   return (
-    <div className="space-y-6 max-w-5xl min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Deductions</h1>
-          <p className="text-sm text-gray-600 mt-1">Business expenses</p>
-        </div>
-        <button
+    <BusinessPageShell
+      title="Deductions"
+      description="Business expenses"
+      loading={loading && !rows.length}
+      error={error}
+      teamRole={teamRole}
+      maxWidth="max-w-5xl"
+      actions={(
+        <Button
           type="button"
           onClick={openAdd}
-          {...write.props({ className: 'inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700' })}
+          disabled={write.disabled}
+          title={write.title}
+          className="bg-warning-600 text-white hover:bg-warning-700"
         >
-          <Plus className="w-4 h-4" /> Add deduction
-        </button>
-      </div>
-
-      {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
-
+          <Plus className="h-4 w-4" />
+          Add deduction
+        </Button>
+      )}
+    >
       <div className="flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Range</label>
-          <select value={range} onChange={(e) => setRange(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <label className="block text-xs text-muted mb-1">Range</label>
+          <select value={range} onChange={(e) => setRange(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-sm">
             <option value="month">This month</option>
             <option value="quarter">This quarter</option>
             <option value="ytd">Year to date</option>
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Category</label>
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[11rem]">
+          <label className="block text-xs text-muted mb-1">Category</label>
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="border border-border rounded-lg px-3 py-2 text-sm min-w-[11rem]">
             <option value="">All Categories</option>
             {filterCategoryOptions.filter(Boolean).map((c) => (
               <option key={c} value={c}>{formatLabel(c)}</option>
@@ -253,37 +258,37 @@ export default function DeductionsPage() {
           </select>
         </div>
         <div className="flex-1 min-w-[140px]">
-          <label className="block text-xs text-gray-500 mb-1">Search</label>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} onBlur={() => load()} className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full" />
+          <label className="block text-xs text-muted mb-1">Search</label>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} onBlur={() => load()} className="border border-border rounded-lg px-3 py-2 text-sm w-full" />
         </div>
-        <button type="button" onClick={() => { setLoading(true); load(); }} className="px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200">Apply</button>
+        <button type="button" onClick={() => { setLoading(true); load(); }} className="px-3 py-2 text-sm bg-surface-subtle rounded-lg hover:bg-surface-subtle">Apply</button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-          <p className="text-xs text-gray-500 uppercase">Total</p>
-          <CurrencyDisplay amount={summary?.total} className="text-xl font-bold text-gray-900 mt-1 block" />
+        <div className="bg-surface rounded-lg border border-border p-4 shadow-sm">
+          <p className="text-xs text-muted uppercase">Total</p>
+          <CurrencyDisplay amount={summary?.total} className="text-xl font-bold text-foreground mt-1 block" />
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm sm:col-span-2">
-          <p className="text-xs text-gray-500 uppercase mb-1">By category</p>
+        <div className="bg-surface rounded-lg border border-border p-4 shadow-sm sm:col-span-2">
+          <p className="text-xs text-muted uppercase mb-1">By category</p>
           <div className="flex flex-wrap gap-2 text-xs">
             {Object.entries(summary?.by_category || {}).map(([k, v]) => (
-              <span key={k} className="px-2 py-1 bg-gray-100 rounded">{formatLabel(k)}: <CurrencyDisplay amount={v} className="inline font-medium" /></span>
+              <span key={k} className="px-2 py-1 bg-surface-subtle rounded">{formatLabel(k)}: <CurrencyDisplay amount={v} className="inline font-medium" /></span>
             ))}
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-          <p className="text-xs text-gray-500 uppercase">Mileage (miles)</p>
-          <p className="text-xl font-bold text-gray-900 mt-1">{Number(summary?.total_miles || 0).toFixed(1)}</p>
+        <div className="bg-surface rounded-lg border border-border p-4 shadow-sm">
+          <p className="text-xs text-muted uppercase">Mileage (miles)</p>
+          <p className="text-xl font-bold text-foreground mt-1">{Number(summary?.total_miles || 0).toFixed(1)}</p>
         </div>
       </div>
 
       {rows.length === 0 ? (
         <EmptyState title="No deductions yet" message="Track tax-deductible expenses." actionLabel={write.allowed ? 'Add deduction' : undefined} onAction={write.allowed ? openAdd : undefined} />
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm overflow-x-auto max-w-[100vw] sm:max-w-none">
+        <div className="bg-surface rounded-lg border border-border overflow-hidden shadow-sm overflow-x-auto max-w-[100vw] sm:max-w-none">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-left text-gray-600">
+            <thead className="bg-surface-subtle text-left text-muted">
               <tr>
                 <th className="px-3 py-2">Date</th>
                 <th className="px-3 py-2">Amount</th>
@@ -294,15 +299,15 @@ export default function DeductionsPage() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t border-gray-100">
+                <tr key={r.id} className="border-t border-border">
                   <td className="px-3 py-2 whitespace-nowrap">{formatFriendlyDate(r.date)}</td>
                   <td className="px-3 py-2 font-medium"><CurrencyDisplay amount={r.amount} /></td>
                   <td className="px-3 py-2">{formatLabel(r.category)}</td>
-                  <td className="px-3 py-2 hidden md:table-cell text-gray-600">{r.vendor || '—'}</td>
+                  <td className="px-3 py-2 hidden md:table-cell text-muted">{r.vendor || '—'}</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
-                      <button type="button" onClick={() => openEdit(r)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-blue-600 rounded' })}><Pencil className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => setDel(r)} {...write.props({ className: 'p-1.5 text-gray-500 hover:text-red-600 rounded' })}><Trash2 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => openEdit(r)} {...write.props({ className: 'p-1.5 text-muted hover:text-accent-600 rounded' })}><Pencil className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => setDel(r)} {...write.props({ className: 'p-1.5 text-muted hover:text-red-600 rounded' })}><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -316,11 +321,11 @@ export default function DeductionsPage() {
         <form onSubmit={submit} className="space-y-3 max-h-[80vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Date</label>
               <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div className={form.is_mileage && !form.mileageOverride ? 'bg-sky-50/80 border border-sky-100 rounded-lg p-2' : ''}>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Amount {form.is_mileage && !form.mileageOverride && <span className="text-sky-600 font-normal">(auto)</span>}</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Amount {form.is_mileage && !form.mileageOverride && <span className="text-sky-600 font-normal">(auto)</span>}</label>
               <input
                 type="number"
                 step="0.01"
@@ -328,7 +333,7 @@ export default function DeductionsPage() {
                 readOnly={form.is_mileage && !form.mileageOverride}
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value, mileageOverride: true })}
-                className="w-full border rounded-lg px-3 py-2 text-sm read-only:bg-gray-50"
+                className="w-full border rounded-lg px-3 py-2 text-sm read-only:bg-surface-subtle"
               />
               {form.is_mileage && !form.mileageOverride && (
                 <button type="button" className="text-xs text-blue-600 mt-1 hover:underline" onClick={() => setForm({ ...form, mileageOverride: true })}>Override amount</button>
@@ -336,7 +341,7 @@ export default function DeductionsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Category</label>
             <select value={form.categorySelect} onChange={(e) => setForm({ ...form, categorySelect: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
               {mergedCategories.map((c) => (
                 <option key={c} value={c}>{formatLabel(c)}</option>
@@ -348,7 +353,7 @@ export default function DeductionsPage() {
             )}
           </div>
           <div className="relative">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Vendor</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Vendor</label>
             <input
               autoComplete="off"
               value={form.vendor}
@@ -362,12 +367,12 @@ export default function DeductionsPage() {
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
             {vendorOpen && vendorHits.length > 0 && (
-              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow max-h-40 overflow-y-auto text-sm">
+              <div className="absolute z-20 mt-1 w-full bg-surface border border-border rounded-lg shadow max-h-40 overflow-y-auto text-sm">
                 {vendorHits.map((v) => (
                   <button
                     key={v}
                     type="button"
-                    className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50"
+                    className="w-full text-left px-3 py-2 hover:bg-surface-subtle border-b border-gray-50"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => { setForm({ ...form, vendor: v }); setVendorOpen(false); }}
                   >
@@ -378,8 +383,8 @@ export default function DeductionsPage() {
             )}
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Receipt (upload)</label>
-            <p className="text-xs text-gray-500 mb-2">Optional — links to this deduction when you save.</p>
+            <label className="block text-xs font-medium text-foreground mb-1">Receipt (upload)</label>
+            <p className="text-xs text-muted mb-2">Optional — links to this deduction when you save.</p>
             <UploadDropzone
               documentType="receipt"
               scope="business"
@@ -393,7 +398,7 @@ export default function DeductionsPage() {
             {receiptDocId && <p className="text-xs text-green-700 mt-1">Receipt will attach on save.</p>}
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Description</label>
             <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
           </div>
           <label className="flex items-center gap-2 text-sm">
@@ -412,7 +417,7 @@ export default function DeductionsPage() {
           </label>
           {form.is_mileage && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Miles</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Miles</label>
               <input
                 type="number"
                 step="0.1"
@@ -428,17 +433,17 @@ export default function DeductionsPage() {
                 }}
                 className="w-full border rounded-lg px-3 py-2 text-sm"
               />
-              {mileageLine && <p className="text-xs text-gray-600 mt-1">{mileageLine}</p>}
+              {mileageLine && <p className="text-xs text-muted mt-1">{mileageLine}</p>}
             </div>
           )}
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setModal(false)} disabled={saving} className="px-4 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
+            <button type="button" onClick={() => setModal(false)} disabled={saving} className="px-4 py-2 text-sm text-foreground rounded-lg hover:bg-surface-subtle">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </form>
       </Modal>
 
       <ConfirmDialog isOpen={!!del} onClose={() => setDel(null)} onConfirm={confirmDelete} title="Delete deduction" message="Remove this record?" confirmText="Delete" danger />
-    </div>
+    </BusinessPageShell>
   );
 }

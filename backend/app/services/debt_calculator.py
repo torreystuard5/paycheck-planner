@@ -195,6 +195,85 @@ def compare_strategies(debts: list[dict], extra_payment: Decimal = _ZERO) -> dic
     }
 
 
+def estimate_payoff_months_extra_percent(
+    balance: Decimal,
+    apr: Decimal,
+    minimum_payment: Decimal,
+    extra_percent: Decimal = _ZERO,
+) -> int | None:
+    """Months to pay off one balance paying (1 + extra_percent/100) × minimum monthly."""
+    bal = Decimal(str(balance))
+    min_pay = Decimal(str(minimum_payment))
+    pct = Decimal(str(extra_percent))
+    if bal <= 0:
+        return 0
+    if min_pay <= 0:
+        return None
+    payment = _r2(min_pay * (Decimal("1") + pct / _HUNDRED))
+    if payment <= 0:
+        return None
+
+    month = 0
+    while bal > _ZERO and month < _MAX_MONTHS:
+        month += 1
+        interest = calculate_monthly_interest(bal, apr)
+        principal = payment - interest
+        if principal <= 0:
+            return None
+        bal -= principal
+        if bal < _ZERO:
+            bal = _ZERO
+    return month if month < _MAX_MONTHS else None
+
+
+def simulate_extra_payment_percents(
+    debts: list[dict],
+    extra_percents: list[Decimal] | None = None,
+    strategy: str = "avalanche",
+) -> list[dict]:
+    """Run payoff simulation for paying X% more than each debt's minimum."""
+    if extra_percents is None:
+        extra_percents = [Decimal("0"), Decimal("10"), Decimal("25"), Decimal("50")]
+
+    baseline = simulate_payoff(debts, _ZERO, strategy=strategy)
+    baseline_interest = baseline["total_interest_paid"]
+    baseline_months = baseline["months_to_payoff"]
+
+    results: list[dict] = []
+    for pct in extra_percents:
+        pct_dec = Decimal(str(pct))
+        if pct_dec <= 0:
+            results.append(
+                {
+                    "extra_percent": _r2(_ZERO),
+                    "effective_extra_amount": _r2(_ZERO),
+                    "months_to_payoff": baseline_months,
+                    "total_interest": baseline_interest,
+                    "interest_saved_vs_minimum": _r2(_ZERO),
+                    "months_saved_vs_minimum": 0,
+                }
+            )
+            continue
+
+        total_extra = sum(
+            Decimal(str(d["minimum_payment"])) * pct_dec / _HUNDRED for d in debts
+        )
+        sim = simulate_payoff(debts, total_extra, strategy=strategy)
+        results.append(
+            {
+                "extra_percent": _r2(pct_dec),
+                "effective_extra_amount": _r2(total_extra),
+                "months_to_payoff": sim["months_to_payoff"],
+                "total_interest": sim["total_interest_paid"],
+                "interest_saved_vs_minimum": _r2(
+                    baseline_interest - sim["total_interest_paid"]
+                ),
+                "months_saved_vs_minimum": max(0, baseline_months - sim["months_to_payoff"]),
+            }
+        )
+    return results
+
+
 def simulate_extra_payments(
     debts: list[dict],
     extra_amounts: list[Decimal] | None = None,

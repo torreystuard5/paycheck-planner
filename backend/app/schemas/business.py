@@ -287,10 +287,16 @@ class StringListResponse(BaseModel):
 
 class BusinessSettingsResponse(BaseModel):
     mileage_rate_per_mile: Decimal
+    business_name: Optional[str] = None
+    business_tagline: Optional[str] = None
+    fiscal_year_start_month: int = 1
 
 
 class BusinessSettingsUpdate(BaseModel):
     mileage_rate_per_mile: Optional[Decimal] = Field(None, gt=0, le=50, max_digits=8, decimal_places=4)
+    business_name: Optional[str] = Field(None, max_length=255)
+    business_tagline: Optional[str] = Field(None, max_length=500)
+    fiscal_year_start_month: Optional[int] = Field(None, ge=1, le=12)
 
 
 # ── Customers ────────────────────────────────────────────────────────
