@@ -1,16 +1,17 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense, memo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, ChevronDown, CreditCard, FileText, TrendingDown, CheckCircle, Users } from 'lucide-react';
 import api from '../services/api';
 import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import DebtInterestPanel from '../components/DebtInterestPanel';
 import { formatLabel } from '../utils/formatLabel';
 import { formatFriendlyDate } from '../utils/formatDate';
 import { getCategoryColor } from '../utils/categoryColors';
-import Bills from './Bills';
-import Debts from './Debts';
+const Bills = lazy(() => import('./Bills'));
+const Debts = lazy(() => import('./Debts'));
 import {
   Badge,
   Button,
@@ -21,7 +22,7 @@ import {
   cn,
 } from '../components/ui';
 
-const TABS = [
+const BASE_TABS = [
   { key: 'all', label: 'All' },
   { key: 'bills', label: 'Bills' },
   { key: 'debts', label: 'Debts' },
@@ -37,10 +38,22 @@ export default function BillsAndDebts() {
   const { activeBudget, budgetVersion } = useBudget();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const activeTab = TABS.find((t) => t.key === tabParam)?.key || 'all';
+  const activeTab = BASE_TABS.find((t) => t.key === tabParam)?.key || 'all';
 
   const [bills, setBills] = useState([]);
   const [debts, setDebts] = useState([]);
+
+  const tabsWithCounts = useMemo(
+    () => BASE_TABS.map((tab) => ({
+      ...tab,
+      count: tab.key === 'all'
+        ? bills.length + debts.length
+        : tab.key === 'bills'
+          ? bills.length
+          : debts.length,
+    })),
+    [bills.length, debts.length],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -112,7 +125,7 @@ export default function BillsAndDebts() {
   if (activeTab === 'all' && loading) return <LoadingSpinner />;
 
   return (
-    <div className="page-container min-w-0">
+    <div className="page-container min-w-0 space-y-6">
       <PageHeader
         title="Bills & Debts"
         description="Manage your bills and debts in one place"
@@ -162,10 +175,17 @@ export default function BillsAndDebts() {
         }
       />
 
-      <FilterChips options={TABS} value={activeTab} onChange={setTab} />
+      <FilterChips
+        options={tabsWithCounts}
+        value={activeTab}
+        onChange={setTab}
+        aria-label="Bills and debts views"
+      />
 
       {error && activeTab === 'all' && (
-        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">{error}</Card>
+        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" role="alert">
+          {error}
+        </Card>
       )}
 
       {activeTab === 'all' && (
@@ -179,11 +199,15 @@ export default function BillsAndDebts() {
       )}
 
       {activeTab === 'bills' && (
-        <Bills autoOpenAdd={addType === 'bill'} onClearAutoOpen={() => setAddType(null)} embedded />
+        <Suspense fallback={<LoadingSpinner label="Loading bills" />}>
+          <Bills autoOpenAdd={addType === 'bill'} onClearAutoOpen={() => setAddType(null)} embedded />
+        </Suspense>
       )}
 
       {activeTab === 'debts' && (
-        <Debts autoOpenAdd={addType === 'debt'} onClearAutoOpen={() => setAddType(null)} embedded />
+        <Suspense fallback={<LoadingSpinner label="Loading debts" />}>
+          <Debts autoOpenAdd={addType === 'debt'} onClearAutoOpen={() => setAddType(null)} embedded />
+        </Suspense>
       )}
     </div>
   );
@@ -191,46 +215,55 @@ export default function BillsAndDebts() {
 
 function AllTabContent({ bills, debts, combinedItems, totalBillsAmount, totalDebtAmount }) {
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card className="p-4 sm:p-5">
-          <div className="mb-2 flex items-center gap-2">
-            <IconStat icon={FileText} tone="accent" className="rounded-lg p-2" iconClassName="h-4 w-4" />
-            <p className="text-caption font-medium">Total Bills</p>
+        <Card className="p-5 sm:p-6">
+          <div className="mb-3 flex items-center gap-3">
+            <IconStat icon={FileText} tone="accent" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+            <p className="text-caption font-semibold uppercase tracking-wide text-muted">Total bills</p>
           </div>
           <CurrencyDisplay amount={totalBillsAmount} className="text-money block" />
-          <p className="text-caption mt-1">
-            {bills.length} bill{bills.length !== 1 ? 's' : ''}
+          <p className="text-caption mt-2">
+            {bills.length} bill{bills.length !== 1 ? 's' : ''} this budget
           </p>
         </Card>
-        <Card className="p-4 sm:p-5">
-          <div className="mb-2 flex items-center gap-2">
-            <IconStat icon={CreditCard} tone="debt" className="rounded-lg p-2" iconClassName="h-4 w-4" />
-            <p className="text-caption font-medium">Total Debt</p>
+        <Card className="p-5 sm:p-6">
+          <div className="mb-3 flex items-center gap-3">
+            <IconStat icon={CreditCard} tone="debt" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+            <p className="text-caption font-semibold uppercase tracking-wide text-muted">Total debt</p>
           </div>
           <CurrencyDisplay amount={totalDebtAmount} className="text-money block" />
-          <p className="text-caption mt-1">
-            {debts.length} debt{debts.length !== 1 ? 's' : ''}
+          <p className="text-caption mt-2">
+            {debts.length} active debt{debts.length !== 1 ? 's' : ''}
           </p>
         </Card>
       </div>
 
       {combinedItems.length === 0 ? (
-        <Card className="py-12 text-center">
-          <p className="text-body">No bills or debts found. Add one to get started.</p>
+        <Card>
+          <EmptyState
+            title="No bills or debts yet"
+            message="Add a bill or debt to see everything in one place."
+          />
         </Card>
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {combinedItems.map((item) => (
-            <CombinedCard key={`${item._type}-${item.id}`} item={item} />
-          ))}
+        <div>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="text-title">All items</h2>
+            <span className="text-caption">{combinedItems.length} total</span>
+          </div>
+          <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 [content-visibility:auto]">
+            {combinedItems.map((item) => (
+              <CombinedCard key={`${item._type}-${item.id}`} item={item} />
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function CombinedCard({ item }) {
+const CombinedCard = memo(function CombinedCard({ item }) {
   const isBill = item._type === 'bill';
   const isPaid = isBill ? item.is_paid : item.is_paid_this_period;
 
@@ -247,10 +280,10 @@ function CombinedCard({ item }) {
   const iconTone = isBill ? 'accent' : 'debt';
 
   return (
-    <Card className={cn(isPaid && 'opacity-75', 'overflow-hidden')}>
-      <div className="p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          <IconStat icon={TypeIcon} tone={iconTone} className="rounded-lg p-2.5" iconClassName="h-5 w-5" />
+    <Card className={cn('overflow-hidden transition-shadow hover:shadow-[var(--shadow-card-hover)]', isPaid && 'opacity-80')}>
+      <div className="p-5 sm:p-6">
+        <div className="flex items-start gap-3.5">
+          <IconStat icon={TypeIcon} tone={iconTone} className="rounded-xl p-3" iconClassName="h-5 w-5" />
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <h3
@@ -266,7 +299,7 @@ function CombinedCard({ item }) {
               </Badge>
             </div>
 
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {isPaid && (
                 <Badge variant="success" className="normal-case gap-1">
                   <CheckCircle className="h-3 w-3" />
@@ -296,10 +329,11 @@ function CombinedCard({ item }) {
               )}
             </div>
 
-            <div className="mt-3">
+            <div className="mt-4">
+              <p className="text-caption font-medium text-muted">{isBill ? 'Amount' : 'Balance'}</p>
               <CurrencyDisplay
                 amount={displayAmount}
-                className={cn('text-lg font-bold sm:text-xl', isPaid ? 'text-muted' : 'text-foreground')}
+                className={cn('text-money mt-0.5 block', isPaid && 'text-muted line-through')}
               />
               {isBill && item.payment_mode === 'split' && item.is_household_bill && (
                 <span className="mt-0.5 block text-sm text-accent-600">
@@ -309,20 +343,23 @@ function CombinedCard({ item }) {
             </div>
 
             {!isBill && (
-              <div className="mt-3 flex items-center gap-2">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-subtle">
+              <div className="mt-4">
+                <div className="mb-1.5 flex items-center justify-between text-caption">
+                  <span className="font-medium text-muted">Payoff progress</span>
+                  <span className="font-semibold text-brand-600">
+                    {(item.percent_paid ?? 0) >= 100 ? 'Paid off!' : `${item.percent_paid ?? 0}%`}
+                  </span>
+                </div>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-subtle ring-1 ring-border/50">
                   <div
-                    className="h-full rounded-full bg-brand-500 transition-all duration-300"
+                    className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-600 transition-all duration-500"
                     style={{ width: `${Math.min(item.percent_paid ?? 0, 100)}%` }}
                   />
                 </div>
-                <span className="w-[4.5rem] shrink-0 text-right text-caption font-medium">
-                  {(item.percent_paid ?? 0) >= 100 ? 'Paid off!' : `${item.percent_paid ?? 0}% paid`}
-                </span>
               </div>
             )}
 
-            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
+            <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-surface-subtle/80 px-2.5 py-2 text-caption">
               <span>
                 Due{' '}
                 {item.next_due_date
@@ -357,4 +394,4 @@ function CombinedCard({ item }) {
       )}
     </Card>
   );
-}
+});

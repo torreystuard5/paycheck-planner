@@ -1,9 +1,9 @@
 import { Loader2 } from 'lucide-react';
 
-export default function LoadingSpinner({ label = 'Loading' }) {
+export default function PageLoader({ label = 'Loading page' }) {
   return (
     <div
-      className="flex min-h-[12rem] flex-col items-center justify-center gap-3 py-16"
+      className="flex min-h-[40vh] flex-col items-center justify-center gap-3 py-16"
       role="status"
       aria-live="polite"
       aria-busy="true"

@@ -1,18 +1,22 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Edit, Trash2, ChevronDown, ChevronUp, DollarSign, Clock, Archive, Calendar, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import UploadDropzone from '../components/uploads/UploadDropzone';
-import DocumentDetailDrawer from '../components/uploads/DocumentDetailDrawer';
 import ProFeatureGate from '../components/ProFeatureGate';
 import { formatFriendlyDate } from '../utils/formatDate';
+import { formatApiError } from '../utils/formatApiError';
+import { augmentPaycheckPlan } from '../utils/paycheckPlanItems';
 import api from '../services/api';
 import { useBudget } from '../context/BudgetContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
-
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import DateInput from '../components/DateInput';
+import { Badge, Button, Card, IconStat, PageHeader } from '../components/ui';
+
+const UploadDropzone = lazy(() => import('../components/uploads/UploadDropzone'));
+const DocumentDetailDrawer = lazy(() => import('../components/uploads/DocumentDetailDrawer'));
+const PaycheckPlanEnvelope = lazy(() => import('../components/PaycheckPlanEnvelope'));
 
 const defaultEntryForm = {
   source_name: '',
@@ -40,6 +44,13 @@ export default function Income() {
   const [showArchive, setShowArchive] = useState(false);
   const [firstLoad, setFirstLoad] = useState(true);
   const [paystubDetailId, setPaystubDetailId] = useState(null);
+  const [paycheckPlan, setPaycheckPlan] = useState(null);
+  const [planError, setPlanError] = useState(null);
+  const [checklist, setChecklist] = useState({});
+  const [checklistLoading, setChecklistLoading] = useState({});
+  const [showHiddenOverdue, setShowHiddenOverdue] = useState(false);
+  const [hidingOverdue, setHidingOverdue] = useState({});
+  const [overrideBusyKey, setOverrideBusyKey] = useState(null);
 
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -90,9 +101,112 @@ export default function Income() {
     }
   }, [selectedMonth, selectedYear, firstLoad, activeBudget?.id]);
 
+  const fetchPaycheckPlan = useCallback(async () => {
+    setPlanError(null);
+    const bq = activeBudget?.id ? `budget_id=${activeBudget.id}` : '';
+    const planUrl = bq
+      ? `/api/v1/paycheck-plan?periods=4&${bq}`
+      : '/api/v1/paycheck-plan?periods=4';
+    try {
+      const res = await api.get(planUrl);
+      const planData = augmentPaycheckPlan(res.data);
+      setPaycheckPlan(planData);
+      setChecklist({});
+    } catch (err) {
+      setPlanError(formatApiError(err) || 'Failed to load paycheck plan.');
+    }
+  }, [activeBudget?.id]);
+
   useEffect(() => {
     fetchData(true);
-  }, [fetchData, budgetVersion]);
+    fetchPaycheckPlan();
+  }, [fetchData, fetchPaycheckPlan, budgetVersion]);
+
+  const assignItemKey = useCallback((item) => `${item.item_type}_${item.id || item.item_id}`, []);
+  const assignItemPaid = useCallback(
+    (item) => Boolean(item.is_paid) || Boolean(checklist[assignItemKey(item)]),
+    [assignItemKey, checklist],
+  );
+  const overrideItemKey = (item) =>
+    `${item.item_type}_${item.id || item.item_id}_${item.occurrence_due_date || item.due_date}`;
+
+  const toggleChecklistItem = async (item, payPeriodStart) => {
+    const key = assignItemKey(item);
+    const currentState = Boolean(item.is_paid) || !!checklist[key];
+    const newState = !currentState;
+    setChecklist((prev) => ({ ...prev, [key]: newState }));
+    setChecklistLoading((prev) => ({ ...prev, [key]: true }));
+    try {
+      await api.put('/api/v1/paycheck-checklist', {
+        item_type: item.item_type,
+        item_id: item.id || item.item_id,
+        pay_period_start: payPeriodStart,
+        is_checked: newState,
+      });
+      await fetchPaycheckPlan();
+      bumpBudgetVersion();
+    } catch {
+      setChecklist((prev) => ({ ...prev, [key]: currentState }));
+    } finally {
+      setChecklistLoading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handlePullForward = async (item) => {
+    const key = overrideItemKey(item);
+    setOverrideBusyKey(key);
+    try {
+      await api.post('/api/v1/paycheck-plan/overrides', {
+        item_type: item.item_type,
+        item_id: item.id || item.item_id,
+        occurrence_due_date: item.occurrence_due_date || item.due_date,
+        budget_id: activeBudget?.id || undefined,
+        target_pay_period_start: paycheckPlan?.paychecks?.[0]?.pay_period_start
+          || paycheckPlan?.paychecks?.[0]?.paycheck_date,
+      });
+      await fetchPaycheckPlan();
+      bumpBudgetVersion();
+    } catch (err) {
+      setPlanError(formatApiError(err) || 'Could not pull item into current paycheck.');
+    } finally {
+      setOverrideBusyKey(null);
+    }
+  };
+
+  const handleRevertOverride = async (item) => {
+    const key = overrideItemKey(item);
+    setOverrideBusyKey(key);
+    try {
+      if (item.override_id) {
+        const bq = activeBudget?.id ? `?budget_id=${activeBudget.id}` : '';
+        await api.delete(`/api/v1/paycheck-plan/overrides/${item.override_id}${bq}`);
+      } else {
+        await api.post('/api/v1/pay-periods/revert-pull-forward', {
+          item_type: item.item_type,
+          item_id: item.id || item.item_id,
+          occurrence_due_date: item.occurrence_due_date || item.due_date,
+          budget_id: activeBudget?.id || undefined,
+        });
+      }
+      await fetchPaycheckPlan();
+      bumpBudgetVersion();
+    } catch (err) {
+      setPlanError(formatApiError(err) || 'Could not return item to original paycheck.');
+    } finally {
+      setOverrideBusyKey(null);
+    }
+  };
+
+  const toggleHideOverdue = async (billId, currentlyHidden) => {
+    const action = currentlyHidden ? 'unhide-overdue' : 'hide-overdue';
+    setHidingOverdue((prev) => ({ ...prev, [billId]: true }));
+    try {
+      await api.patch(`/api/v1/bills/${billId}/${action}`);
+      await fetchPaycheckPlan();
+    } catch { /* ignore */ } finally {
+      setHidingOverdue((prev) => ({ ...prev, [billId]: false }));
+    }
+  };
 
   // ── Paycheck entry handlers ──
   const openAddEntry = () => {
@@ -163,7 +277,6 @@ export default function Income() {
   const actualMonthlyNet = monthlySummary ? Number(monthlySummary.total_net) : 0;
   const paycheckCount = monthlySummary ? monthlySummary.paycheck_count : 0;
 
-  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
   if (loading) return <LoadingSpinner />;
 
@@ -176,81 +289,113 @@ export default function Income() {
   };
 
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
-      <div className="min-w-0">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Income & Paychecks</h1>
-            <p className="text-sm text-gray-600 mt-1">Track your take-home pay</p>
-          </div>
-          <button onClick={openAddEntry} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">
+    <div className="page-container min-w-0 space-y-6">
+      <PageHeader
+        title="Income & Paychecks"
+        description="Log pay and allocate your current paycheck envelope"
+        actions={
+          <Button variant="primary" onClick={openAddEntry} className="w-full sm:w-auto">
             <DollarSign className="h-4 w-4" />
             Log Paycheck
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" role="alert">{error}</Card>
+      )}
+      {planError && (
+        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" role="alert">{planError}</Card>
       )}
 
       <ProFeatureGate featureKey="receipt_ocr">
-        <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+        <Card className="space-y-3 p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Upload className="h-5 w-5 text-blue-600" />
+              <h2 className="text-title flex items-center gap-2">
+                <Upload className="h-5 w-5 text-accent-600" aria-hidden />
                 Upload paystub
               </h2>
-              <p className="text-sm text-gray-600">
+              <p className="text-body mt-1">
                 Scan a paystub to pre-fill a paycheck entry, or{' '}
-                <Link to="/uploads" className="text-blue-600 hover:underline">
+                <Link to="/uploads" className="font-medium text-accent-600 hover:text-accent-700 hover:underline">
                   manage all uploads
                 </Link>
                 .
               </p>
             </div>
           </div>
-          <UploadDropzone
-            documentType="paystub"
-            compact
-            onUploaded={(doc) => {
-              if (doc?.id) setPaystubDetailId(doc.id);
-            }}
-          />
-        </div>
+          <Suspense fallback={<LoadingSpinner label="Loading uploader" />}>
+            <UploadDropzone
+              documentType="paystub"
+              compact
+              onUploaded={(doc) => {
+                if (doc?.id) setPaystubDetailId(doc.id);
+              }}
+            />
+          </Suspense>
+        </Card>
       </ProFeatureGate>
 
       {paystubDetailId && (
-        <DocumentDetailDrawer
-          documentId={paystubDetailId}
-          onClose={() => setPaystubDetailId(null)}
-          onUpdated={() => {
-            setPaystubDetailId(null);
-            bumpBudgetVersion();
-            fetchData();
-          }}
-        />
+        <Suspense fallback={null}>
+          <DocumentDetailDrawer
+            documentId={paystubDetailId}
+            onClose={() => setPaystubDetailId(null)}
+            onUpdated={() => {
+              setPaystubDetailId(null);
+              bumpBudgetVersion();
+              fetchData();
+            }}
+          />
+        </Suspense>
       )}
 
+      <section aria-labelledby="income-paycheck-plan-heading">
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 id="income-paycheck-plan-heading" className="text-title">Current Paycheck Plan</h2>
+          <Badge variant="success" className="normal-case">Envelope view</Badge>
+        </div>
+        <Suspense fallback={<LoadingSpinner label="Loading paycheck plan" />}>
+          <PaycheckPlanEnvelope
+            paycheckPlan={paycheckPlan}
+            assignItemPaid={assignItemPaid}
+            assignItemKey={assignItemKey}
+            checklistLoading={checklistLoading}
+            onToggleItem={toggleChecklistItem}
+            onPullForward={handlePullForward}
+            onRevertOverride={handleRevertOverride}
+            overrideBusyKey={overrideBusyKey}
+            overrideItemKey={overrideItemKey}
+            hidingOverdue={hidingOverdue}
+            onHideOverdue={toggleHideOverdue}
+            showHiddenOverdue={showHiddenOverdue}
+            onToggleShowHidden={() => setShowHiddenOverdue((prev) => !prev)}
+          />
+        </Suspense>
+      </section>
+
       {/* Monthly income summary */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-600">{monthLabel} Income</p>
-            <CurrencyDisplay amount={actualMonthlyNet} className="text-2xl font-bold text-green-600 mt-1 block" />
-            <p className="text-xs text-gray-500 mt-1">
-              {paycheckCount > 0
-                ? `Based on ${paycheckCount} logged paycheck${paycheckCount !== 1 ? 's' : ''}`
-                : 'No paychecks logged this month'}
-            </p>
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <IconStat icon={DollarSign} tone="brand" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+            <div>
+              <p className="text-caption font-semibold uppercase tracking-wide text-muted">{monthLabel}</p>
+              <CurrencyDisplay amount={actualMonthlyNet} className="text-money mt-1 block text-brand-600" />
+              <p className="text-caption mt-1">
+                {paycheckCount > 0
+                  ? `Based on ${paycheckCount} logged paycheck${paycheckCount !== 1 ? 's' : ''}`
+                  : 'No paychecks logged this month'}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-gray-400" />
+            <Calendar className="h-4 w-4 text-muted" />
             <select
               value={`${selectedMonth}-${selectedYear}`}
               onChange={handleMonthChange}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30"
             >
               {monthOptions.map((opt) => (
                 <option key={`${opt.month}-${opt.year}`} value={`${opt.month}-${opt.year}`}>
@@ -260,31 +405,30 @@ export default function Income() {
             </select>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Paycheck History */}
       {allEntries.length > 0 && (
         <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Clock className="h-5 w-5 text-gray-400" />
-            <h2 className="text-lg font-semibold text-gray-900">Paycheck History</h2>
-            <span className="text-xs font-medium px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+          <div className="mb-4 flex items-center gap-2">
+            <Clock className="h-5 w-5 text-muted" />
+            <h2 className="text-title">Paycheck History</h2>
+            <Badge variant="neutral" className="normal-case">
               {allEntries.length} check{allEntries.length !== 1 ? 's' : ''}
-            </span>
+            </Badge>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {(showArchive ? allEntries : allEntries.slice(0, 10)).map((entry) => {
               const isExpEntry = expandedEntryId === entry.id;
               return (
-                <div key={entry.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <Card key={entry.id} className="overflow-hidden">
                   <button
+                    type="button"
                     onClick={() => setExpandedEntryId(isExpEntry ? null : entry.id)}
-                    className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
+                    className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-surface-subtle sm:p-5"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="bg-green-50 p-2 rounded-lg shrink-0">
-                        <DollarSign className="h-5 w-5 text-green-600" />
-                      </div>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <IconStat icon={DollarSign} tone="brand" className="rounded-lg p-2" iconClassName="h-4 w-4" />
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">{entry.source_name || 'Paycheck'}</p>
                         <p className="text-xs text-gray-500">{formatFriendlyDate(entry.pay_date)}</p>
@@ -299,8 +443,8 @@ export default function Income() {
                     className="overflow-hidden transition-all duration-300 ease-in-out"
                     style={{ maxHeight: isExpEntry ? '250px' : '0px', opacity: isExpEntry ? 1 : 0 }}
                   >
-                    <div className="px-4 pb-4">
-                      <div className="border-t border-gray-200 pt-3 space-y-2 text-sm">
+                    <div className="px-4 pb-4 sm:px-5">
+                      <div className="space-y-2 border-t border-border pt-3 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-500">Pay Date</span>
                           <span className="text-gray-700">{formatFriendlyDate(entry.pay_date)}</span>
@@ -338,7 +482,7 @@ export default function Income() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </Card>
               );
             })}
           </div>
@@ -367,13 +511,13 @@ export default function Income() {
       <Modal isOpen={showEntryModal} onClose={() => setShowEntryModal(false)} title={editingEntry ? 'Edit Paycheck' : 'Log Paycheck'}>
         <form onSubmit={handleEntrySubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Source</label>
+            <label className="form-label">Source</label>
             <input
               type="text"
               list="source-suggestions"
               value={entryForm.source_name}
               onChange={(e) => setEntryForm({ ...entryForm, source_name: e.target.value })}
-              className={inputClass}
+              className="form-input"
               placeholder="e.g. Main Job, Side Gig"
             />
             {distinctSources.length > 0 && (
@@ -383,28 +527,30 @@ export default function Income() {
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pay Date</label>
-            <DateInput value={entryForm.pay_date} onChange={(e) => setEntryForm({ ...entryForm, pay_date: e.target.value })} className={inputClass} />
+            <label className="form-label">Pay Date</label>
+            <DateInput value={entryForm.pay_date} onChange={(e) => setEntryForm({ ...entryForm, pay_date: e.target.value })} className="form-input" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Net Amount (take-home)</label>
-              <input type="number" step="0.01" required value={entryForm.net_amount} onChange={(e) => setEntryForm({ ...entryForm, net_amount: e.target.value })} className={inputClass} />
+              <label className="form-label">Net Amount (take-home)</label>
+              <input type="number" step="0.01" required value={entryForm.net_amount} onChange={(e) => setEntryForm({ ...entryForm, net_amount: e.target.value })} className="form-input" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Gross Amount (optional)</label>
-              <input type="number" step="0.01" value={entryForm.gross_amount} onChange={(e) => setEntryForm({ ...entryForm, gross_amount: e.target.value })} className={inputClass} />
+              <label className="form-label">Gross Amount (optional)</label>
+              <input type="number" step="0.01" value={entryForm.gross_amount} onChange={(e) => setEntryForm({ ...entryForm, gross_amount: e.target.value })} className="form-input" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Memo (optional)</label>
-            <input type="text" maxLength={255} value={entryForm.memo} onChange={(e) => setEntryForm({ ...entryForm, memo: e.target.value })} className={inputClass} placeholder="e.g. Overtime included" />
+            <label className="form-label">Memo (optional)</label>
+            <input type="text" maxLength={255} value={entryForm.memo} onChange={(e) => setEntryForm({ ...entryForm, memo: e.target.value })} className="form-input" placeholder="e.g. Overtime included" />
           </div>
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
-            <button type="button" onClick={() => setShowEntryModal(false)} className="min-h-[44px] px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" disabled={savingEntry} className="min-h-[44px] px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
-              {savingEntry ? 'Saving...' : editingEntry ? 'Update' : 'Log Paycheck'}
-            </button>
+            <Button type="button" variant="secondary" onClick={() => setShowEntryModal(false)} disabled={savingEntry}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={savingEntry}>
+              {savingEntry ? 'Saving…' : editingEntry ? 'Update' : 'Log Paycheck'}
+            </Button>
           </div>
         </form>
       </Modal>

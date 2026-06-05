@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DollarSign,
@@ -13,12 +13,6 @@ import {
   Clock,
   CheckCircle,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Square,
-  CheckSquare,
-  EyeOff,
-  Eye,
 } from 'lucide-react';
 import { parseISO, formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
@@ -26,14 +20,16 @@ import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
-import PaycheckPlanItemActions from '../components/PaycheckPlanItemActions';
+import WhatsNewBanner from '../components/WhatsNewBanner';
+
+const PaycheckPlanEnvelope = lazy(() => import('../components/PaycheckPlanEnvelope'));
+const RecentUpdates = lazy(() => import('../components/RecentUpdates'));
 import usePolling from '../hooks/usePolling';
-import { formatDate, formatPaycheckDate } from '../utils/formatDate';
+import { formatDate } from '../utils/formatDate';
 import { augmentPaycheckPlan } from '../utils/paycheckPlanItems';
 import { formatApiError } from '../utils/formatApiError';
 import {
   Badge,
-  Button,
   Card,
   CollapsibleCard,
   IconStat,
@@ -56,7 +52,9 @@ const creditRatingMeta = (pct) => {
   return { label: 'Critical', variant: 'danger', bar: 'bg-danger-500' };
 };
 
-function SummaryStatCard({ label, value, count, icon, tone, subtitle, paidSubtitle, onClick }) {
+const SummaryStatCard = memo(function SummaryStatCard({
+  label, value, count, icon, tone, subtitle, paidSubtitle, onClick,
+}) {
   return (
     <Card
       variant="interactive"
@@ -64,6 +62,7 @@ function SummaryStatCard({ label, value, count, icon, tone, subtitle, paidSubtit
       className="p-4 sm:p-5"
       role="button"
       tabIndex={0}
+      aria-label={`${label}. View details.`}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -99,7 +98,7 @@ function SummaryStatCard({ label, value, count, icon, tone, subtitle, paidSubtit
       </div>
     </Card>
   );
-}
+});
 
 function MetricRow({ label, value, valueClassName }) {
   return (
@@ -108,44 +107,6 @@ function MetricRow({ label, value, valueClassName }) {
       <span className={cn('text-sm font-semibold text-foreground tabular-nums', valueClassName)}>
         {value}
       </span>
-    </div>
-  );
-}
-
-function PaycheckMetricGrid({ current }) {
-  const remaining = Number(current.remaining);
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      <Card variant="inset" className="p-3">
-        <p className="text-caption">Pay Period</p>
-        <p className="mt-1 text-sm font-semibold text-foreground">
-          {formatPaycheckDate(current.paycheck_date)}
-        </p>
-      </Card>
-      <Card variant="inset" className="p-3">
-        <p className="text-caption">Paycheck Amount</p>
-        <CurrencyDisplay
-          amount={current.paycheck_amount}
-          className="mt-1 block text-sm font-semibold text-foreground"
-        />
-      </Card>
-      <Card variant="inset" className="p-3">
-        <p className="text-caption">Total Due</p>
-        <CurrencyDisplay
-          amount={current.total_due}
-          className="mt-1 block text-sm font-semibold text-foreground"
-        />
-      </Card>
-      <Card variant="inset" className="p-3">
-        <p className="text-caption">Remaining</p>
-        <CurrencyDisplay
-          amount={current.remaining}
-          className={cn(
-            'mt-1 block text-sm font-semibold',
-            remaining >= 0 ? 'text-brand-600' : 'text-danger-600',
-          )}
-        />
-      </Card>
     </div>
   );
 }
@@ -386,13 +347,6 @@ export default function Dashboard() {
     return `${paidCount}/${totalBillCount} bills paid \u00b7 ${fmtCurrency(paidBillsTotal)} of ${fmtCurrency(totalBills)}`;
   };
 
-  const hasPaycheckPlan =
-    Boolean(paycheckPlan)
-    && (
-      Boolean(paycheckPlan.current_paycheck)
-      || (Array.isArray(paycheckPlan.paychecks) && paycheckPlan.paychecks.length > 0)
-      || paycheckPlan.current_paycheck_date
-    );
   const currentPaycheckItems =
     paycheckPlan?.current_paycheck?.assigned_items
     || paycheckPlan?.paychecks?.[0]?.assigned_items
@@ -487,11 +441,13 @@ export default function Dashboard() {
       </PageHeader>
 
       {error && (
-        <Card className="flex items-center gap-3 border-danger-200 bg-danger-50 p-4">
-          <AlertCircle className="h-5 w-5 shrink-0 text-danger-600" />
+        <Card className="flex items-center gap-3 border-danger-200 bg-danger-50 p-4" role="alert">
+          <AlertCircle className="h-5 w-5 shrink-0 text-danger-600" aria-hidden />
           <p className="text-sm text-danger-700">{error}</p>
         </Card>
       )}
+
+      <WhatsNewBanner compact />
 
       <div className="card-grid">
         {summaryCards.map((card) => (
@@ -512,261 +468,24 @@ export default function Dashboard() {
           collapsed={collapsedSections}
           onToggle={toggleSection}
         >
-          {paycheckPlan?.current_paycheck_date && (
-            <Card variant="inset" className="mb-4 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-caption">Current Paycheck</span>
-                <span className="text-sm font-semibold text-foreground">
-                  {formatPaycheckDate(paycheckPlan.current_paycheck_date)}
-                </span>
-              </div>
-              {paycheckPlan.next_paycheck_date && (
-                <div className="mt-2 flex items-center justify-between gap-3 border-t border-border pt-2">
-                  <span className="text-caption">Next Paycheck</span>
-                  <span className="text-sm text-muted">
-                    {formatPaycheckDate(paycheckPlan.next_paycheck_date)}
-                  </span>
-                </div>
-              )}
-            </Card>
-          )}
-
-          {hasPaycheckPlan ? (
-            <div className="space-y-4">
-              {(() => {
-                const current = paycheckPlan.current_paycheck || paycheckPlan.paychecks[0];
-                const payPeriodStart = current.pay_period_start || current.paycheck_date;
-                const assignedItems = Array.isArray(current.assigned_items) ? current.assigned_items : [];
-
-                const visibleItems = assignedItems.filter(
-                  (item) => !(item.is_overdue && item.hidden_overdue && !assignItemPaid(item)),
-                );
-                const hiddenOverdueItems = assignedItems.filter(
-                  (item) => item.is_overdue && item.hidden_overdue && !assignItemPaid(item),
-                );
-
-                const sortedItems = [...visibleItems].sort((a, b) => {
-                  const aChecked = assignItemPaid(a);
-                  const bChecked = assignItemPaid(b);
-                  if (aChecked !== bChecked) return aChecked ? 1 : -1;
-                  return new Date(a.due_date) - new Date(b.due_date);
-                });
-
-                const checkedCount = current.assigned_paid_count ?? visibleItems.filter((item) => assignItemPaid(item)).length;
-                const totalItems = current.assigned_total_count ?? visibleItems.length;
-                const progressPct = current.assigned_progress_percent ?? (totalItems > 0 ? (checkedCount / totalItems) * 100 : 0);
-
-                const totalAssignedAmount = Number(current.assigned_total_amount ?? visibleItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0));
-                const paidAmount = Number(current.assigned_paid_amount ?? visibleItems.filter((item) => assignItemPaid(item)).reduce((sum, item) => sum + (Number(item.amount) || 0), 0));
-                const stillOwed = Number(current.assigned_still_owed ?? (totalAssignedAmount - paidAmount));
-
-                return (
-                  <>
-                    <PaycheckMetricGrid current={current} />
-
-                    {totalItems > 0 && (
-                      <div className="border-t border-border pt-4">
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-foreground">Assigned Items</p>
-                          <Badge variant="success" className="normal-case">
-                            {checkedCount}/{totalItems} paid
-                          </Badge>
-                        </div>
-
-                        <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-surface-subtle">
-                          <div
-                            className="h-full rounded-full bg-brand-500 transition-all duration-300"
-                            style={{ width: `${progressPct}%` }}
-                          />
-                        </div>
-
-                        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
-                          <span className="font-semibold text-brand-600">
-                            Paid: {fmtCurrency(paidAmount)}
-                          </span>
-                          <span className="text-muted">of {fmtCurrency(totalAssignedAmount)}</span>
-                          <span className="text-muted">·</span>
-                          <span className="font-semibold text-warning-600">
-                            Still owed: {fmtCurrency(stillOwed)}
-                          </span>
-                        </div>
-
-                        <div className="space-y-2">
-                          {sortedItems.map((item) => {
-                            const key = assignItemKey(item);
-                            const isChecked = assignItemPaid(item);
-                            const isToggling = !!checklistLoading[key];
-                            const isSplit = item.is_split || (item.split_count && item.split_count > 1);
-                            const isHiding = !!hidingOverdue[item.id || item.item_id];
-
-                            return (
-                              <div
-                                key={key}
-                                className={cn(
-                                  'flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors',
-                                  item.is_overdue && !isChecked && 'border-l-2 border-danger-500 bg-danger-50',
-                                  isChecked && 'bg-surface-subtle',
-                                  !isChecked && !item.is_overdue && 'hover:bg-surface-subtle',
-                                )}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => toggleChecklistItem(item, payPeriodStart)}
-                                  disabled={isToggling}
-                                  className={cn(
-                                    'shrink-0 transition-colors',
-                                    isToggling && 'opacity-50',
-                                    isChecked ? 'text-brand-600' : 'text-muted hover:text-foreground',
-                                  )}
-                                  aria-label={isChecked ? 'Mark unpaid' : 'Mark paid'}
-                                >
-                                  {isChecked ? (
-                                    <CheckSquare className="h-4 w-4" />
-                                  ) : (
-                                    <Square className="h-4 w-4" />
-                                  )}
-                                </button>
-
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                                    <span
-                                      className={cn(
-                                        'truncate font-medium',
-                                        isChecked ? 'text-muted line-through' : 'text-foreground',
-                                      )}
-                                    >
-                                      {item.name}
-                                    </span>
-                                    {item.is_overdue && !isChecked && (
-                                      <Badge variant="danger" className="normal-case px-1.5 py-0 text-[10px]">
-                                        Overdue
-                                      </Badge>
-                                    )}
-                                    {item.pulled_forward && (
-                                      <Badge variant="warning" className="normal-case px-1.5 py-0 text-[10px]">
-                                        Pulled forward
-                                      </Badge>
-                                    )}
-                                    {isSplit && (
-                                      <Badge variant="purple" className="normal-case px-1.5 py-0 text-[10px]">
-                                        Your share
-                                      </Badge>
-                                    )}
-                                    <Badge
-                                      variant={item.item_type === 'debt' ? 'debt' : 'info'}
-                                      className="normal-case px-1.5 py-0 text-[10px]"
-                                    >
-                                      {item.item_type}
-                                    </Badge>
-                                  </div>
-                                  {item.pulled_forward && item.original_pay_period_start && (
-                                    <p className="text-caption mt-0.5">
-                                      From {formatPaycheckDate(item.original_pay_period_start)}
-                                    </p>
-                                  )}
-                                </div>
-
-                                <div className="shrink-0 text-right">
-                                  <CurrencyDisplay
-                                    amount={item.amount}
-                                    className={cn(
-                                      'text-sm font-medium',
-                                      isChecked ? 'text-muted line-through' : 'text-foreground',
-                                    )}
-                                  />
-                                  {isSplit && item.full_amount && (
-                                    <p className="text-caption">of {fmtCurrency(item.full_amount)}</p>
-                                  )}
-                                </div>
-
-                                {item.is_overdue && !isChecked && item.item_type === 'bill' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => toggleHideOverdue(item.id || item.item_id, false)}
-                                    disabled={isHiding}
-                                    className="min-h-8 shrink-0 px-1.5"
-                                    title="Hide overdue"
-                                    aria-label="Hide overdue"
-                                  >
-                                    <EyeOff className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-
-                                <PaycheckPlanItemActions
-                                  item={item}
-                                  busy={overrideBusyKey === overrideItemKey(item)}
-                                  compact
-                                  onPullForward={handlePullForward}
-                                  onRevert={handleRevertOverride}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {hiddenOverdueItems.length > 0 && (
-                          <div className="mt-4 border-t border-border pt-3">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setShowHiddenOverdue((prev) => !prev)}
-                              className="h-auto min-h-0 w-full justify-start px-0 text-caption text-muted hover:text-foreground"
-                            >
-                              {showHiddenOverdue ? (
-                                <ChevronUp className="mr-1.5 h-3.5 w-3.5" />
-                              ) : (
-                                <ChevronDown className="mr-1.5 h-3.5 w-3.5" />
-                              )}
-                              {hiddenOverdueItems.length} hidden overdue{' '}
-                              {hiddenOverdueItems.length === 1 ? 'item' : 'items'}
-                            </Button>
-
-                            {showHiddenOverdue && (
-                              <div className="mt-2 space-y-2">
-                                {hiddenOverdueItems.map((item) => {
-                                  const key = `${item.item_type}_${item.id || item.item_id}`;
-                                  const isHiding = !!hidingOverdue[item.id || item.item_id];
-                                  return (
-                                    <div
-                                      key={key}
-                                      className="flex items-center gap-2 rounded-lg bg-surface-subtle px-3 py-2.5 text-sm opacity-70"
-                                    >
-                                      <span className="w-4 shrink-0" />
-                                      <span className="min-w-0 flex-1 truncate text-muted">
-                                        {item.name}
-                                        <Badge variant="neutral" className="ml-1.5 normal-case px-1.5 py-0 text-[10px]">
-                                          Hidden
-                                        </Badge>
-                                      </span>
-                                      <CurrencyDisplay amount={item.amount} className="shrink-0 text-sm text-muted" />
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => toggleHideOverdue(item.id || item.item_id, true)}
-                                        disabled={isHiding}
-                                        className="min-h-8 shrink-0 px-1.5"
-                                        title="Show overdue"
-                                        aria-label="Show overdue"
-                                      >
-                                        <Eye className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          ) : (
-            <p className="text-body">No paycheck plan configured yet.</p>
-          )}
+          <Suspense fallback={<LoadingSpinner label="Loading paycheck plan" />}>
+            <PaycheckPlanEnvelope
+              paycheckPlan={paycheckPlan}
+              assignItemPaid={assignItemPaid}
+              assignItemKey={assignItemKey}
+              checklistLoading={checklistLoading}
+              onToggleItem={toggleChecklistItem}
+              onPullForward={handlePullForward}
+              onRevertOverride={handleRevertOverride}
+              overrideBusyKey={overrideBusyKey}
+              overrideItemKey={overrideItemKey}
+              hidingOverdue={hidingOverdue}
+              onHideOverdue={toggleHideOverdue}
+              showHiddenOverdue={showHiddenOverdue}
+              onToggleShowHidden={() => setShowHiddenOverdue((prev) => !prev)}
+              className="border-0 shadow-none"
+            />
+          </Suspense>
         </CollapsibleCard>
 
         <CollapsibleCard
@@ -942,6 +661,10 @@ export default function Dashboard() {
           </div>
         </CollapsibleCard>
       )}
+
+      <Suspense fallback={null}>
+        <RecentUpdates />
+      </Suspense>
     </div>
   );
 }

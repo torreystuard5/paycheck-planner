@@ -3,7 +3,7 @@ import { cn } from './cn';
 const variants = {
   default: 'bg-surface border border-border shadow-[var(--shadow-card)]',
   interactive:
-    'bg-surface border border-border shadow-[var(--shadow-card)] cursor-pointer transition-shadow hover:shadow-[var(--shadow-card-hover)]',
+    'bg-surface border border-border shadow-[var(--shadow-card)] cursor-pointer transition-all duration-200 hover:border-accent-300/40 hover:shadow-[var(--shadow-card-hover)] active:scale-[0.995]',
   inset: 'bg-surface-subtle border border-border',
 };
 

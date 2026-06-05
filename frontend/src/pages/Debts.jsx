@@ -20,9 +20,10 @@ import CurrencyDisplay from '../components/CurrencyDisplay';
 import DebtInterestPanel from '../components/DebtInterestPanel';
 import DebtFormInterestPreview from '../components/DebtFormInterestPreview';
 import usePolling from '../hooks/usePolling';
-import { Badge, Button, Card, IconStat, cn } from '../components/ui';
+import { Badge, Button, Card, FilterChips, IconStat, PageHeader, cn } from '../components/ui';
 
 const TABS = ['Overview', 'Payoff Strategy', 'Credit Cards'];
+const DEBT_TAB_OPTIONS = TABS.map((t) => ({ key: t, label: t }));
 const DEBT_TYPES = ['credit_card', 'student_loan', 'auto_loan', 'mortgage', 'personal_loan', 'other'];
 
 const defaultForm = {
@@ -431,7 +432,6 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
   const totalDebt = debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
   const totalMinPayment = debts.reduce((sum, d) => sum + (Number(d.minimum_payment) || 0), 0);
 
-  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
   if (loading) return <LoadingSpinner />;
 
@@ -643,44 +643,44 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
   };
 
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
+    <div className={cn(embedded ? 'min-w-0 space-y-5' : 'page-container min-w-0')}>
       {!embedded && (
-      <div className="min-w-0">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Debts</h1>
-            <p className="text-sm text-gray-600 mt-1">Track and pay down your debts</p>
-            {lastUpdated && user?.household_id && (
-              <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
-            )}
-          </div>
-          {activeTab === 'Overview' && (
-            <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
-              <SortDropdown
-                sortBy={sortBy}
-                sortOrder={sortOrder}
-                onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
-                options={[
-                  { value: 'name', label: 'Name' },
-                  { value: 'balance', label: 'Balance' },
-                  { value: 'minimum_payment', label: 'Minimum Payment' },
-                  { value: 'interest_rate', label: 'Interest Rate' },
-                  { value: 'due_date', label: 'Due Date' },
-                  { value: 'created_at', label: 'Date Added' },
-                ]}
-              />
-              <ImportExportButton
-                onExport={handleExport}
-                onImport={() => { setShowImportModal(true); setImportResult(null); }}
-              />
-              <button onClick={openAdd} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
-                <Plus className="h-4 w-4" />
-                Add Debt
-              </button>
-            </div>
+        <>
+          <PageHeader
+            title="Debts"
+            description="Track and pay down your debts"
+            actions={
+              activeTab === 'Overview' ? (
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+                  <SortDropdown
+                    sortBy={sortBy}
+                    sortOrder={sortOrder}
+                    onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+                    options={[
+                      { value: 'name', label: 'Name' },
+                      { value: 'balance', label: 'Balance' },
+                      { value: 'minimum_payment', label: 'Minimum Payment' },
+                      { value: 'interest_rate', label: 'Interest Rate' },
+                      { value: 'due_date', label: 'Due Date' },
+                      { value: 'created_at', label: 'Date Added' },
+                    ]}
+                  />
+                  <ImportExportButton
+                    onExport={handleExport}
+                    onImport={() => { setShowImportModal(true); setImportResult(null); }}
+                  />
+                  <Button variant="primary" onClick={openAdd} className="w-full bg-debt-600 hover:bg-debt-700 sm:w-auto">
+                    <Plus className="h-4 w-4" />
+                    Add Debt
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
+          {lastUpdated && user?.household_id && (
+            <p className="text-caption -mt-2">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
           )}
-        </div>
-      </div>
+        </>
       )}
 
       {embedded && activeTab === 'Overview' && (
@@ -710,24 +710,10 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">{error}</Card>
       )}
 
-      <div className="border-b border-gray-200 overflow-x-auto">
-        <nav className="flex min-w-max gap-5 sm:gap-6">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <FilterChips options={DEBT_TAB_OPTIONS} value={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'Overview' && (
         <div className="min-w-0 space-y-5 sm:space-y-6">
@@ -816,7 +802,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
                     placeholder="Extra monthly amount"
                     value={extraPayment}
                     onChange={(e) => setExtraPayment(e.target.value)}
-                    className={`${inputClass} max-w-xs`}
+                    className="form-input max-w-xs"
                   />
                   <button onClick={simulateExtra} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
                     Simulate
@@ -1011,53 +997,53 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
+              <label className="form-label">Name</label>
+              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="form-input" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={inputClass}>
+              <label className="form-label">Type</label>
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="form-input">
                 {DEBT_TYPES.map((t) => <option key={t} value={t}>{formatLabel(t)}</option>)}
               </select>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Balance</label>
-              <input type="number" step="0.01" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} className={inputClass} />
+              <label className="form-label">Balance</label>
+              <input type="number" step="0.01" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} className="form-input" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Credit Limit</label>
-              <input type="number" step="0.01" value={form.credit_limit} onChange={(e) => setForm({ ...form, credit_limit: e.target.value })} className={inputClass} placeholder="Optional" />
+              <label className="form-label">Credit Limit</label>
+              <input type="number" step="0.01" value={form.credit_limit} onChange={(e) => setForm({ ...form, credit_limit: e.target.value })} className="form-input" placeholder="Optional" />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Interest Rate (APR %)</label>
+              <label className="form-label">Interest Rate (APR %)</label>
               <input
                 type="number"
                 step="0.01"
                 min="0"
                 value={form.apr}
                 onChange={(e) => setForm({ ...form, apr: e.target.value })}
-                className={inputClass}
+                className="form-input"
                 placeholder="e.g. 22.9"
               />
               <p className="text-caption mt-1">Annual percentage rate on the current balance</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Payment</label>
-              <input type="number" step="0.01" value={form.minimum_payment} onChange={(e) => setForm({ ...form, minimum_payment: e.target.value })} className={inputClass} />
+              <label className="form-label">Minimum Payment</label>
+              <input type="number" step="0.01" value={form.minimum_payment} onChange={(e) => setForm({ ...form, minimum_payment: e.target.value })} className="form-input" />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Due Day</label>
-              <input type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className={inputClass} />
+              <label className="form-label">Due Day</label>
+              <input type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className="form-input" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Days Before</label>
-              <input type="number" min="0" max="30" value={form.reminder_days} onChange={(e) => setForm({ ...form, reminder_days: e.target.value })} className={inputClass} />
+              <label className="form-label">Reminder Days Before</label>
+              <input type="number" min="0" max="30" value={form.reminder_days} onChange={(e) => setForm({ ...form, reminder_days: e.target.value })} className="form-input" />
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1117,11 +1103,13 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={closeDebtModal} disabled={saving} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {saving ? 'Saving...' : editingDebt ? 'Update' : 'Create'}
-            </button>
+          <div className="flex flex-col-reverse justify-end gap-2 pt-2 sm:flex-row sm:gap-3">
+            <Button type="button" variant="secondary" onClick={closeDebtModal} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="accent" disabled={saving}>
+              {saving ? 'Saving…' : editingDebt ? 'Update' : 'Create'}
+            </Button>
           </div>
         </form>
       </Modal>
@@ -1197,7 +1185,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
               How much are you paying toward <span className="font-semibold text-gray-900">{payTarget.name}</span>?
             </p>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Amount</label>
+              <label className="form-label">Payment Amount</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
                 <input

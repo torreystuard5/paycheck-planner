@@ -116,19 +116,14 @@ export function DebtInterestPreview({ balance, apr, minimumPayment, className })
 
       <dl className="divide-y divide-border">
         <PreviewMetric
-          label="Monthly interest"
-          hint={hasApr ? `${formatRatePercent(interest.monthlyRatePercent)} monthly rate` : 'Enter APR'}
-        >
-          {canCalcInterest ? (
-            <CurrencyDisplay amount={interestAmount} className="text-base font-bold text-debt-600 tabular-nums" />
-          ) : (
-            <span className="text-base font-semibold text-muted">--</span>
-          )}
-        </PreviewMetric>
-
-        <PreviewMetric
-          label="Interest this month"
-          hint={hasBalance ? 'Balance × monthly rate' : 'Enter balance'}
+          label="Estimated monthly interest"
+          hint={
+            canCalcInterest
+              ? `${formatRatePercent(interest.monthlyRatePercent)} monthly · balance × rate`
+              : hasApr
+                ? 'Enter balance to calculate'
+                : 'Enter APR and balance'
+          }
         >
           {canCalcInterest ? (
             <CurrencyDisplay amount={interestAmount} className="text-base font-bold text-debt-600 tabular-nums" />

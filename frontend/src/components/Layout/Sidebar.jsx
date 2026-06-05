@@ -37,6 +37,7 @@ import { APP_VERSION } from '../../config';
 import { BUSINESS_NAV_LINKS, filterBusinessNavLinks } from '../../config/businessNav';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
 import api from '../../services/api';
+import { cn } from '../ui';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
 const personalLinks = [
@@ -93,45 +94,50 @@ function BudgetSwitcher({ onClose }) {
   if (!activeBudget) return null;
 
   return (
-    <div className="px-3 pb-1 relative" ref={menuRef}>
+    <div className="relative px-3 pb-2" ref={menuRef}>
       <button
+        type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors min-h-[44px] text-left"
+        className="flex min-h-[44px] w-full items-center gap-2 rounded-xl border border-border bg-surface-subtle px-3 py-2 text-left transition-colors hover:bg-surface hover:shadow-[var(--shadow-card)]"
       >
         {activeBudget.color && (
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: activeBudget.color }} />
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white" style={{ backgroundColor: activeBudget.color }} />
         )}
-        <span className="flex-1 text-xs font-medium text-gray-700 truncate">{activeBudget.name}</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+        <span className="flex-1 truncate text-xs font-semibold text-foreground">{activeBudget.name}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 text-muted transition-transform', menuOpen && 'rotate-180')} />
       </button>
 
       {menuOpen && (
-        <div className="absolute left-3 right-3 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1 max-h-60 overflow-y-auto">
+        <div className="absolute left-3 right-3 top-full z-50 mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-border bg-surface py-1 shadow-[var(--shadow-card-hover)]">
           {budgets.map((b) => (
             <button
               key={b.id}
+              type="button"
               onClick={() => handleSwitch(b.id)}
               disabled={!!switchingId}
-              className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs text-left transition-colors min-h-[44px] ${
-                b.id === activeBudget.id ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'
-              } ${switchingId ? 'opacity-60' : ''}`}
+              className={cn(
+                'flex min-h-[44px] w-full items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors',
+                b.id === activeBudget.id ? 'bg-accent-50 text-accent-700' : 'text-foreground hover:bg-surface-subtle',
+                switchingId && 'opacity-60',
+              )}
             >
               {b.color ? (
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: b.color }} />
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
               ) : (
-                <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-gray-300" />
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-border" />
               )}
               <span className="flex-1 truncate">{b.name}</span>
-              {b.id === activeBudget.id && <Check className="w-3.5 h-3.5 shrink-0" />}
-              {switchingId === b.id && <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />}
+              {b.id === activeBudget.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+              {switchingId === b.id && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />}
             </button>
           ))}
-          <div className="border-t border-gray-100 mt-1 pt-1">
+          <div className="mt-1 border-t border-border pt-1">
             <button
+              type="button"
               onClick={() => { setMenuOpen(false); navigate('/budgets'); onClose(); }}
-              className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors min-h-[44px]"
+              className="flex min-h-[44px] w-full items-center gap-2 px-3 py-2.5 text-xs text-muted transition-colors hover:bg-surface-subtle hover:text-foreground"
             >
-              <Settings className="w-3.5 h-3.5" />
+              <Settings className="h-3.5 w-3.5" />
               Manage budgets…
             </button>
           </div>
@@ -206,68 +212,67 @@ export default function Sidebar({ open, onClose }) {
   };
 
   const content = (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-5 border-b border-gray-200">
-        <Link to="/" className="flex items-center gap-2">
-          <img src={logo} alt="PayDrift logo" className="h-8 w-auto lg:h-10" />
-          <div className="flex flex-col">
-            <span className="text-lg font-bold text-gray-900">PayDrift</span>
-            <span className="text-[10px] text-gray-400 leading-tight">
-              {appMode === 'business' ? 'Business Mode' : 'Budget · Bills · Savings'}
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-border px-4 py-5">
+        <Link to="/" className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90">
+          <img src={logo} alt="PayDrift logo" className="h-8 w-auto rounded-lg lg:h-9" />
+          <div className="min-w-0 flex flex-col">
+            <span className="truncate text-base font-bold tracking-tight text-foreground">PayDrift</span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
+              {appMode === 'business' ? 'Business' : 'Personal finance'}
             </span>
           </div>
         </Link>
         <button
+          type="button"
           onClick={onClose}
-          className="lg:hidden flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface-subtle hover:text-foreground lg:hidden"
           aria-label="Close sidebar"
         >
           <X className="h-5 w-5" />
         </button>
       </div>
 
-      {/* Mode Toggle — Bundle plans only */}
       {showModeToggle && (
         <div className="px-3 pt-3 pb-1">
-          <div className="flex bg-gray-100 rounded-lg p-1">
+          <div className="flex rounded-xl border border-border bg-surface-subtle p-1">
             <button
+              type="button"
               onClick={() => handleModeSwitch('personal')}
               disabled={switching}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-medium transition-colors min-h-[44px] ${
+              className={cn(
+                'flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all',
                 appMode === 'personal'
-                  ? 'bg-white text-blue-700 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              } ${switching ? 'opacity-60' : ''}`}
+                  ? 'bg-surface text-accent-700 shadow-[var(--shadow-card)] ring-1 ring-border'
+                  : 'text-muted hover:text-foreground',
+                switching && 'opacity-60',
+              )}
             >
-              {switching && appMode !== 'personal' ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : null}
+              {switching && appMode !== 'personal' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Personal
             </button>
             <button
+              type="button"
               onClick={() => handleModeSwitch('business')}
               disabled={switching}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-medium transition-colors min-h-[44px] ${
+              className={cn(
+                'flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all',
                 appMode === 'business'
-                  ? 'bg-white text-purple-700 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              } ${switching ? 'opacity-60' : ''}`}
+                  ? 'bg-surface text-purple-700 shadow-[var(--shadow-card)] ring-1 ring-border'
+                  : 'text-muted hover:text-foreground',
+                switching && 'opacity-60',
+              )}
             >
-              {switching && appMode !== 'business' ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : null}
+              {switching && appMode !== 'business' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Business
             </button>
           </div>
         </div>
       )}
 
-      {/* Budget Switcher — below mode toggle, personal mode only */}
       {appMode === 'personal' && <BudgetSwitcher onClose={onClose} />}
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3" aria-label="Main navigation">
         {links.map(({ to, label, icon: Icon, warm, adminOnly, small }) => {
           if (adminOnly && !user?.is_admin) return null;
           return (
@@ -275,45 +280,58 @@ export default function Sidebar({ open, onClose }) {
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg font-medium transition-colors ${
+                cn(
+                  'group flex items-center gap-3 rounded-xl font-medium transition-all',
                   small
-                    ? `px-3 py-1.5 text-xs ${isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`
-                    : `px-3 py-2.5 text-sm ${
-                        isActive
-                          ? 'bg-blue-50 text-blue-700'
-                          : warm
-                            ? 'text-rose-500 hover:bg-rose-50 hover:text-rose-600'
-                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                      }`
-                }`
+                    ? 'px-3 py-2 text-xs'
+                    : 'min-h-[44px] px-3 py-2.5 text-sm',
+                  small
+                    ? isActive
+                      ? 'text-accent-600'
+                      : 'text-muted hover:text-foreground'
+                    : isActive
+                      ? 'bg-accent-50 text-accent-700 shadow-sm ring-1 ring-accent-100'
+                      : warm
+                        ? 'text-danger-600 hover:bg-danger-50'
+                        : 'text-muted hover:bg-surface-subtle hover:text-foreground',
+                )
               }
               onClick={onClose}
             >
-              <Icon className={`shrink-0 ${small ? 'h-4 w-4' : 'h-5 w-5'}`} />
-              {label}
+              <Icon
+                className={cn(
+                  'shrink-0 transition-colors',
+                  small ? 'h-4 w-4' : 'h-[18px] w-[18px]',
+                )}
+                strokeWidth={2}
+              />
+              <span className="truncate">{label}</span>
             </NavLink>
           );
         })}
       </nav>
 
-      {/* User footer */}
-      <div className="px-4 py-4 border-t border-gray-200">
-        <div className="flex items-center justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
+      <div className="border-t border-border px-4 py-4">
+        <div className="flex items-center gap-3 rounded-xl bg-surface-subtle/80 p-3 ring-1 ring-border/60">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-100 text-sm font-semibold text-accent-700">
+            {(user?.first_name || user?.email || '?')[0].toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-foreground">
               {user?.first_name} {user?.last_name}
             </p>
-            <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+            <p className="truncate text-caption">{user?.email}</p>
           </div>
           <button
+            type="button"
             onClick={logout}
-            className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+            className="rounded-lg p-2 text-muted transition-colors hover:bg-danger-50 hover:text-danger-600"
             aria-label="Log out"
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-4 w-4" />
           </button>
         </div>
-        <p className="text-[11px] text-gray-400 mt-2 text-center">PayDrift {APP_VERSION}</p>
+        <p className="text-caption mt-3 text-center">PayDrift {APP_VERSION}</p>
       </div>
     </div>
   );
@@ -330,16 +348,16 @@ export default function Sidebar({ open, onClose }) {
 
       {/* Mobile drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[86vw] bg-white border-r border-gray-200 transform transition-transform lg:hidden ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 w-72 max-w-[86vw] transform border-r border-border bg-surface transition-transform duration-300 ease-out lg:hidden',
+          open ? 'translate-x-0 shadow-xl' : '-translate-x-full',
+        )}
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {content}
       </aside>
 
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 bg-white border-r border-gray-200">
+      <aside className="fixed inset-y-0 z-30 hidden w-64 flex-col border-r border-border bg-surface lg:flex">
         {content}
       </aside>
     </>

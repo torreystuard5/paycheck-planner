@@ -16,7 +16,7 @@ import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import DateInput from '../components/DateInput';
 import usePolling from '../hooks/usePolling';
-import { Badge, Button, Card, IconStat, cn } from '../components/ui';
+import { Badge, Button, Card, IconStat, PageHeader, cn } from '../components/ui';
 
 const CATEGORIES = ['Housing', 'Utilities', 'Insurance', 'Transportation', 'Subscriptions', 'Food', 'Healthcare', 'Other'];
 const FREQUENCIES = [
@@ -629,7 +629,6 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
 
   if (loading) return <LoadingSpinner />;
 
-  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
   const statusTabs = [
     { label: 'All', value: '' },
     { label: 'Unpaid', value: 'unpaid' },
@@ -924,35 +923,35 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
   };
 
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
+    <div className={cn(embedded ? 'min-w-0 space-y-5' : 'page-container min-w-0')}>
       {!embedded && (
-      <div className="min-w-0">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Bills</h1>
-            <p className="text-sm text-gray-600 mt-1">Manage your recurring bills</p>
-            {lastUpdated && user?.household_id && (
-              <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
-            )}
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
-            <SortDropdown
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
-              options={sortOptions}
-            />
-            <ImportExportButton
-              onExport={handleExport}
-              onImport={() => { setShowImportModal(true); setImportResult(null); }}
-            />
-            <button onClick={openAdd} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
-              <Plus className="h-4 w-4" />
-              Add Bill
-            </button>
-          </div>
-        </div>
-      </div>
+        <>
+          <PageHeader
+            title="Bills"
+            description="Manage your recurring bills"
+            actions={
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+                <SortDropdown
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
+                  options={sortOptions}
+                />
+                <ImportExportButton
+                  onExport={handleExport}
+                  onImport={() => { setShowImportModal(true); setImportResult(null); }}
+                />
+                <Button variant="accent" onClick={openAdd} className="w-full sm:w-auto">
+                  <Plus className="h-4 w-4" />
+                  Add Bill
+                </Button>
+              </div>
+            }
+          />
+          {lastUpdated && user?.household_id && (
+            <p className="text-caption -mt-2">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+          )}
+        </>
       )}
 
       {embedded && !showHistory && (
@@ -975,7 +974,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">{error}</Card>
       )}
 
       {showHistory ? (
@@ -1180,22 +1179,22 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
       <Modal isOpen={showPayModal} onClose={() => { setShowPayModal(false); setPayTarget(null); }} title="Mark as Paid">
         <form onSubmit={handlePay} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Paid Amount</label>
+            <label className="form-label">Paid Amount</label>
             <input
               type="number"
               step="0.01"
               min="0.01"
               value={payForm.paid_amount}
               onChange={(e) => setPayForm({ ...payForm, paid_amount: e.target.value })}
-              className={inputClass}
+              className="form-input"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Paid Date</label>
+            <label className="form-label">Paid Date</label>
             <DateInput
               value={payForm.paid_date}
               onChange={(e) => setPayForm({ ...payForm, paid_date: e.target.value })}
-              className={inputClass}
+              className="form-input"
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
@@ -1273,11 +1272,11 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
       <Modal isOpen={showMemberPayModal} onClose={() => setShowMemberPayModal(false)} title="Record Member Payment">
         <form onSubmit={handleMemberPayment} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Paid By</label>
+            <label className="form-label">Paid By</label>
             <select
               value={memberPayForm.member_id}
               onChange={(e) => handleMemberSelect(e.target.value)}
-              className={inputClass}
+              className="form-input"
             >
               <option value="">Select member...</option>
               {householdMembers.map((m) => (
@@ -1288,22 +1287,22 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+            <label className="form-label">Amount</label>
             <input
               type="number"
               step="0.01"
               min="0.01"
               value={memberPayForm.amount_paid}
               onChange={(e) => setMemberPayForm({ ...memberPayForm, amount_paid: e.target.value })}
-              className={inputClass}
+              className="form-input"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <label className="form-label">Date</label>
             <DateInput
               value={memberPayForm.paid_at}
               onChange={(e) => setMemberPayForm({ ...memberPayForm, paid_at: e.target.value })}
-              className={inputClass}
+              className="form-input"
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
@@ -1319,17 +1318,17 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingBill ? 'Edit Bill' : 'Add Bill'}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
+            <label className="form-label">Name</label>
+            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="form-input" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
+              <label className="form-label">Amount</label>
+              <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="form-input" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
-              <select value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value })} className={inputClass}>
+              <label className="form-label">Frequency</label>
+              <select value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value })} className="form-input">
                 {FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
               </select>
             </div>
@@ -1356,25 +1355,25 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
               </div>
               {form.frequency === 'biweekly' && (
                 <div className="mt-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date (anchor for biweekly cycle)</label>
+                  <label className="form-label">Start Date (anchor for biweekly cycle)</label>
                   <DateInput
                     value={form.start_date}
                     onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-                    className={inputClass}
+                    className="form-input"
                   />
                 </div>
               )}
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Due Day</label>
-              <input type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className={inputClass} />
+              <label className="form-label">Due Day</label>
+              <input type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} className="form-input" />
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={inputClass}>
+            <label className="form-label">Category</label>
+            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="form-input">
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
@@ -1418,11 +1417,11 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
 
               {form.payment_mode === 'single' && (
                 <div className="mt-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
+                  <label className="form-label">Assigned To</label>
                   <select
                     value={form.assigned_member_id}
                     onChange={(e) => setForm({ ...form, assigned_member_id: e.target.value })}
-                    className={inputClass}
+                    className="form-input"
                   >
                     <option value="">Bill owner (default)</option>
                     {householdMembers.map((m) => (
@@ -1437,8 +1436,8 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Days</label>
-            <input type="number" min="0" max="30" value={form.reminder_days} onChange={(e) => setForm({ ...form, reminder_days: e.target.value })} className={inputClass} />
+            <label className="form-label">Reminder Days</label>
+            <input type="number" min="0" max="30" value={form.reminder_days} onChange={(e) => setForm({ ...form, reminder_days: e.target.value })} className="form-input" />
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" id="auto_pay" checked={form.auto_pay} onChange={(e) => setForm({ ...form, auto_pay: e.target.checked })} className="rounded border-gray-300" />
@@ -1450,18 +1449,20 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
           </div>
           {form.is_tax_deductible && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tax Category</label>
-              <select value={form.tax_category} onChange={(e) => setForm({ ...form, tax_category: e.target.value })} className={inputClass}>
+              <label className="form-label">Tax Category</label>
+              <select value={form.tax_category} onChange={(e) => setForm({ ...form, tax_category: e.target.value })} className="form-input">
                 <option value="">Select category...</option>
                 {TAX_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           )}
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
-            <button type="button" onClick={() => setShowModal(false)} className="min-h-[44px] px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {saving ? 'Saving...' : editingBill ? 'Update' : 'Create'}
-            </button>
+            <Button type="button" variant="secondary" onClick={() => setShowModal(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="accent" disabled={saving}>
+              {saving ? 'Saving…' : editingBill ? 'Update' : 'Create'}
+            </Button>
           </div>
         </form>
       </Modal>

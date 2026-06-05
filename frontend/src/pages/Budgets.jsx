@@ -5,6 +5,7 @@ import { useBudget } from '../context/BudgetContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { Badge, Button, Card, PageHeader } from '../components/ui';
 
 const PRESET_COLORS = [
   '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
@@ -173,23 +174,20 @@ export default function Budgets() {
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Budgets</h1>
-          <p className="text-gray-600 mt-1">Create and manage your budget workspaces</p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium min-h-[44px]"
-        >
-          <Plus className="w-4 h-4" />
-          Create budget
-        </button>
-      </div>
+    <div className="page-container min-w-0">
+      <PageHeader
+        title="Budgets"
+        description="Create and manage your budget workspaces"
+        actions={
+          <Button variant="accent" onClick={openCreate} className="w-full sm:w-auto">
+            <Plus className="h-4 w-4" />
+            Create budget
+          </Button>
+        }
+      />
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
+        <Card className="border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">{error}</Card>
       )}
 
       {/* Active budgets list */}
@@ -200,7 +198,7 @@ export default function Budgets() {
           const busy = !!actionLoading[b.id];
 
           return (
-            <div key={b.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-5">
+            <Card key={b.id} className="p-4 sm:p-5">
               <div className="flex items-start gap-3">
                 {/* Color swatch */}
                 <span
@@ -291,7 +289,7 @@ export default function Budgets() {
                   )}
                 </div>
               </div>
-            </div>
+            </Card>
           );
         })}
         {budgets.length === 0 && !loading && (

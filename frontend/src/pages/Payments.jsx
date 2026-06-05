@@ -11,6 +11,7 @@ import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import DateInput from '../components/DateInput';
 import usePolling from '../hooks/usePolling';
+import { Badge, Button, Card, PageHeader } from '../components/ui';
 
 // Payment form uses backend fields: bill_id/debt_id (UUID), amount, paid_date, pay_period_date, is_extra
 
@@ -174,21 +175,16 @@ export default function Payments() {
     }
   };
 
-  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Payment History</h1>
-          <p className="text-sm text-gray-600 mt-1">View and manage your payments</p>
-          {lastUpdated && user?.household_id && (
-            <p className="text-xs text-gray-400 mt-0.5">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="page-container min-w-0">
+      <PageHeader
+        title="Payment History"
+        description="View and manage your payments"
+        actions={
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <div className="relative" ref={exportRef}>
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
@@ -209,15 +205,19 @@ export default function Payments() {
               </div>
             )}
           </div>
-          <button onClick={() => setShowModal(true)} className="flex min-h-[44px] items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+          <Button variant="accent" onClick={() => setShowModal(true)} className="w-full sm:w-auto">
             <Plus className="h-4 w-4" />
             Record Payment
-          </button>
+          </Button>
         </div>
-      </div>
+        }
+      />
+      {lastUpdated && user?.household_id && (
+        <p className="text-caption -mt-2">Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</p>
+      )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">{error}</Card>
       )}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -225,21 +225,21 @@ export default function Payments() {
           <DateInput
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+            className="form-input min-w-0 flex-1"
             aria-label="Start date"
           />
-          <span className="shrink-0 text-sm text-gray-400">to</span>
+          <span className="shrink-0 text-caption">to</span>
           <DateInput
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+            className="form-input min-w-0 flex-1"
             aria-label="End date"
           />
         </div>
-        <button onClick={handleFilter} className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+        <Button variant="accent" onClick={handleFilter} className="w-full sm:w-auto">
           <Filter className="h-4 w-4" />
           Filter
-        </button>
+        </Button>
       </div>
 
       {payments.length === 0 ? (
@@ -258,7 +258,7 @@ export default function Payments() {
                   ? formatFriendlyDate(payment.derived_pay_period_date)
                   : null;
               return (
-                <div key={payment.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <Card key={payment.id} className="p-4 transition-shadow hover:shadow-[var(--shadow-card-hover)]">
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-gray-900">
                       {payment.paid_date ? formatFriendlyDate(payment.paid_date) : '--'}
@@ -266,8 +266,8 @@ export default function Payments() {
                     <CurrencyDisplay amount={payment.amount} className="font-semibold text-gray-900" />
                   </div>
                   <div className="mt-2 flex items-center gap-2">
-                    {payment.bill_id && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Bill</span>}
-                    {payment.debt_id && <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">Debt</span>}
+                    {payment.bill_id && <Badge variant="info" className="normal-case">Bill</Badge>}
+                    {payment.debt_id && <Badge variant="debt" className="normal-case">Debt</Badge>}
                     <span className="text-sm text-gray-700 truncate">{billName || debtName || 'Payment'}</span>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
@@ -298,23 +298,22 @@ export default function Payments() {
                       Delete
                     </button>
                   </div>
-                </div>
+                </Card>
               );
             })}
           </div>
 
-          {/* Desktop table layout */}
-          <div className="hidden sm:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <Card className="hidden overflow-hidden sm:block">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50">
+                <thead className="bg-surface-subtle/80">
                   <tr>
-                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Paid Date</th>
-                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Pay Period</th>
-                    <th className="text-left px-6 py-3 text-gray-600 font-medium">For</th>
-                    <th className="text-right px-6 py-3 text-gray-600 font-medium">Amount</th>
-                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Type</th>
-                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Source</th>
+                    <th className="px-6 py-3 text-left font-medium text-muted">Paid Date</th>
+                    <th className="px-6 py-3 text-left font-medium text-muted">Pay Period</th>
+                    <th className="px-6 py-3 text-left font-medium text-muted">For</th>
+                    <th className="px-6 py-3 text-right font-medium text-muted">Amount</th>
+                    <th className="px-6 py-3 text-left font-medium text-muted">Type</th>
+                    <th className="px-6 py-3 text-left font-medium text-muted">Source</th>
                     <th className="px-6 py-3"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
@@ -329,7 +328,7 @@ export default function Payments() {
                         ? formatFriendlyDate(payment.derived_pay_period_date)
                         : '—';
                     return (
-                      <tr key={payment.id} className="border-t border-gray-100 hover:bg-gray-50">
+                      <tr key={payment.id} className="border-t border-border/60 transition-colors hover:bg-surface-subtle/50">
                         <td className="px-6 py-4 text-gray-900">
                           {payment.paid_date ? formatFriendlyDate(payment.paid_date) : '--'}
                         </td>
@@ -369,7 +368,7 @@ export default function Payments() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </Card>
         </>
       )}
 
@@ -404,7 +403,7 @@ export default function Payments() {
                 <select
                   value={form.bill_id}
                   onChange={(e) => setForm({ ...form, bill_id: e.target.value, debt_id: '' })}
-                  className={inputClass}
+                  className="form-input"
                 >
                   <option value="">None</option>
                   {bills.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -415,7 +414,7 @@ export default function Payments() {
                 <select
                   value={form.debt_id}
                   onChange={(e) => setForm({ ...form, debt_id: e.target.value, bill_id: '' })}
-                  className={inputClass}
+                  className="form-input"
                 >
                   <option value="">None</option>
                   {debts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -426,17 +425,17 @@ export default function Payments() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputClass} />
+              <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="form-input" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Paid Date</label>
-              <DateInput value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} className={inputClass} />
+              <DateInput value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} className="form-input" />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pay Period Date</label>
-              <DateInput value={form.pay_period_date} onChange={(e) => setForm({ ...form, pay_period_date: e.target.value })} className={inputClass} />
+              <DateInput value={form.pay_period_date} onChange={(e) => setForm({ ...form, pay_period_date: e.target.value })} className="form-input" />
             </div>
             <div className="flex items-center gap-2 sm:pt-6">
               <input type="checkbox" id="is_extra" checked={form.is_extra} onChange={(e) => setForm({ ...form, is_extra: e.target.checked })} className="rounded border-gray-300" />

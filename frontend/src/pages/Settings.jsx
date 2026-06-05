@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Save, User, DollarSign, Download, Loader2, Calendar, Plus, Edit, Trash2, Clock, Briefcase } from 'lucide-react';
+import { Save, User, DollarSign, Download, Loader2, Calendar, Plus, Edit, Trash2, Clock, Briefcase, Palette } from 'lucide-react';
+import ThemePreferencePicker from '../components/ThemePreferencePicker';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -9,6 +10,15 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { getFormatPreview, formatFriendlyDate } from '../utils/formatDate';
 import DateInput from '../components/DateInput';
 import { APP_VERSION } from '../config';
+import {
+  Badge,
+  Button,
+  Card,
+  FilterChips,
+  PageHeader,
+  SettingsSection,
+  cn,
+} from '../components/ui';
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const SCHEDULE_FREQUENCIES = ['weekly', 'biweekly', 'semi_monthly', 'monthly'];
@@ -270,72 +280,48 @@ export default function Settings() {
 
   const dayOptions = Array.from({ length: 28 }, (_, i) => i + 1);
 
-  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
-
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Settings</h1>
-        <p className="text-sm text-gray-600 mt-1">Manage your account preferences</p>
-      </div>
+    <div className="page-container min-w-0">
+      <PageHeader
+        title="Settings"
+        description="Manage your account, pay schedule, and app preferences"
+      />
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">{error}</Card>
       )}
       {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">Settings saved successfully.</div>
+        <Card className="border-brand-200 bg-brand-50 p-3 text-sm text-brand-700">Settings saved successfully.</Card>
       )}
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 overflow-x-auto -mx-3 px-3 sm:-mx-4 sm:px-4 md:mx-0 md:px-0">
-        <nav className="flex gap-1 min-w-max" aria-label="Settings tabs">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap min-h-[44px] ${
-                activeTab === tab.key
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50/50'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <FilterChips options={TABS} value={activeTab} onChange={setActiveTab} />
 
       {/* Tab: Account */}
       {activeTab === 'account' && (
-        <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <User className="w-5 h-5 text-blue-500" />
-              Profile
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleSave} className="mx-auto max-w-2xl space-y-5">
+          <SettingsSection title="Profile" icon={User} iconTone="accent">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="s-first" className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                <input id="s-first" type="text" value={profile.first_name} onChange={(e) => setProfile({ ...profile, first_name: e.target.value })} className={inputClass} />
+                <label htmlFor="s-first" className="form-label">First Name</label>
+                <input id="s-first" type="text" value={profile.first_name} onChange={(e) => setProfile({ ...profile, first_name: e.target.value })} className="form-input" />
               </div>
               <div>
-                <label htmlFor="s-last" className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                <input id="s-last" type="text" value={profile.last_name} onChange={(e) => setProfile({ ...profile, last_name: e.target.value })} className={inputClass} />
+                <label htmlFor="s-last" className="form-label">Last Name</label>
+                <input id="s-last" type="text" value={profile.last_name} onChange={(e) => setProfile({ ...profile, last_name: e.target.value })} className="form-input" />
               </div>
               <div className="sm:col-span-2">
-                <label htmlFor="s-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input id="s-email" type="email" value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className={inputClass} />
+                <label htmlFor="s-email" className="form-label">Email</label>
+                <input id="s-email" type="email" value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className="form-input" />
               </div>
             </div>
-          </div>
+          </SettingsSection>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Currency</h2>
+          <SettingsSection title="Currency" description="How amounts are displayed across the app" icon={DollarSign} iconTone="brand">
             <div className="max-w-xs">
-              <label htmlFor="s-curr" className="block text-sm font-medium text-gray-700 mb-1">Display Currency</label>
-              <select id="s-curr" value={preferences.currency} onChange={(e) => setPreferences({ ...preferences, currency: e.target.value })} className={inputClass}>
+              <label htmlFor="s-curr" className="form-label">Display Currency</label>
+              <select id="s-curr" value={preferences.currency} onChange={(e) => setPreferences({ ...preferences, currency: e.target.value })} className="form-input">
                 <option value="USD">USD ($)</option>
                 <option value="EUR">EUR</option>
                 <option value="GBP">GBP</option>
@@ -343,15 +329,11 @@ export default function Settings() {
                 <option value="AUD">AUD</option>
               </select>
             </div>
-          </div>
+          </SettingsSection>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-500" />
-              Date Format
-            </h2>
+          <SettingsSection title="Date Format" icon={Calendar} iconTone="purple">
             <div className="max-w-xs">
-              <label htmlFor="s-datefmt" className="block text-sm font-medium text-gray-700 mb-1">Display Format</label>
+              <label htmlFor="s-datefmt" className="form-label">Display Format</label>
               <select
                 id="s-datefmt"
                 value={dateFormat}
@@ -362,40 +344,41 @@ export default function Settings() {
                     await api.patch('/api/v1/auth/me/date-format', { date_format: newFormat });
                   } catch {}
                 }}
-                className={inputClass}
+                className="form-input"
               >
                 <option value="MM/DD/YYYY">MM/DD/YYYY (US)</option>
                 <option value="DD/MM/YYYY">DD/MM/YYYY (International)</option>
                 <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
               </select>
-              <p className="mt-2 text-sm text-gray-500">
-                Preview: <span className="font-medium text-gray-700">{getFormatPreview(dateFormat)}</span>
+              <p className="text-caption mt-2">
+                Preview: <span className="font-medium text-foreground">{getFormatPreview(dateFormat)}</span>
               </p>
             </div>
-          </div>
+          </SettingsSection>
 
           <div className="flex justify-end">
-            <button type="submit" disabled={saving} className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              <Save className="w-4 h-4" />
+            <Button type="submit" variant="accent" disabled={saving}>
+              <Save className="h-4 w-4" />
               {saving ? 'Saving...' : 'Save Changes'}
-            </button>
+            </Button>
           </div>
         </form>
       )}
 
       {/* Tab: Pay & Schedule */}
       {activeTab === 'pay' && (
-        <div className="space-y-6 max-w-2xl">
+        <div className="mx-auto max-w-2xl space-y-5">
           <form onSubmit={handleSave}>
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-green-500" />
-                Pay Schedule
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SettingsSection
+              title="Pay Schedule"
+              description="Default pay frequency and amount for planning"
+              icon={DollarSign}
+              iconTone="brand"
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="s-freq" className="block text-sm font-medium text-gray-700 mb-1">Pay Frequency</label>
-                  <select id="s-freq" value={preferences.pay_frequency} onChange={(e) => setPreferences({ ...preferences, pay_frequency: e.target.value })} className={inputClass}>
+                  <label htmlFor="s-freq" className="form-label">Pay Frequency</label>
+                  <select id="s-freq" value={preferences.pay_frequency} onChange={(e) => setPreferences({ ...preferences, pay_frequency: e.target.value })} className="form-input">
                     <option value="weekly">Weekly</option>
                     <option value="biweekly">Biweekly</option>
                     <option value="semi_monthly">Semi-Monthly</option>
@@ -403,90 +386,85 @@ export default function Settings() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="s-npd" className="block text-sm font-medium text-gray-700 mb-1">Next Pay Date</label>
-                  <input id="s-npd" type="date" value={preferences.next_pay_date} onChange={(e) => setPreferences({ ...preferences, next_pay_date: e.target.value })} className={inputClass} />
+                  <label htmlFor="s-npd" className="form-label">Next Pay Date</label>
+                  <input id="s-npd" type="date" value={preferences.next_pay_date} onChange={(e) => setPreferences({ ...preferences, next_pay_date: e.target.value })} className="form-input" />
                 </div>
                 <div>
-                  <label htmlFor="s-net" className="block text-sm font-medium text-gray-700 mb-1">Net Pay Amount</label>
-                  <input id="s-net" type="number" step="0.01" value={preferences.net_pay_amount} onChange={(e) => setPreferences({ ...preferences, net_pay_amount: e.target.value })} className={inputClass} />
+                  <label htmlFor="s-net" className="form-label">Net Pay Amount</label>
+                  <input id="s-net" type="number" step="0.01" value={preferences.net_pay_amount} onChange={(e) => setPreferences({ ...preferences, net_pay_amount: e.target.value })} className="form-input" />
                 </div>
               </div>
-              <div className="flex justify-end mt-4">
-                <button type="submit" disabled={saving} className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                  <Save className="w-4 h-4" />
+              <div className="mt-4 flex justify-end">
+                <Button type="submit" variant="accent" disabled={saving}>
+                  <Save className="h-4 w-4" />
                   {saving ? 'Saving...' : 'Save Changes'}
-                </button>
+                </Button>
               </div>
-            </div>
+            </SettingsSection>
           </form>
 
-          {/* Paycheck Schedule Management */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Clock className="w-5 h-5 text-blue-500" />
-                Paycheck Schedule
-              </h2>
-              <button
-                onClick={openAddSchedule}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Add Schedule
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Configure your paycheck schedules to enable pay period bill grouping.
-            </p>
-
+          <SettingsSection
+            title="Paycheck Schedules"
+            description="Configure schedules for pay period bill grouping"
+            icon={Clock}
+            iconTone="accent"
+            actions={
+              <Button variant="accent" size="sm" onClick={openAddSchedule}>
+                <Plus className="h-4 w-4" />
+                Add
+              </Button>
+            }
+          >
             {schedules.length === 0 ? (
-              <div className="text-center py-6">
-                <Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No paycheck schedules configured yet.</p>
+              <div className="py-8 text-center">
+                <Clock className="mx-auto mb-2 h-8 w-8 text-muted" />
+                <p className="text-body">No paycheck schedules configured yet.</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {schedules.map((schedule) => (
-                  <div key={schedule.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
-                    <div>
+                  <Card key={schedule.id} variant="inset" className="flex items-center justify-between gap-3 p-4">
+                    <div className="min-w-0">
                       {schedule.income_source_name && (
-                        <p className="text-sm font-medium text-gray-900">{schedule.income_source_name}</p>
+                        <p className="font-medium text-foreground">{schedule.income_source_name}</p>
                       )}
-                      <p className="text-sm text-gray-600">{describeSchedule(schedule)}</p>
+                      <p className="text-caption">{describeSchedule(schedule)}</p>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEditSchedule(schedule)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteScheduleTarget(schedule)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEditSchedule(schedule)} className="min-h-8 px-1.5" aria-label="Edit schedule">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setDeleteScheduleTarget(schedule)} className="min-h-8 px-1.5 text-danger-600" aria-label="Delete schedule">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             )}
-          </div>
+          </SettingsSection>
         </div>
       )}
 
       {/* Tab: App */}
       {activeTab === 'app' && (
-        <div className="space-y-6 max-w-2xl">
-          {/* Mode Selection — no tier gate, early access = everyone can switch */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Briefcase className="w-5 h-5 text-purple-500" />
-              App Mode
-            </h2>
-            <p className="text-sm text-gray-600 mb-4">Switch between Personal and Business mode to change your sidebar and dashboard.</p>
-            <div className="flex gap-3">
+        <div className="mx-auto max-w-2xl space-y-5">
+          <SettingsSection
+            title="Appearance"
+            description="Choose light, dark, or match your device"
+            icon={Palette}
+            iconTone="accent"
+          >
+            <ThemePreferencePicker />
+          </SettingsSection>
+
+          <SettingsSection
+            title="App Mode"
+            description="Switch between Personal and Business mode"
+            icon={Briefcase}
+            iconTone="purple"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={async () => {
@@ -496,13 +474,14 @@ export default function Settings() {
                     navigate('/dashboard');
                   } catch {}
                 }}
-                className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                className={cn(
+                  'flex min-h-[52px] items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all',
                   user?.app_mode === 'personal' || !user?.app_mode
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                }`}
+                    ? 'border-accent-500 bg-accent-50 text-accent-700 shadow-sm'
+                    : 'border-border bg-surface text-muted hover:border-border hover:bg-surface-subtle',
+                )}
               >
-                <User className="w-4 h-4" />
+                <User className="h-4 w-4" />
                 Personal
               </button>
               <button
@@ -514,33 +493,36 @@ export default function Settings() {
                     navigate('/business/dashboard');
                   } catch {}
                 }}
-                className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                className={cn(
+                  'flex min-h-[52px] items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all',
                   user?.app_mode === 'business'
-                    ? 'border-purple-500 bg-purple-50 text-purple-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                }`}
+                    ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm'
+                    : 'border-border bg-surface text-muted hover:border-border hover:bg-surface-subtle',
+                )}
               >
-                <Briefcase className="w-4 h-4" />
+                <Briefcase className="h-4 w-4" />
                 Business
               </button>
             </div>
-          </div>
+          </SettingsSection>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Subscription</h2>
-            <p className="text-sm text-gray-600 mb-3">
+          <SettingsSection title="Subscription" description="Your current plan and billing">
+            <p className="text-body mb-3">
               Plan: <strong>{user?.subscription_tier || 'early_access'}</strong>
               {user?.subscription_tier === 'early_access' && (
-                <span className="text-green-600"> (full access during early access)</span>
+                <Badge variant="success" className="ml-2 normal-case">Full early access</Badge>
               )}
             </p>
             <div className="flex flex-wrap gap-2">
-              <Link to="/upgrade" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+              <Link
+                to="/upgrade"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-700"
+              >
                 View plans / Upgrade
               </Link>
-              <button
+              <Button
+                variant="secondary"
                 type="button"
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                 onClick={async () => {
                   try {
                     const { data } = await api.post('/api/v1/billing/portal');
@@ -552,19 +534,18 @@ export default function Settings() {
                 }}
               >
                 Manage billing
-              </button>
+              </Button>
             </div>
-          </div>
+          </SettingsSection>
 
           {user?.app_mode === 'business' && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Business expense defaults</h2>
-              <p className="text-sm text-gray-600 mb-4">
-                Mileage reimbursement rate per mile (used on the Deductions page for mileage entries). The IRS 2026 optional standard business rate is $0.70/mile.
+            <SettingsSection title="Business expense defaults" description="Mileage reimbursement rate per mile">
+              <p className="text-caption mb-4">
+                Used on the Deductions page. IRS 2026 optional standard business rate is $0.70/mile.
               </p>
-              <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-wrap items-end gap-3">
                 <div className="min-w-[10rem]">
-                  <label htmlFor="mileage-rate" className="block text-xs text-gray-500 mb-1">Dollars per mile</label>
+                  <label htmlFor="mileage-rate" className="form-label">Dollars per mile</label>
                   <input
                     id="mileage-rate"
                     type="number"
@@ -573,58 +554,51 @@ export default function Settings() {
                     max="50"
                     value={mileageRate}
                     onChange={(e) => setMileageRate(e.target.value)}
-                    className={inputClass}
+                    className="form-input"
                   />
                 </div>
-                <button type="button" onClick={saveMileage} disabled={mileageSaving} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50">
+                <Button type="button" onClick={saveMileage} disabled={mileageSaving} className="bg-purple-600 text-white hover:bg-purple-700">
                   {mileageSaving ? 'Saving…' : 'Save mileage rate'}
-                </button>
+                </Button>
               </div>
-            </div>
+            </SettingsSection>
           )}
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
-              <Download className="w-5 h-5 text-blue-500" />
-              Export All Data
-            </h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Download all your bills, debts, and payment history in a single Excel file.
-            </p>
-            <button
-              onClick={handleExportAll}
-              disabled={exporting}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
+          <SettingsSection
+            title="Export All Data"
+            description="Download bills, debts, and payment history"
+            icon={Download}
+            iconTone="accent"
+          >
+            <Button onClick={handleExportAll} disabled={exporting} variant="accent">
               {exporting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Exporting...
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4" />
+                  <Download className="h-4 w-4" />
                   Export All Data
                 </>
               )}
-            </button>
-          </div>
+            </Button>
+          </SettingsSection>
         </div>
       )}
 
-      {/* Version footer */}
-      <p className="text-xs text-gray-400 text-center pt-4">PayDrift {APP_VERSION}</p>
+      <p className="text-caption text-center">PayDrift {APP_VERSION}</p>
 
       {/* Paycheck Schedule Modal */}
       <Modal isOpen={showScheduleModal} onClose={() => setShowScheduleModal(false)} title={editingSchedule ? 'Edit Schedule' : 'Add Paycheck Schedule'}>
         <form onSubmit={handleScheduleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Income Source Name (optional)</label>
+            <label className="form-label">Income Source Name (optional)</label>
             <input
               type="text"
               value={scheduleForm.income_source_name}
               onChange={(e) => setScheduleForm({ ...scheduleForm, income_source_name: e.target.value })}
-              className={inputClass}
+              className="form-input"
               placeholder="e.g. Main Job, Side Gig"
             />
           </div>
@@ -634,7 +608,7 @@ export default function Settings() {
             <select
               value={scheduleForm.frequency}
               onChange={(e) => setScheduleForm({ ...scheduleForm, frequency: e.target.value })}
-              className={inputClass}
+              className="form-input"
             >
               {SCHEDULE_FREQUENCIES.map((f) => (
                 <option key={f} value={f}>{f.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
@@ -649,7 +623,7 @@ export default function Settings() {
               <select
                 value={scheduleForm.day_of_week}
                 onChange={(e) => setScheduleForm({ ...scheduleForm, day_of_week: e.target.value })}
-                className={inputClass}
+                className="form-input"
               >
                 {DAY_NAMES.map((name, idx) => (
                   <option key={idx} value={idx}>{name}</option>
@@ -666,7 +640,7 @@ export default function Settings() {
                 <select
                   value={scheduleForm.day_of_week}
                   onChange={(e) => setScheduleForm({ ...scheduleForm, day_of_week: e.target.value })}
-                  className={inputClass}
+                  className="form-input"
                 >
                   {DAY_NAMES.map((name, idx) => (
                     <option key={idx} value={idx}>{name}</option>
@@ -678,7 +652,7 @@ export default function Settings() {
                 <DateInput
                   value={scheduleForm.anchor_date}
                   onChange={(e) => setScheduleForm({ ...scheduleForm, anchor_date: e.target.value })}
-                  className={inputClass}
+                  className="form-input"
                 />
                 <p className="text-xs text-gray-500 mt-1">Enter the date of your most recent paycheck to anchor the biweekly cycle.</p>
               </div>
@@ -693,7 +667,7 @@ export default function Settings() {
                 <select
                   value={scheduleForm.first_day}
                   onChange={(e) => setScheduleForm({ ...scheduleForm, first_day: e.target.value })}
-                  className={inputClass}
+                  className="form-input"
                 >
                   {dayOptions.map((d) => (
                     <option key={d} value={d}>{d}{getOrdinal(d)}</option>
@@ -705,7 +679,7 @@ export default function Settings() {
                 <select
                   value={scheduleForm.second_day}
                   onChange={(e) => setScheduleForm({ ...scheduleForm, second_day: e.target.value })}
-                  className={inputClass}
+                  className="form-input"
                 >
                   {dayOptions.map((d) => (
                     <option key={d} value={d}>{d}{getOrdinal(d)}</option>
@@ -722,7 +696,7 @@ export default function Settings() {
               <select
                 value={scheduleForm.day_of_month}
                 onChange={(e) => setScheduleForm({ ...scheduleForm, day_of_month: e.target.value })}
-                className={inputClass}
+                className="form-input"
               >
                 {dayOptions.map((d) => (
                   <option key={d} value={d}>{d}{getOrdinal(d)}</option>
@@ -732,10 +706,10 @@ export default function Settings() {
           )}
 
           <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setShowScheduleModal(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" disabled={scheduleSaving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            <Button type="button" variant="ghost" onClick={() => setShowScheduleModal(false)}>Cancel</Button>
+            <Button type="submit" variant="accent" disabled={scheduleSaving}>
               {scheduleSaving ? 'Saving...' : editingSchedule ? 'Update' : 'Create'}
-            </button>
+            </Button>
           </div>
         </form>
       </Modal>

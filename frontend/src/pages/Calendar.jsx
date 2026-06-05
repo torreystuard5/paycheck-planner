@@ -15,6 +15,7 @@ import {
 import api from '../services/api';
 import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { Button, Card, FilterChips, PageHeader } from '../components/ui';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = [
@@ -241,81 +242,57 @@ export default function Calendar() {
     .sort((a, b) => a.day - b.day);
 
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <CalendarIcon className="h-6 w-6 text-blue-600 sm:h-7 sm:w-7" />
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Calendar</h1>
-      </div>
+    <div className="page-container min-w-0">
+      <PageHeader title="Calendar" description="Bills, debts, and paychecks at a glance" />
 
-      {/* View toggle */}
       <div className="flex justify-center">
-        <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-          <button
-            onClick={() => setView('household')}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-              view === 'household'
-                ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Household
-          </button>
-          <button
-            onClick={() => setView('personal')}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-              view === 'personal'
-                ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Personal
-          </button>
-        </div>
+        <FilterChips
+          options={[
+            { key: 'household', label: 'Household' },
+            { key: 'personal', label: 'Personal' },
+          ]}
+          value={view}
+          onChange={setView}
+        />
       </div>
 
-      {/* Month nav */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <button onClick={goPrev} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
-            <ChevronLeft className="h-4 w-4 text-gray-600" />
-          </button>
-          <h2 className="text-base font-semibold text-gray-900 w-[140px] text-center sm:w-[180px] sm:text-lg">
+          <Button variant="secondary" size="sm" onClick={goPrev} className="min-h-10 min-w-10 p-2">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <h2 className="w-[140px] text-center text-title sm:w-[180px]">
             {MONTH_NAMES[month]} {year}
           </h2>
-          <button onClick={goNext} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
-            <ChevronRight className="h-4 w-4 text-gray-600" />
-          </button>
+          <Button variant="secondary" size="sm" onClick={goNext} className="min-h-10 min-w-10 p-2">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
-        <button
-          onClick={goToday}
-          className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-        >
+        <Button variant="ghost" size="sm" onClick={goToday} className="text-accent-600">
           Today
-        </button>
+        </Button>
       </div>
 
-      {/* Summary bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-500 mb-1">Bills Due</p>
-          <p className="text-lg font-bold text-gray-900">{formatCurrency(totalBills)}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{billsPaid}/{billsTotal} paid</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-500 mb-1">Debt Payments</p>
-          <p className="text-lg font-bold text-gray-900">{formatCurrency(totalDebts)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-500 mb-1">Paychecks</p>
-          <p className="text-lg font-bold text-emerald-600">{formatCurrency(totalPaychecks)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-500 mb-1">Net</p>
-          <p className={`text-lg font-bold ${net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+      <div className="card-grid">
+        <Card className="p-4 sm:p-5">
+          <p className="text-caption mb-1">Bills due</p>
+          <p className="text-money">{formatCurrency(totalBills)}</p>
+          <p className="text-caption mt-0.5">{billsPaid}/{billsTotal} paid</p>
+        </Card>
+        <Card className="p-4 sm:p-5">
+          <p className="text-caption mb-1">Debt payments</p>
+          <p className="text-money text-debt-600">{formatCurrency(totalDebts)}</p>
+        </Card>
+        <Card className="p-4 sm:p-5">
+          <p className="text-caption mb-1">Paychecks</p>
+          <p className="text-money text-brand-600">{formatCurrency(totalPaychecks)}</p>
+        </Card>
+        <Card className="p-4 sm:p-5">
+          <p className="text-caption mb-1">Net</p>
+          <p className={`text-money ${net >= 0 ? 'text-brand-600' : 'text-danger-600'}`}>
             {net >= 0 ? '+' : ''}{formatCurrency(net)}
           </p>
-        </div>
+        </Card>
       </div>
 
       {loading ? (
@@ -323,11 +300,11 @@ export default function Calendar() {
       ) : (
         <>
           {/* Desktop grid */}
-          <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <Card className="hidden overflow-hidden md:block">
             {/* Day headers */}
-            <div className="grid grid-cols-7 border-b border-gray-200">
+            <div className="grid grid-cols-7 border-b border-border bg-surface-subtle/60">
               {DAYS.map(d => (
-                <div key={d} className="px-2 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">{d}</div>
+                <div key={d} className="px-2 py-2.5 text-center text-xs font-semibold uppercase text-muted">{d}</div>
               ))}
             </div>
 
@@ -343,16 +320,16 @@ export default function Calendar() {
                   return (
                     <div
                       key={ci}
-                      className={`min-h-[100px] p-1.5 border-r border-gray-100 last:border-r-0 ${
-                        !cell.current ? 'bg-gray-50' : ''
-                      } ${isToday(cell.day, cell.current) ? 'bg-blue-50/50' : ''}`}
+                      className={`min-h-[100px] border-r border-border/60 p-1.5 last:border-r-0 ${
+                        !cell.current ? 'bg-surface-subtle/40' : ''
+                      } ${isToday(cell.day, cell.current) ? 'bg-accent-50/60' : ''}`}
                       onClick={() => cell.current && dayEvents.length > 3 && setExpandedDay(expanded ? null : cell.day)}
                     >
                       <div className={`text-xs font-medium mb-1 ${
                         !cell.current ? 'text-gray-300'
                           : isToday(cell.day, cell.current)
-                            ? 'text-white bg-blue-600 w-6 h-6 rounded-full flex items-center justify-center'
-                            : 'text-gray-700'
+                            ? 'flex h-6 w-6 items-center justify-center rounded-full bg-accent-600 text-white'
+                            : 'text-foreground'
                       }`}>
                         {cell.day}
                       </div>
@@ -371,7 +348,7 @@ export default function Calendar() {
                 })}
               </div>
             ))}
-          </div>
+          </Card>
 
           {/* Mobile agenda */}
           <div className="md:hidden space-y-3">

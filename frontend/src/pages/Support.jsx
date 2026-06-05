@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Send, Loader2, ChevronDown, ChevronUp, HelpCircle, MessageSquare, AlertCircle, Clock, ArrowRightCircle, CheckCircle2 } from 'lucide-react';
 import api from '../services/api';
 import { formatFriendlyDate } from '../utils/formatDate';
+import { Badge, Button, Card, PageHeader, SettingsSection } from '../components/ui';
 
 const FAQ_ITEMS = [
   {
@@ -31,9 +32,9 @@ const FAQ_ITEMS = [
 ];
 
 const STATUS_CONFIG = {
-  open: { label: 'Open', color: 'bg-amber-100 text-amber-700', icon: Clock },
-  in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700', icon: ArrowRightCircle },
-  resolved: { label: 'Resolved', color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
+  open: { label: 'Open', variant: 'warning', icon: Clock },
+  in_progress: { label: 'In Progress', variant: 'info', icon: ArrowRightCircle },
+  resolved: { label: 'Resolved', variant: 'success', icon: CheckCircle2 },
 };
 
 export default function Support() {
@@ -99,123 +100,74 @@ export default function Support() {
 
   const formatDate = (dateStr) => formatFriendlyDate(dateStr);
 
-  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
-
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Support</h1>
-        <p className="text-sm text-gray-600 mt-1">Get help and find answers to common questions</p>
-      </div>
+    <div className="page-container min-w-0">
+      <PageHeader
+        title="Support"
+        description="Get help and find answers to common questions"
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="min-w-0 space-y-5 sm:space-y-6">
-          <div className="min-w-0 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <HelpCircle className="w-5 h-5 text-blue-500" />
-              Frequently Asked Questions
-            </h2>
-            <div className="space-y-2">
-              {FAQ_ITEMS.map((item, idx) => (
-                <div key={idx} className="border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleFaq(idx)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-                  >
-                    <span>{item.question}</span>
-                    {openFaq === idx ? (
-                      <ChevronUp className="w-4 h-4 text-gray-400 shrink-0 ml-2" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-gray-400 shrink-0 ml-2" />
-                    )}
-                  </button>
-                  {openFaq === idx && (
-                    <div className="px-4 pb-3 text-sm text-gray-600 border-t border-gray-100 pt-3">
-                      {item.answer}
-                    </div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+        <SettingsSection title="Frequently Asked Questions" icon={HelpCircle} iconTone="accent">
+          <div className="space-y-2">
+            {FAQ_ITEMS.map((item, idx) => (
+              <Card key={idx} variant="inset" className="overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggleFaq(idx)}
+                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-surface-subtle"
+                >
+                  <span>{item.question}</span>
+                  {openFaq === idx ? (
+                    <ChevronUp className="ml-2 h-4 w-4 shrink-0 text-muted" />
+                  ) : (
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-muted" />
                   )}
-                </div>
-              ))}
-            </div>
+                </button>
+                {openFaq === idx && (
+                  <div className="border-t border-border px-4 pb-3 pt-3 text-sm text-body">
+                    {item.answer}
+                  </div>
+                )}
+              </Card>
+            ))}
           </div>
+        </SettingsSection>
 
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-purple-500" />
-            Contact Us
-          </h2>
-
+        <SettingsSection title="Contact Us" icon={MessageSquare} iconTone="purple">
           {sent && (
-            <div className="mb-4 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">
+            <Card className="mb-4 border-brand-200 bg-brand-50 p-3 text-sm text-brand-700">
               Message sent successfully! We&apos;ll get back to you soon.
-            </div>
+            </Card>
           )}
 
           {error && (
-            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <Card className="mb-4 flex items-center gap-2 border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">
+              <AlertCircle className="h-4 w-4 shrink-0" />
               {error}
-            </div>
+            </Card>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  value={form.name}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Your name"
-                />
+                <label htmlFor="name" className="form-label">Name</label>
+                <input id="name" name="name" type="text" value={form.name} onChange={handleChange} className="form-input" placeholder="Your name" />
               </div>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="you@example.com"
-                />
+                <label htmlFor="email" className="form-label">Email</label>
+                <input id="email" name="email" type="email" value={form.email} onChange={handleChange} className="form-input" placeholder="you@example.com" />
               </div>
             </div>
             <div>
-              <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-              <input
-                id="subject"
-                name="subject"
-                type="text"
-                value={form.subject}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="What can we help with?"
-              />
+              <label htmlFor="subject" className="form-label">Subject</label>
+              <input id="subject" name="subject" type="text" value={form.subject} onChange={handleChange} className="form-input" placeholder="What can we help with?" />
             </div>
             <div>
-              <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-              <textarea
-                id="message"
-                name="message"
-                rows={6}
-                value={form.message}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Describe your issue or question..."
-              />
+              <label htmlFor="message" className="form-label">Message</label>
+              <textarea id="message" name="message" rows={6} value={form.message} onChange={handleChange} className="form-input" placeholder="Describe your issue or question..." />
             </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
+            <Button type="submit" variant="accent" disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -227,29 +179,24 @@ export default function Support() {
                   Send Message
                 </>
               )}
-            </button>
+            </Button>
           </form>
-        </div>
+        </SettingsSection>
       </div>
 
-      {/* My Tickets Section */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-blue-500" />
-          My Tickets
-        </h2>
+      <SettingsSection title="My Tickets" icon={MessageSquare} iconTone="accent">
 
         {ticketsLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted" />
           </div>
         ) : ticketsError ? (
-          <div className="flex items-center gap-2 text-red-600 text-sm py-4">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+          <div className="flex items-center gap-2 py-4 text-sm text-danger-600">
+            <AlertCircle className="h-4 w-4 shrink-0" />
             {ticketsError}
           </div>
         ) : tickets.length === 0 ? (
-          <p className="text-sm text-gray-500 py-4">You haven&apos;t submitted any tickets yet.</p>
+          <p className="py-4 text-body">You haven&apos;t submitted any tickets yet.</p>
         ) : (
           <div className="space-y-3">
             {tickets.map((ticket) => {
@@ -257,49 +204,45 @@ export default function Support() {
               const StatusIcon = cfg.icon;
               const isExpanded = expandedTicket === ticket.id;
               return (
-                <div key={ticket.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                <Card key={ticket.id} className="overflow-hidden">
                   <button
+                    type="button"
                     onClick={() => setExpandedTicket(isExpanded ? null : ticket.id)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                    className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface-subtle"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${cfg.color}`}>
-                        <StatusIcon className="w-3 h-3" />
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Badge variant={cfg.variant} className="shrink-0 normal-case gap-1">
+                        <StatusIcon className="h-3 w-3" />
                         {cfg.label}
-                      </span>
-                      <span className="text-sm font-medium text-gray-900 truncate">{ticket.subject || 'No Subject'}</span>
+                      </Badge>
+                      <span className="truncate text-sm font-medium">{ticket.subject || 'No Subject'}</span>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-2">
-                      <span className="text-xs text-gray-500">{formatDate(ticket.created_at)}</span>
-                      {isExpanded ? (
-                        <ChevronUp className="w-4 h-4 text-gray-400" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
-                      )}
+                    <div className="ml-2 flex shrink-0 items-center gap-2">
+                      <span className="text-caption">{formatDate(ticket.created_at)}</span>
+                      {isExpanded ? <ChevronUp className="h-4 w-4 text-muted" /> : <ChevronDown className="h-4 w-4 text-muted" />}
                     </div>
                   </button>
                   {isExpanded && (
-                    <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-3">
+                    <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Your Message</p>
-                        <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-800 whitespace-pre-wrap">
+                        <p className="text-caption mb-1 font-semibold uppercase tracking-wide">Your message</p>
+                        <div className="whitespace-pre-wrap rounded-lg bg-surface-subtle p-3 text-sm">
                           {ticket.message || 'No message.'}
                         </div>
                       </div>
-                      {ticket.reply_count > 0 && (
+                      {ticket.reply_count > 0 ? (
                         <TicketReplies ticketId={ticket.id} />
-                      )}
-                      {ticket.reply_count === 0 && (
-                        <p className="text-sm text-gray-400 italic">No Replies Yet.</p>
+                      ) : (
+                        <p className="text-sm italic text-muted">No replies yet.</p>
                       )}
                     </div>
                   )}
-                </div>
+                </Card>
               );
             })}
           </div>
         )}
-      </div>
+      </SettingsSection>
     </div>
   );
 }
@@ -326,25 +269,25 @@ function TicketReplies({ ticketId }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-3">
-        <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+        <Loader2 className="h-4 w-4 animate-spin text-muted" aria-hidden />
       </div>
     );
   }
 
   if (!detail?.replies?.length) {
-    return <p className="text-sm text-gray-400 italic">No Replies Yet.</p>;
+    return <p className="text-sm text-muted italic">No replies yet.</p>;
   }
 
   return (
     <div>
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
+      <p className="text-caption mb-2 font-medium uppercase tracking-wide">
         Replies ({detail.replies.length})
       </p>
       <div className="space-y-2">
         {detail.replies.map((reply) => (
-          <div key={reply.id} className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-            <p className="text-sm text-gray-800 whitespace-pre-wrap">{reply.reply_message}</p>
-            <p className="text-xs text-gray-500 mt-2">
+          <div key={reply.id} className="rounded-lg border border-accent-100 bg-accent-50 p-3">
+            <p className="text-sm whitespace-pre-wrap text-foreground">{reply.reply_message}</p>
+            <p className="text-caption mt-2">
               {formatFriendlyDate(reply.created_at)}
             </p>
           </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Copy, LogOut, Activity, Clock, Settings, CheckCircle, DollarSign, ClipboardList, Trash2, ShoppingCart, Plus, Edit2, X } from 'lucide-react';
+import { Users, UserPlus, Copy, LogOut, Activity, Clock, Settings, CheckCircle, DollarSign, ClipboardList, Trash2, ShoppingCart, Plus, Edit2 } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,15 @@ import usePolling from '../hooks/usePolling';
 import { formatFriendlyDate } from '../utils/formatDate';
 import ProFeatureGate from '../components/ProFeatureGate';
 import HouseholdFinancialOverview from '../components/HouseholdFinancialOverview';
+import {
+  Badge,
+  Button,
+  Card,
+  FilterChips,
+  IconStat,
+  PageHeader,
+  cn,
+} from '../components/ui';
 
 const fmtCurrency = (val) => {
   const n = Number(val);
@@ -387,85 +396,75 @@ export default function Household() {
 
   const getInitialColor = (name) => {
     const colors = [
-      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500',
-      'bg-pink-500', 'bg-indigo-500', 'bg-teal-500', 'bg-red-500',
+      'bg-accent-500', 'bg-brand-500', 'bg-purple-500', 'bg-warning-500',
+      'bg-debt-500', 'bg-accent-600', 'bg-brand-600', 'bg-danger-500',
     ];
     const idx = (name || '').charCodeAt(0) % colors.length;
     return colors[idx];
   };
-
-  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
   if (loading) return <LoadingSpinner />;
 
   // No household — show create/join UI
   if (!household) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Household</h1>
-          <p className="text-sm text-gray-600 mt-1">Create or join a household to share your budget</p>
-        </div>
+      <div className="page-container min-w-0">
+        <PageHeader
+          title="Household"
+          description="Create or join a household to share your budget"
+        />
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+          <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">{error}</Card>
         )}
         {success && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 shrink-0" />
+          <Card className="flex items-center gap-2 border-brand-200 bg-brand-50 p-3 text-sm text-brand-700">
+            <CheckCircle className="h-4 w-4 shrink-0" />
             {success}
-          </div>
+          </Card>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Users className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Create Household</h2>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <IconStat icon={Users} tone="accent" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+              <h2 className="text-title">Create Household</h2>
             </div>
-            <p className="text-sm text-gray-600 mb-4">Start a new household and invite your partner.</p>
+            <p className="text-body mb-4">Start a new household and invite your partner.</p>
             <form onSubmit={handleCreate} className="space-y-3">
               <input
                 type="text"
                 placeholder="Household name"
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
-                className={inputClass}
+                className="form-input"
               />
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
+              <Button type="submit" variant="accent" disabled={submitting} className="w-full">
                 {submitting ? 'Creating...' : 'Create'}
-              </button>
+              </Button>
             </form>
-          </div>
+          </Card>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <UserPlus className="w-5 h-5 text-green-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Join Household</h2>
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <IconStat icon={UserPlus} tone="brand" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+              <h2 className="text-title">Join Household</h2>
             </div>
-            <p className="text-sm text-gray-600 mb-4">Enter an invite code to join an existing household.</p>
+            <p className="text-body mb-4">Enter an invite code to join an existing household.</p>
             <form onSubmit={handleJoin} className="space-y-3">
               <input
                 type="text"
                 placeholder="Invite code"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
-                className={inputClass}
+                className="form-input font-mono uppercase tracking-widest"
                 maxLength={8}
               />
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
-              >
+              <Button type="submit" variant="primary" disabled={submitting} className="w-full">
                 {submitting ? 'Joining...' : 'Join'}
-              </button>
+              </Button>
             </form>
-          </div>
+          </Card>
         </div>
       </div>
     );
@@ -489,49 +488,29 @@ export default function Household() {
   const completedItems = filteredShoppingItems.filter((i) => i.is_completed);
 
   return (
-    <div className="min-w-0 space-y-5 sm:space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="break-words text-xl font-bold text-gray-900 sm:text-2xl">{household.name}</h1>
-          <p className="text-sm text-gray-600 mt-1">Household Budget</p>
-        </div>
-        <button
-          onClick={() => setShowLeaveConfirm(true)}
-          className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 sm:w-auto"
-        >
-          <LogOut className="w-4 h-4" />
-          Leave Household
-        </button>
-      </div>
+    <div className="page-container min-w-0">
+      <PageHeader
+        title={household.name}
+        description="Household budget & shared finances"
+        actions={
+          <Button variant="danger" onClick={() => setShowLeaveConfirm(true)} className="w-full border border-danger-300 bg-surface text-danger-600 hover:bg-danger-50 sm:w-auto">
+            <LogOut className="h-4 w-4" />
+            Leave Household
+          </Button>
+        }
+      />
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+        <Card className="border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">{error}</Card>
       )}
       {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 shrink-0" />
+        <Card className="flex items-center gap-2 border-brand-200 bg-brand-50 p-3 text-sm text-brand-700">
+          <CheckCircle className="h-4 w-4 shrink-0" />
           {success}
-        </div>
+        </Card>
       )}
 
-      {/* Tabs — matches Settings.jsx pattern */}
-      <div className="border-b border-gray-200 overflow-x-auto -mx-3 px-3 sm:-mx-4 sm:px-4 md:mx-0 md:px-0">
-        <nav className="flex gap-1 min-w-max" aria-label="Household tabs">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap min-h-[44px] ${
-                activeTab === tab.key
-                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50/50'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <FilterChips options={TABS} value={activeTab} onChange={setActiveTab} />
 
       {/* ========== OVERVIEW TAB ========== */}
       {activeTab === 'overview' && (
@@ -545,90 +524,84 @@ export default function Household() {
           <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
             {/* Invite Code */}
             {showInvite ? (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <UserPlus className="w-5 h-5 text-green-600" />
-                  <h2 className="text-lg font-semibold text-gray-900">Invite Code</h2>
+              <Card className="p-5 sm:p-6">
+                <div className="mb-4 flex items-center gap-3">
+                  <IconStat icon={UserPlus} tone="brand" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+                  <h2 className="text-title">Invite Code</h2>
                 </div>
-                <p className="text-sm text-gray-600 mb-3">Share this code to invite someone.</p>
+                <p className="text-body mb-3">Share this code to invite someone.</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-gray-100 px-4 py-2.5 rounded-lg text-lg font-mono font-bold text-gray-900 text-center tracking-widest">
+                  <code className="flex-1 rounded-xl bg-surface-subtle px-4 py-3 text-center font-mono text-lg font-bold tracking-widest text-foreground ring-1 ring-border">
                     {household.invite_code}
                   </code>
-                  <button
-                    onClick={handleCopyCode}
-                    className="p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    title="Copy code"
-                  >
-                    {copied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
-                  </button>
+                  <Button variant="ghost" onClick={handleCopyCode} className="min-h-11 px-2.5" title="Copy code" aria-label="Copy invite code">
+                    {copied ? <CheckCircle className="h-5 w-5 text-brand-600" /> : <Copy className="h-5 w-5" />}
+                  </Button>
                 </div>
-                {copied && <p className="text-xs text-green-600 mt-2">Copied to clipboard!</p>}
-              </div>
+                {copied && <p className="text-caption mt-2 text-brand-600">Copied to clipboard!</p>}
+              </Card>
             ) : (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col justify-center">
-                <p className="text-sm text-gray-500">Invite code is hidden for your account. Ask a parent or household admin if you need it.</p>
-              </div>
+              <Card className="flex flex-col justify-center p-5 sm:p-6">
+                <p className="text-body">Invite code is hidden for your account. Ask a parent or household admin if you need it.</p>
+              </Card>
             )}
 
-            {/* Split Method */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Settings className="w-5 h-5 text-purple-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Split Method</h2>
+            <Card className="p-5 sm:p-6">
+              <div className="mb-4 flex items-center gap-3">
+                <IconStat icon={Settings} tone="purple" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+                <h2 className="text-title">Split Method</h2>
               </div>
-              <p className="text-sm text-gray-600 mb-3">How bills are split between members.</p>
+              <p className="text-body mb-3">How bills are split between members.</p>
               <select
                 value={household.split_method || 'equal'}
                 onChange={handleSplitMethodChange}
                 disabled={!isCreator || !isAdult}
-                className={`${inputClass} ${(!isCreator || !isAdult) ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                className={cn('form-input', (!isCreator || !isAdult) && 'cursor-not-allowed bg-surface-subtle')}
               >
                 <option value="equal">Equal Split</option>
                 <option value="proportional">Proportional To Income</option>
                 <option value="custom">Custom</option>
               </select>
               {(!isCreator || !isAdult) && (
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-caption mt-2">
                   {!isAdult ? 'Only adults can change split settings.' : 'Only the household creator can change this.'}
                 </p>
               )}
-            </div>
+            </Card>
           </div>
 
-          {/* Activity Feed */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Activity Feed</h2>
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <IconStat icon={Activity} tone="accent" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+                <h2 className="text-title">Activity Feed</h2>
               </div>
               {lastUpdated && (
-                <span className="text-xs text-gray-400">
+                <span className="text-caption">
                   Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
                 </span>
               )}
             </div>
 
             {activities.length === 0 ? (
-              <p className="text-sm text-gray-500">No Activity Yet.</p>
+              <p className="text-body">No activity yet.</p>
             ) : (
-              <div className="max-h-96 overflow-y-auto space-y-3">
+              <div className="max-h-96 space-y-3 overflow-y-auto">
                 {activities.map((item) => (
-                  <div key={item.id} className="flex items-start gap-3">
-                    <div className={`w-8 h-8 rounded-full ${getInitialColor(item.user_first_name)} flex items-center justify-center text-white text-xs font-medium shrink-0`}>
+                  <div key={item.id} className="flex items-start gap-3 rounded-xl bg-surface-subtle/60 px-3 py-2.5">
+                    <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white', getInitialColor(item.user_first_name))}>
                       {(item.user_first_name || '?')[0].toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-900">
+                      <p className="text-sm">
                         <span className="font-medium">{item.user_first_name || 'Someone'}</span>
                         {' '}{item.action}{' '}{item.entity_type.replace(/_/g, ' ')}{' '}
                         <span className="font-medium">&apos;{item.entity_name}&apos;</span>
-                        {item.details && <span className="text-gray-500"> &mdash; {item.details}</span>}
+                        {item.details && <span className="text-muted"> &mdash; {item.details}</span>}
                       </p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Clock className="w-3 h-3 text-gray-400" />
-                        <span className="text-xs text-gray-400">
+                      <div className="mt-0.5 flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-muted" />
+                        <span className="text-caption">
                           {item.created_at ? formatDistanceToNow(parseISO(item.created_at), { addSuffix: true }) : ''}
                         </span>
                       </div>
@@ -637,88 +610,81 @@ export default function Household() {
                 ))}
               </div>
             )}
-          </div>
+          </Card>
         </div>
       )}
 
       {/* ========== MEMBERS TAB ========== */}
       {activeTab === 'members' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Users className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Members</h2>
-              <span className="text-xs text-gray-400 ml-auto">{(household.members || []).length} member{(household.members || []).length !== 1 ? 's' : ''}</span>
+        <div className="space-y-5">
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <IconStat icon={Users} tone="accent" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+              <h2 className="text-title">Members</h2>
+              <Badge variant="neutral" className="ml-auto normal-case">
+                {(household.members || []).length} member{(household.members || []).length !== 1 ? 's' : ''}
+              </Badge>
             </div>
             <div className="space-y-3">
               {(household.members || []).map((member) => (
-                <div key={member.id} className="flex flex-col gap-2 border-b border-gray-50 last:border-0 pb-3 last:pb-0">
+                <div key={member.id} className="flex flex-col gap-2 rounded-xl border border-border/60 bg-surface-subtle/40 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full ${getInitialColor(member.first_name)} flex items-center justify-center text-white text-sm font-medium`}>
+                    <div className={cn('flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium text-white', getInitialColor(member.first_name))}>
                       {(member.first_name || '?')[0].toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="truncate text-sm font-medium">
                         {member.first_name} {member.last_name}
                         {(member.household_member_role || 'adult') === 'child' && (
-                          <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Child</span>
+                          <Badge variant="warning" className="ml-2 normal-case">Child</Badge>
                         )}
                         {(member.household_member_role || 'adult') === 'adult' && (
-                          <span className="ml-2 text-[10px] uppercase tracking-wide text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">Adult</span>
+                          <Badge variant="info" className="ml-2 normal-case">Adult</Badge>
                         )}
                       </p>
-                      <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                      <p className="truncate text-caption">{member.email}</p>
                     </div>
                   </div>
                   {isAdult && member.id !== household.created_by && (
-                    <div className="flex flex-wrap items-center gap-2 pl-11">
-                      <label className="text-xs text-gray-500">Role</label>
+                    <div className="flex flex-wrap items-center gap-2 pl-12">
+                      <label className="text-caption">Role</label>
                       <select
                         value={member.household_member_role || 'adult'}
                         onChange={(e) => handleRoleChange(member.id, e.target.value)}
-                        className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white"
+                        className="form-input max-w-[8rem] py-1 text-xs"
                       >
                         <option value="adult">Adult</option>
                         <option value="child">Child</option>
                       </select>
                       {(member.household_member_role || 'adult') === 'child' && (
-                        <button
-                          type="button"
-                          onClick={() => openPermModal(member)}
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                        >
+                        <Button type="button" variant="link" size="sm" onClick={() => openPermModal(member)} className="text-xs">
                           Permissions
-                        </button>
+                        </Button>
                       )}
                     </div>
                   )}
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
 
-          {/* Invite Code in Members tab too */}
           {showInvite && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <UserPlus className="w-5 h-5 text-green-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Invite Code</h2>
+            <Card className="p-5 sm:p-6">
+              <div className="mb-4 flex items-center gap-3">
+                <IconStat icon={UserPlus} tone="brand" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+                <h2 className="text-title">Invite Code</h2>
               </div>
-              <p className="text-sm text-gray-600 mb-3">Share this code to invite someone.</p>
+              <p className="text-body mb-3">Share this code to invite someone.</p>
               <div className="flex items-center gap-2">
-                <code className="flex-1 bg-gray-100 px-4 py-2.5 rounded-lg text-lg font-mono font-bold text-gray-900 text-center tracking-widest">
+                <code className="flex-1 rounded-xl bg-surface-subtle px-4 py-3 text-center font-mono text-lg font-bold tracking-widest ring-1 ring-border">
                   {household.invite_code}
                 </code>
-                <button
-                  onClick={handleCopyCode}
-                  className="p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="Copy code"
-                >
-                  {copied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
-                </button>
+                <Button variant="ghost" onClick={handleCopyCode} className="min-h-11 px-2.5" aria-label="Copy invite code">
+                  {copied ? <CheckCircle className="h-5 w-5 text-brand-600" /> : <Copy className="h-5 w-5" />}
+                </Button>
               </div>
-              {copied && <p className="text-xs text-green-600 mt-2">Copied to clipboard!</p>}
-            </div>
+              {copied && <p className="text-caption mt-2 text-brand-600">Copied to clipboard!</p>}
+            </Card>
           )}
         </div>
       )}
@@ -728,25 +694,25 @@ export default function Household() {
         <div className="space-y-6">
           {/* Shared Bills */}
           {showSharedBills && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <DollarSign className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Shared Bills</h2>
+            <Card className="p-5 sm:p-6">
+              <div className="mb-4 flex items-center gap-3">
+                <IconStat icon={DollarSign} tone="accent" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+                <h2 className="text-title">Shared Bills</h2>
               </div>
               {householdBills.length === 0 ? (
-                <p className="text-sm text-gray-500">No shared bills yet.</p>
+                <p className="text-sm text-muted">No shared bills yet.</p>
               ) : (
                 <div className="space-y-4">
                   {householdBills.map((bill) => {
                     const bd = billBreakdowns[bill.id];
                     return (
-                      <div key={bill.id} className="border border-gray-100 rounded-lg p-4">
+                      <div key={bill.id} className="rounded-xl border border-border/60 bg-surface-subtle/40 p-4">
                         <div className="flex items-center justify-between mb-3">
                           <div>
-                            <h3 className="text-sm font-semibold text-gray-900">{bill.name}</h3>
-                            <p className="text-xs text-gray-500">{bill.category || 'Uncategorized'} &middot; Due {bill.next_due_date ? formatFriendlyDate(bill.next_due_date) : (bill.due_day ? `day ${bill.due_day}` : '--')}</p>
+                            <h3 className="text-sm font-semibold text-foreground">{bill.name}</h3>
+                            <p className="text-xs text-muted">{bill.category || 'Uncategorized'} &middot; Due {bill.next_due_date ? formatFriendlyDate(bill.next_due_date) : (bill.due_day ? `day ${bill.due_day}` : '--')}</p>
                           </div>
-                          <span className="text-sm font-bold text-gray-900">
+                          <span className="text-sm font-bold text-foreground">
                             {showMoney ? fmtCurrency(bill.amount) : '—'}
                           </span>
                         </div>
@@ -754,8 +720,8 @@ export default function Household() {
                         {bd ? (
                           <>
                             <div className="flex gap-4 mb-3 text-xs">
-                              <span className="text-green-600">Paid: {showMoney ? fmtCurrency(bd.total_paid) : '—'}</span>
-                              <span className="text-amber-600">Remaining: {showMoney ? fmtCurrency(bd.total_remaining) : '—'}</span>
+                              <span className="text-brand-600">Paid: {showMoney ? fmtCurrency(bd.total_paid) : '—'}</span>
+                              <span className="text-warning-600">Remaining: {showMoney ? fmtCurrency(bd.total_remaining) : '—'}</span>
                             </div>
                             <div className="space-y-1.5">
                               {bd.members?.map((member) => {
@@ -763,17 +729,17 @@ export default function Household() {
                                 const isPaid = balance <= 0;
                                 return (
                                   <div key={member.member_id} className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-700">{member.member_name}</span>
+                                    <span className="text-foreground">{member.member_name}</span>
                                     <div className="flex items-center gap-3 text-xs">
-                                      <span className="text-gray-500">Share: {showMoney ? fmtCurrency(member.share) : '—'}</span>
-                                      <span className="text-gray-500">Paid: {showMoney ? fmtCurrency(member.paid) : '—'}</span>
+                                      <span className="text-muted">Share: {showMoney ? fmtCurrency(member.share) : '—'}</span>
+                                      <span className="text-muted">Paid: {showMoney ? fmtCurrency(member.paid) : '—'}</span>
                                       {isPaid ? (
-                                        <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-0.5 rounded-full font-medium">
-                                          <CheckCircle className="w-3 h-3" />
+                                        <Badge variant="success" className="normal-case gap-1">
+                                          <CheckCircle className="h-3 w-3" aria-hidden />
                                           Paid
-                                        </span>
+                                        </Badge>
                                       ) : (
-                                        <span className="text-amber-600 font-medium">
+                                        <span className="font-medium text-warning-600">
                                           {showMoney ? `${fmtCurrency(balance)} due` : 'Due'}
                                         </span>
                                       )}
@@ -784,38 +750,37 @@ export default function Household() {
                             </div>
                           </>
                         ) : (
-                          <p className="text-xs text-gray-400">Loading breakdown...</p>
+                          <p className="text-xs text-muted">Loading breakdown...</p>
                         )}
                       </div>
                     );
                   })}
                 </div>
               )}
-            </div>
+            </Card>
           )}
 
-          {/* Chores */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <ClipboardList className="w-5 h-5 text-teal-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Household Chores</h2>
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <IconStat icon={ClipboardList} tone="brand" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+              <h2 className="text-title">Household Chores</h2>
             </div>
             {isAdult && (
-              <form onSubmit={handleCreateChore} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 mb-6 pb-6 border-b border-gray-100">
+              <form onSubmit={handleCreateChore} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 mb-6 pb-6 border-b border-border">
                 <input
-                  className={`${inputClass} lg:col-span-4`}
+                  className={`form-input lg:col-span-4`}
                   placeholder="Chore title"
                   value={choreTitle}
                   onChange={(e) => setChoreTitle(e.target.value)}
                 />
                 <input
                   type="date"
-                  className={`${inputClass} lg:col-span-2`}
+                  className={`form-input lg:col-span-2`}
                   value={choreDue}
                   onChange={(e) => setChoreDue(e.target.value)}
                 />
                 <select
-                  className={`${inputClass} lg:col-span-3`}
+                  className={`form-input lg:col-span-3`}
                   value={choreAssign}
                   onChange={(e) => setChoreAssign(e.target.value)}
                 >
@@ -825,7 +790,7 @@ export default function Household() {
                   ))}
                 </select>
                 <select
-                  className={`${inputClass} lg:col-span-2`}
+                  className={`form-input lg:col-span-2`}
                   value={choreRecurring}
                   onChange={(e) => setChoreRecurring(e.target.value)}
                 >
@@ -834,26 +799,23 @@ export default function Household() {
                   <option value="weekly">Weekly</option>
                   <option value="monthly">Monthly</option>
                 </select>
-                <button
-                  type="submit"
-                  className="lg:col-span-1 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
-                >
+                <Button type="submit" variant="primary" className="lg:col-span-1">
                   Add
-                </button>
+                </Button>
               </form>
             )}
             {chores.length === 0 ? (
-              <p className="text-sm text-gray-500">No chores yet.</p>
+              <p className="text-sm text-muted">No chores yet.</p>
             ) : (
               <ul className="space-y-2">
                 {chores.map((c) => (
                   <li
                     key={c.id}
-                    className="flex flex-wrap items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-2 text-sm"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface-subtle/40 px-3 py-2 text-sm"
                   >
                     <div>
-                      <p className="font-medium text-gray-900">{c.title}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="font-medium text-foreground">{c.title}</p>
+                      <p className="text-xs text-muted">
                         {c.due_date ? `Due ${c.due_date}` : 'No due date'}
                         {c.recurring ? ` · Repeats ${c.recurring}` : ''}
                         {c.status === 'completed' ? ' · Done' : ''}
@@ -864,7 +826,7 @@ export default function Household() {
                         <button
                           type="button"
                           onClick={() => handleCompleteChore(c.id)}
-                          className="text-xs font-medium text-teal-700 hover:text-teal-900"
+                          className="min-h-11 px-2 text-xs font-medium text-brand-700 hover:text-brand-800"
                         >
                           Mark done
                         </button>
@@ -873,8 +835,8 @@ export default function Household() {
                         <button
                           type="button"
                           onClick={() => handleDeleteChore(c.id)}
-                          className="p-1 text-gray-400 hover:text-red-600"
-                          title="Delete"
+                          className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-danger-50 hover:text-danger-600"
+                          aria-label="Delete chore"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -884,38 +846,37 @@ export default function Household() {
                 ))}
               </ul>
             )}
-          </div>
+          </Card>
         </div>
       )}
 
-      {/* ========== SHOPPING LIST TAB ========== */}
       {activeTab === 'shopping' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <ShoppingCart className="w-5 h-5 text-emerald-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Shopping List</h2>
-              <span className="text-xs text-gray-400 ml-auto">
+        <div className="space-y-5">
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <IconStat icon={ShoppingCart} tone="brand" className="rounded-xl p-2.5" iconClassName="h-5 w-5" />
+              <h2 className="text-title">Shopping List</h2>
+              <Badge variant="neutral" className="ml-auto normal-case">
                 {shoppingItems.filter((i) => !i.is_completed).length} active
-              </span>
+              </Badge>
             </div>
 
             {/* Quick add */}
-            <form onSubmit={handleAddShoppingItem} className="flex flex-col sm:flex-row gap-2 mb-4 pb-4 border-b border-gray-100">
+            <form onSubmit={handleAddShoppingItem} className="flex flex-col sm:flex-row gap-2 mb-4 pb-4 border-b border-border">
               <input
-                className={`${inputClass} sm:flex-1`}
+                className={`form-input sm:flex-1`}
                 placeholder="Add item..."
                 value={newItemName}
                 onChange={(e) => setNewItemName(e.target.value)}
               />
               <input
-                className={`${inputClass} sm:w-24`}
+                className={`form-input sm:w-24`}
                 placeholder="Qty"
                 value={newItemQty}
                 onChange={(e) => setNewItemQty(e.target.value)}
               />
               <select
-                className={`${inputClass} sm:w-32`}
+                className={`form-input sm:w-32`}
                 value={newItemCategory}
                 onChange={(e) => setNewItemCategory(e.target.value)}
               >
@@ -924,54 +885,45 @@ export default function Household() {
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center justify-center gap-1 min-h-[44px]"
-              >
-                <Plus className="w-4 h-4" />
+              <Button type="submit" variant="primary" className="min-h-[44px]">
+                <Plus className="h-4 w-4" />
                 Add
-              </button>
+              </Button>
             </form>
 
-            {/* Filter */}
-            <div className="flex gap-1 mb-4">
-              {['all', 'active', 'completed'].map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setShoppingFilter(f)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors min-h-[36px] ${
-                    shoppingFilter === f
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'text-gray-500 hover:bg-gray-100'
-                  }`}
-                >
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
-                </button>
-              ))}
-            </div>
+            <FilterChips
+              className="mb-4"
+              options={[
+                { key: 'all', label: 'All' },
+                { key: 'active', label: 'Active' },
+                { key: 'completed', label: 'Completed' },
+              ]}
+              value={shoppingFilter}
+              onChange={setShoppingFilter}
+            />
 
             {/* Active items */}
             {activeItems.length > 0 && (
               <ul className="space-y-2 mb-4">
                 {activeItems.map((item) => (
-                  <li key={item.id} className="border border-gray-100 rounded-lg px-3 py-2">
+                  <li key={item.id} className="border border-border rounded-lg px-3 py-2">
                     {editingItem === item.id ? (
                       <div className="space-y-2">
                         <input
-                          className={inputClass}
+                          className="form-input"
                           value={editForm.item_name}
                           onChange={(e) => setEditForm((f) => ({ ...f, item_name: e.target.value }))}
                           placeholder="Item name"
                         />
                         <div className="flex flex-col sm:flex-row gap-2">
                           <input
-                            className={`${inputClass} sm:w-24`}
+                            className={`form-input sm:w-24`}
                             value={editForm.quantity}
                             onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))}
                             placeholder="Qty"
                           />
                           <select
-                            className={`${inputClass} sm:w-32`}
+                            className={`form-input sm:w-32`}
                             value={editForm.category}
                             onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
                           >
@@ -981,7 +933,7 @@ export default function Household() {
                             ))}
                           </select>
                           <input
-                            className={`${inputClass} sm:flex-1`}
+                            className={`form-input sm:flex-1`}
                             value={editForm.notes}
                             onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
                             placeholder="Notes"
@@ -991,17 +943,13 @@ export default function Household() {
                           <button
                             type="button"
                             onClick={() => { setEditingItem(null); setEditForm({}); }}
-                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 rounded-lg text-xs"
+                            className="min-h-11 rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-subtle"
                           >
                             Cancel
                           </button>
-                          <button
-                            type="button"
-                            onClick={handleSaveEdit}
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
-                          >
+                          <Button type="button" variant="accent" size="sm" onClick={handleSaveEdit}>
                             Save
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -1009,32 +957,32 @@ export default function Household() {
                         <button
                           type="button"
                           onClick={() => handleToggleShoppingItem(item)}
-                          className="w-5 h-5 rounded border-2 border-gray-300 hover:border-emerald-500 flex items-center justify-center shrink-0 transition-colors"
-                          title="Mark as purchased"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border-2 border-border transition-colors hover:border-brand-500"
+                          aria-label="Mark as purchased"
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-gray-900">{item.item_name}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-sm font-medium text-foreground">{item.item_name}</p>
+                          <p className="text-xs text-muted">
                             {item.quantity && <span>{item.quantity}</span>}
                             {item.quantity && item.category && <span> &middot; </span>}
                             {item.category && <span>{item.category}</span>}
-                            {item.notes && <span className="text-gray-400"> — {item.notes}</span>}
+                            {item.notes && <span className="text-muted"> — {item.notes}</span>}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <button
                             type="button"
                             onClick={() => startEditItem(item)}
-                            className="p-1.5 text-gray-400 hover:text-blue-600 rounded transition-colors"
-                            title="Edit"
+                            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-accent-50 hover:text-accent-600"
+                            aria-label="Edit item"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteShoppingItem(item.id)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
-                            title="Delete"
+                            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-danger-50 hover:text-danger-600"
+                            aria-label="Delete item"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1049,22 +997,22 @@ export default function Household() {
             {/* Completed items */}
             {completedItems.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Completed</p>
+                <p className="text-xs font-medium text-muted uppercase tracking-wide mb-2">Completed</p>
                 <ul className="space-y-2">
                   {completedItems.map((item) => (
-                    <li key={item.id} className="border border-gray-50 rounded-lg px-3 py-2 bg-gray-50/50">
+                    <li key={item.id} className="rounded-lg border border-border bg-surface-subtle/50 px-3 py-2">
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
                           onClick={() => handleToggleShoppingItem(item)}
-                          className="w-5 h-5 rounded border-2 border-emerald-400 bg-emerald-100 flex items-center justify-center shrink-0 transition-colors"
-                          title="Mark as active"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 transition-colors"
+                          aria-label="Mark as active"
                         >
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          <CheckCircle className="h-4 w-4 text-brand-600" aria-hidden />
                         </button>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm text-gray-400 line-through">{item.item_name}</p>
-                          <p className="text-xs text-gray-400">
+                          <p className="text-sm text-muted line-through">{item.item_name}</p>
+                          <p className="text-xs text-muted">
                             {item.quantity && <span>{item.quantity}</span>}
                             {item.quantity && item.category && <span> &middot; </span>}
                             {item.category && <span>{item.category}</span>}
@@ -1073,8 +1021,8 @@ export default function Household() {
                         <button
                           type="button"
                           onClick={() => handleDeleteShoppingItem(item.id)}
-                          className="p-1.5 text-gray-300 hover:text-red-500 rounded transition-colors shrink-0"
-                          title="Delete"
+                          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-danger-50 hover:text-danger-600"
+                          aria-label="Delete completed item"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1086,15 +1034,15 @@ export default function Household() {
             )}
 
             {shoppingItems.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">No items yet. Add your first item above.</p>
+              <p className="text-sm text-muted text-center py-4">No items yet. Add your first item above.</p>
             )}
 
             {shoppingFilter !== 'all' && filteredShoppingItems.length === 0 && shoppingItems.length > 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">
+              <p className="text-sm text-muted text-center py-4">
                 No {shoppingFilter} items.
               </p>
             )}
-          </div>
+          </Card>
         </div>
       )}
 
@@ -1130,8 +1078,8 @@ export default function Household() {
               <span>Can view invite code</span>
             </label>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setPermModalMember(null)} className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 rounded-lg text-sm">Cancel</button>
-              <button type="button" onClick={savePermModal} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Save</button>
+              <Button type="button" variant="ghost" onClick={() => setPermModalMember(null)}>Cancel</Button>
+              <Button type="button" variant="accent" onClick={savePermModal}>Save</Button>
             </div>
           </div>
         )}

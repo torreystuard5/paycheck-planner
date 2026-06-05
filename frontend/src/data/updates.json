@@ -1,0 +1,64 @@
+{
+  "whatsNew": {
+    "version": "2026.06",
+    "released": "2026-06-03",
+    "title": "A fresh PayDrift experience",
+    "summary": "PayDrift has been redesigned end-to-end: modern layout, paycheck envelope view, dark mode, faster loading, and improved mobile and accessibility on the flows you use every day.",
+    "highlights": [
+      "Redesigned Dashboard, Bills & Debts (with live debt interest preview), Income, Savings, Reports, Settings, Household, Support, and Changelog",
+      "Paycheck plan envelope with paid vs. remaining amounts and checklist on Dashboard and Income",
+      "Desktop sidebar and mobile bottom navigation with safe-area spacing",
+      "Dark mode in Settings → App → Appearance (Light, Dark, or System)",
+      "Code-split routes and tab-level loading for faster first paint",
+      "Skip link, modal focus trap, ARIA labels, and 44px touch targets on primary controls",
+      "What's New panel on Dashboard plus full changelog page"
+    ]
+  },
+  "entries": [
+    {
+      "date": "2026-06-03",
+      "type": "update",
+      "description": "Major UI redesign: design system tokens, refreshed navigation, dark mode, and polish across core personal-finance pages."
+    },
+    {
+      "date": "2026-06-03",
+      "type": "new_feature",
+      "description": "Appearance settings: Light, Dark, or System theme — saved on this device."
+    },
+    {
+      "date": "2026-06-03",
+      "type": "new_feature",
+      "description": "Debt interest preview in add/edit debt modals: estimated monthly interest and payoff timeline from balance, APR, and minimum payment."
+    },
+    {
+      "date": "2026-06-03",
+      "type": "update",
+      "description": "Paycheck plan envelope on Dashboard and Income with checklist, overdue handling, and pull-forward actions."
+    },
+    {
+      "date": "2026-06-03",
+      "type": "update",
+      "description": "Performance pass: lazy-loaded routes, Bills/Debts tab splitting, and deferred heavy components."
+    },
+    {
+      "date": "2026-06-03",
+      "type": "update",
+      "description": "Accessibility and mobile pass: skip to content, keyboard-friendly modals, improved contrast, and larger tap targets."
+    },
+    {
+      "date": "2026-06-03",
+      "type": "fix",
+      "description": "Household shared bills and shopping list styling aligned with the new design system; duplicate interest preview row removed in debt modals."
+    },
+    {
+      "date": "2026-06-05",
+      "type": "fix",
+      "description": "Bills, Debts, Income, and Payments modals now use design-system form inputs and buttons; paycheck checklist has larger touch targets; interest preview logic consolidated."
+    }
+  ],
+  "_handover": {
+    "designSystemDoc": "frontend/DESIGN_SYSTEM.md",
+    "productionPaths": "frontend/ (Netlify), backend/ (Render)",
+    "keyDirs": ["src/components/ui/", "src/index.css", "src/context/ThemeContext.jsx", "src/lib/productUpdates.js"]
+  }
+}

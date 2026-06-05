@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronDown, Loader2, Rocket } from 'lucide-react';
 import api from '../services/api';
 import { formatFriendlyDate } from '../utils/formatDate';
+import { mergeChangelogEntries } from '../lib/productUpdates';
+import { Badge, Card, cn } from './ui';
 
 const COLLAPSED_KEY = 'paydrift_updates_collapsed';
 const TABS = ['Recent Updates', 'Coming Soon'];
 
 const UPDATE_TYPE_BADGE = {
-  update: 'bg-blue-100 text-blue-700',
-  fix: 'bg-amber-100 text-amber-700',
-  new_feature: 'bg-green-100 text-green-700',
+  update: 'info',
+  fix: 'warning',
+  new_feature: 'success',
 };
 
 export default function RecentUpdates() {
@@ -28,14 +31,12 @@ export default function RecentUpdates() {
     localStorage.setItem(COLLAPSED_KEY, String(collapsed));
   }, [collapsed]);
 
-  // Fetch unseen count on mount
   useEffect(() => {
     api.get('/api/v1/whats-new-unseen-count')
       .then(({ data }) => setUnseenCount(data.unseen_count || 0))
       .catch(() => {});
   }, []);
 
-  // Mark as seen whenever the user expands the panel
   useEffect(() => {
     if (!collapsed && unseenCount > 0) {
       setUnseenCount(0);
@@ -53,7 +54,9 @@ export default function RecentUpdates() {
       ]).then(([updatesRes, comingSoonRes, announcementsRes]) => {
         if (updatesRes.status === 'fulfilled') {
           const data = updatesRes.value.data;
-          setUpdates(Array.isArray(data) ? data : []);
+          setUpdates(mergeChangelogEntries(Array.isArray(data) ? data : []));
+        } else {
+          setUpdates(mergeChangelogEntries([]));
         }
         const csItems = [];
         if (comingSoonRes.status === 'fulfilled') {
@@ -65,7 +68,13 @@ export default function RecentUpdates() {
           if (Array.isArray(data)) {
             const csAnnouncements = data
               .filter((a) => a.type === 'coming_soon')
-              .map((a) => ({ id: `ann-${a.id}`, feature_name: a.title || 'Coming Soon', description: a.message, eta: null, created_at: a.created_at }));
+              .map((a) => ({
+                id: `ann-${a.id}`,
+                feature_name: a.title || 'Coming Soon',
+                description: a.message,
+                eta: null,
+                created_at: a.created_at,
+              }));
             csItems.push(...csAnnouncements);
           }
         }
@@ -76,40 +85,52 @@ export default function RecentUpdates() {
     }
   }, [collapsed, fetched]);
 
-  const sortedUpdates = [...updates].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const sortedUpdates = updates;
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+    <Card className="overflow-hidden" role="region" aria-labelledby="recent-updates-heading">
       <button
+        type="button"
         onClick={() => setCollapsed(!collapsed)}
-        className="w-full p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 rounded-lg transition-colors"
+        className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500/30 sm:p-5"
+        aria-expanded={!collapsed}
+        aria-controls="recent-updates-panel"
       >
         <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900">What&apos;s New</span>
+          <span id="recent-updates-heading" className="font-semibold text-foreground">
+            What&apos;s New
+          </span>
           {unseenCount > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold bg-red-500 text-white">
+            <span
+              className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-danger-600 px-1.5 text-xs font-bold text-white"
+              aria-label={`${unseenCount} unread updates`}
+            >
               {unseenCount}
             </span>
           )}
         </div>
         <ChevronDown
-          className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
+          className={cn('h-5 w-5 text-muted transition-transform duration-200', !collapsed && 'rotate-180')}
+          aria-hidden
         />
       </button>
 
       {!collapsed && (
-        <div className="border-t border-gray-100">
-          {/* Tabs */}
-          <div className="flex gap-0 border-b border-gray-100">
+        <div id="recent-updates-panel" className="border-t border-border">
+          <div className="flex border-b border-border" role="tablist" aria-label="What's new sections">
             {TABS.map((tab) => (
               <button
                 key={tab}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                className={cn(
+                  'min-h-11 flex-1 px-4 py-2.5 text-sm font-medium transition-colors',
                   activeTab === tab
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
+                    ? 'border-b-2 border-accent-600 text-accent-700'
+                    : 'text-muted hover:text-foreground',
+                )}
               >
                 {tab}
               </button>
@@ -117,49 +138,54 @@ export default function RecentUpdates() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+            <div className="flex items-center justify-center py-8" role="status">
+              <Loader2 className="h-5 w-5 animate-spin text-accent-600" aria-hidden />
             </div>
           ) : activeTab === 'Recent Updates' ? (
             sortedUpdates.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-500">No updates yet.</div>
+              <div className="py-8 text-center text-body">
+                No updates yet.{' '}
+                <Link to="/changelog" className="font-medium text-accent-600 hover:underline">
+                  View changelog
+                </Link>
+              </div>
             ) : (
-              <div className="divide-y divide-gray-100">
+              <div className="max-h-64 divide-y divide-border overflow-y-auto overscroll-contain">
                 {sortedUpdates.slice(0, 8).map((update, idx) => (
-                  <div key={update.id || idx} className="py-3 px-4 flex items-start gap-3">
-                    <span className="text-sm text-gray-500 shrink-0 w-16">
+                  <div key={update.id || idx} className="flex items-start gap-3 px-4 py-3">
+                    <time className="w-16 shrink-0 text-caption tabular-nums" dateTime={update.date}>
                       {formatFriendlyDate(update.date)}
-                    </span>
+                    </time>
                     {update.type && (
-                      <span className={`inline-flex px-1.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${UPDATE_TYPE_BADGE[update.type] || 'bg-gray-100 text-gray-700'}`}>
+                      <Badge variant={UPDATE_TYPE_BADGE[update.type] || 'neutral'} className="shrink-0 normal-case">
                         {update.type === 'new_feature' ? 'New' : update.type === 'fix' ? 'Fix' : 'Update'}
-                      </span>
+                      </Badge>
                     )}
-                    <span className="text-sm text-gray-800">{update.description || update.message}</span>
+                    <span className="min-w-0 flex-1 text-sm text-foreground">
+                      {update.description || update.message}
+                    </span>
                   </div>
                 ))}
               </div>
             )
+          ) : comingSoon.length === 0 ? (
+            <div className="py-8 text-center text-body">No upcoming features yet.</div>
           ) : (
-            comingSoon.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-500">No upcoming features yet.</div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {comingSoon.map((item, idx) => (
-                  <div key={item.id || idx} className="py-3 px-4 flex items-start gap-3">
-                    <Rocket className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{item.feature_name}</p>
-                      <p className="text-sm text-gray-600">{item.description}</p>
-                      {item.eta && <p className="text-xs text-gray-400 mt-0.5">ETA: {item.eta}</p>}
-                    </div>
+            <div className="max-h-64 divide-y divide-border overflow-y-auto overscroll-contain">
+              {comingSoon.map((item, idx) => (
+                <div key={item.id || idx} className="flex items-start gap-3 px-4 py-3">
+                  <Rocket className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">{item.feature_name}</p>
+                    <p className="text-body">{item.description}</p>
+                    {item.eta && <p className="text-caption mt-0.5">ETA: {item.eta}</p>}
                   </div>
-                ))}
-              </div>
-            )
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

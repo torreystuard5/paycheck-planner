@@ -1,59 +1,149 @@
 @import "tailwindcss";
 
+/* Semantic tokens — overridden in .dark for theme switching */
+:root {
+  --pd-muted: #475569;
+  --pd-brand-50: #ecfdf5;
+  --pd-brand-100: #d1fae5;
+  --pd-brand-500: #10b981;
+  --pd-brand-600: #059669;
+  --pd-brand-700: #047857;
+
+  --pd-accent-50: #eff6ff;
+  --pd-accent-100: #dbeafe;
+  --pd-accent-300: #93c5fd;
+  --pd-accent-500: #3b82f6;
+  --pd-accent-600: #2563eb;
+  --pd-accent-700: #1d4ed8;
+
+  --pd-debt-50: #fff7ed;
+  --pd-debt-100: #ffedd5;
+  --pd-debt-300: #fdba74;
+  --pd-debt-500: #f97316;
+  --pd-debt-600: #ea580c;
+  --pd-debt-700: #c2410c;
+
+  --pd-danger-50: #fef2f2;
+  --pd-danger-100: #fee2e2;
+  --pd-danger-500: #ef4444;
+  --pd-danger-600: #dc2626;
+  --pd-danger-700: #b91c1c;
+
+  --pd-warning-50: #fffbeb;
+  --pd-warning-100: #fef3c7;
+  --pd-warning-600: #d97706;
+  --pd-warning-700: #b45309;
+
+  --pd-purple-50: #faf5ff;
+  --pd-purple-500: #a855f7;
+  --pd-purple-600: #9333ea;
+
+  --pd-surface: #ffffff;
+  --pd-surface-subtle: #f8fafc;
+  --pd-border: #e2e8f0;
+  --pd-foreground: #0f172a;
+
+  --pd-shadow-card: 0 1px 3px rgb(15 23 42 / 0.06), 0 1px 2px rgb(15 23 42 / 0.04);
+  --pd-shadow-card-hover: 0 4px 12px rgb(15 23 42 / 0.08);
+  --pd-shadow-nav: 0 -4px 24px rgb(15 23 42 / 0.06);
+}
+
+.dark {
+  --pd-brand-50: #052e22;
+  --pd-brand-100: #064e3b;
+  --pd-brand-500: #34d399;
+  --pd-brand-600: #10b981;
+  --pd-brand-700: #6ee7b7;
+
+  --pd-accent-50: #0c1929;
+  --pd-accent-100: #172554;
+  --pd-accent-300: #60a5fa;
+  --pd-accent-500: #60a5fa;
+  --pd-accent-600: #3b82f6;
+  --pd-accent-700: #93c5fd;
+
+  --pd-debt-50: #1c1410;
+  --pd-debt-100: #431407;
+  --pd-debt-300: #fb923c;
+  --pd-debt-500: #fb923c;
+  --pd-debt-600: #f97316;
+  --pd-debt-700: #fdba74;
+
+  --pd-danger-50: #1f1212;
+  --pd-danger-100: #450a0a;
+  --pd-danger-500: #f87171;
+  --pd-danger-600: #ef4444;
+  --pd-danger-700: #fca5a5;
+
+  --pd-warning-50: #1c1608;
+  --pd-warning-100: #422006;
+  --pd-warning-600: #fbbf24;
+  --pd-warning-700: #fcd34d;
+
+  --pd-purple-50: #1e1033;
+  --pd-purple-500: #c084fc;
+  --pd-purple-600: #a855f7;
+
+  --pd-surface: #1e293b;
+  --pd-surface-subtle: #0f172a;
+  --pd-border: #334155;
+  --pd-muted: #94a3b8;
+  --pd-foreground: #f1f5f9;
+
+  --pd-shadow-card: 0 1px 3px rgb(0 0 0 / 0.35), 0 1px 2px rgb(0 0 0 / 0.2);
+  --pd-shadow-card-hover: 0 4px 16px rgb(0 0 0 / 0.45);
+  --pd-shadow-nav: 0 -4px 24px rgb(0 0 0 / 0.35);
+}
+
 @theme {
-  /* Brand — pay, income, positive money flow */
-  --color-brand-50: #ecfdf5;
-  --color-brand-100: #d1fae5;
-  --color-brand-500: #10b981;
-  --color-brand-600: #059669;
-  --color-brand-700: #047857;
+  --color-brand-50: var(--pd-brand-50);
+  --color-brand-100: var(--pd-brand-100);
+  --color-brand-500: var(--pd-brand-500);
+  --color-brand-600: var(--pd-brand-600);
+  --color-brand-700: var(--pd-brand-700);
 
-  /* Accent — navigation, links, bills */
-  --color-accent-50: #eff6ff;
-  --color-accent-100: #dbeafe;
-  --color-accent-500: #3b82f6;
-  --color-accent-600: #2563eb;
-  --color-accent-700: #1d4ed8;
+  --color-accent-50: var(--pd-accent-50);
+  --color-accent-100: var(--pd-accent-100);
+  --color-accent-300: var(--pd-accent-300);
+  --color-accent-500: var(--pd-accent-500);
+  --color-accent-600: var(--pd-accent-600);
+  --color-accent-700: var(--pd-accent-700);
 
-  /* Debt — balances, debt UI */
-  --color-debt-50: #fff7ed;
-  --color-debt-100: #ffedd5;
-  --color-debt-500: #f97316;
-  --color-debt-600: #ea580c;
-  --color-debt-700: #c2410c;
+  --color-debt-50: var(--pd-debt-50);
+  --color-debt-100: var(--pd-debt-100);
+  --color-debt-300: var(--pd-debt-300);
+  --color-debt-500: var(--pd-debt-500);
+  --color-debt-600: var(--pd-debt-600);
+  --color-debt-700: var(--pd-debt-700);
 
-  /* Danger — delete, over budget, critical overdue */
-  --color-danger-50: #fef2f2;
-  --color-danger-100: #fee2e2;
-  --color-danger-500: #ef4444;
-  --color-danger-600: #dc2626;
-  --color-danger-700: #b91c1c;
+  --color-danger-50: var(--pd-danger-50);
+  --color-danger-100: var(--pd-danger-100);
+  --color-danger-500: var(--pd-danger-500);
+  --color-danger-600: var(--pd-danger-600);
+  --color-danger-700: var(--pd-danger-700);
 
-  /* Warning */
-  --color-warning-50: #fffbeb;
-  --color-warning-100: #fef3c7;
-  --color-warning-600: #d97706;
-  --color-warning-700: #b45309;
+  --color-warning-50: var(--pd-warning-50);
+  --color-warning-100: var(--pd-warning-100);
+  --color-warning-600: var(--pd-warning-600);
+  --color-warning-700: var(--pd-warning-700);
 
-  /* Neutrals */
-  --color-surface: #ffffff;
-  --color-surface-subtle: #f8fafc;
-  --color-border: #e2e8f0;
-  --color-muted: #64748b;
-  --color-foreground: #0f172a;
+  --color-surface: var(--pd-surface);
+  --color-surface-subtle: var(--pd-surface-subtle);
+  --color-border: var(--pd-border);
+  --color-muted: var(--pd-muted);
+  --color-foreground: var(--pd-foreground);
 
-  /* Savings / purple accent */
-  --color-purple-50: #faf5ff;
-  --color-purple-500: #a855f7;
-  --color-purple-600: #9333ea;
+  --color-purple-50: var(--pd-purple-50);
+  --color-purple-500: var(--pd-purple-500);
+  --color-purple-600: var(--pd-purple-600);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
   --radius-card: 0.75rem;
   --radius-button: 0.625rem;
 
-  --shadow-card: 0 1px 3px rgb(15 23 42 / 0.06), 0 1px 2px rgb(15 23 42 / 0.04);
-  --shadow-card-hover: 0 4px 12px rgb(15 23 42 / 0.08);
+  --shadow-card: var(--pd-shadow-card);
+  --shadow-card-hover: var(--pd-shadow-card-hover);
 }
 
 html,
@@ -160,6 +250,41 @@ textarea {
   }
 }
 
+@utility form-input {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.25rem;
+  color: var(--color-foreground);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  @media (width >= 40rem) {
+    min-height: auto;
+    font-size: 0.875rem;
+  }
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand-500) 30%, transparent);
+    border-color: var(--color-brand-500);
+  }
+  &:disabled {
+    cursor: not-allowed;
+    background-color: var(--color-surface-subtle);
+    opacity: 0.7;
+  }
+}
+
+@utility form-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-foreground);
+}
+
 @utility card-grid {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -170,4 +295,86 @@ textarea {
   @media (width >= 64rem) {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+@utility skeleton {
+  border-radius: 0.5rem;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-border) 40%, transparent) 0%,
+    color-mix(in srgb, var(--color-border) 70%, transparent) 50%,
+    color-mix(in srgb, var(--color-border) 40%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@utility animate-fade-in {
+  animation: fadeIn 0.25s ease-out;
+}
+
+/* Legacy Tailwind grays → semantic tokens in dark mode */
+.dark .bg-white {
+  background-color: var(--color-surface);
+}
+.dark .bg-gray-50,
+.dark .hover\:bg-gray-50:hover {
+  background-color: color-mix(in srgb, var(--color-surface) 85%, var(--color-surface-subtle));
+}
+.dark .bg-gray-100,
+.dark .hover\:bg-gray-100:hover {
+  background-color: color-mix(in srgb, var(--color-border) 35%, var(--color-surface));
+}
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: var(--color-border);
+}
+.dark .text-gray-400 {
+  color: color-mix(in srgb, var(--color-muted) 80%, transparent);
+}
+.dark .text-gray-500,
+.dark .text-gray-600 {
+  color: var(--color-muted);
+}
+.dark .text-gray-700,
+.dark .text-gray-800,
+.dark .text-gray-900 {
+  color: var(--color-foreground);
+}
+.dark .hover\:text-gray-600:hover,
+.dark .hover\:text-gray-700:hover {
+  color: var(--color-foreground);
+}
+.dark .divide-gray-200 > :not(:last-child) {
+  border-color: var(--color-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible) {
+  outline: none;
 }

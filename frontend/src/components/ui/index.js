@@ -5,4 +5,6 @@ export { default as IconStat } from './IconStat';
 export { default as PageHeader } from './PageHeader';
 export { default as CollapsibleCard } from './CollapsibleCard';
 export { default as FilterChips } from './FilterChips';
+export { default as ProgressRing } from './ProgressRing';
+export { default as SettingsSection } from './SettingsSection';
 export { cn } from './cn';

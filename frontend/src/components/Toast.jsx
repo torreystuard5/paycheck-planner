@@ -21,16 +21,19 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={addToast}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[150] flex flex-col gap-2">
+      <div
+        className="fixed right-4 z-[150] flex flex-col gap-2 max-sm:left-4 max-sm:right-4"
+        style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+      >
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-[slideUp_0.3s_ease-out] ${
+            className={`flex min-h-11 items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium shadow-[var(--shadow-card-hover)] animate-[slideUp_0.3s_ease-out] ${
               toast.type === 'success'
-                ? 'bg-green-600 text-white'
+                ? 'border-brand-700/30 bg-brand-600 text-white'
                 : toast.type === 'error'
-                ? 'bg-red-600 text-white'
-                : 'bg-gray-800 text-white'
+                ? 'border-danger-700/30 bg-danger-600 text-white'
+                : 'border-border bg-surface text-foreground'
             }`}
           >
             {toast.type === 'success' && <CheckCircle className="w-4 h-4 shrink-0" />}
@@ -38,7 +41,7 @@ export function ToastProvider({ children }) {
             <span>{toast.message}</span>
             <button
               onClick={() => removeToast(toast.id)}
-              className="ml-2 p-0.5 rounded hover:bg-white/20 transition-colors"
+              className="ml-2 flex min-h-8 min-w-8 items-center justify-center rounded-lg transition-colors hover:bg-foreground/10"
             >
               <X className="w-3.5 h-3.5" />
             </button>

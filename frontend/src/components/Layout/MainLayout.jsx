@@ -16,7 +16,9 @@ import Sidebar from './Sidebar';
 import AnnouncementBanner from '../AnnouncementBanner';
 import AdminMaintenanceBanner from '../AdminMaintenanceBanner';
 import Footer from '../Footer';
+import SkipToContent from '../SkipToContent';
 import { useAuth } from '../../context/AuthContext';
+import { cn } from '../ui';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
 const personalMobileTabs = [
@@ -37,34 +39,47 @@ function MobileBottomNav({ user, onMenu }) {
   const tabs = user?.app_mode === 'business' ? businessMobileTabs : personalMobileTabs;
   return (
     <nav
-      className="lg:hidden fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-surface/95 shadow-[var(--pd-shadow-nav)] backdrop-blur-md supports-[backdrop-filter]:bg-surface/90 lg:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Primary mobile navigation"
+      role="navigation"
     >
-      <div className="grid grid-cols-5 px-1 pt-1">
+      <div className="grid grid-cols-5 gap-0.5 px-2 pt-1.5 pb-1">
         {tabs.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-medium transition-colors ${
-                isActive
-                  ? 'text-blue-700 bg-blue-50'
-                  : 'text-gray-500 hover:text-gray-800'
-              }`
+              cn(
+                'flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-semibold transition-all',
+                isActive ? 'text-accent-700' : 'text-muted',
+              )
             }
           >
-            <Icon className="h-5 w-5" />
-            <span className="max-w-full truncate">{label}</span>
+            {({ isActive }) => (
+              <>
+                <span
+                  className={cn(
+                    'flex h-8 w-8 items-center justify-center rounded-xl transition-all',
+                    isActive && 'bg-accent-100 text-accent-700 shadow-sm',
+                  )}
+                >
+                  <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+                </span>
+                <span className="max-w-full truncate">{label}</span>
+              </>
+            )}
           </NavLink>
         ))}
         <button
           type="button"
           onClick={onMenu}
-          className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-800"
+          className="flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-semibold text-muted transition-colors hover:text-foreground"
           aria-label="Open menu"
         >
-          <Menu className="h-5 w-5" />
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl">
+            <Menu className="h-[18px] w-[18px]" strokeWidth={2} />
+          </span>
           <span>More</span>
         </button>
       </div>
@@ -77,36 +92,40 @@ export default function MainLayout() {
   const { user } = useAuth();
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-gray-50">
+    <div className="min-h-screen overflow-x-hidden bg-surface-subtle">
+      <SkipToContent />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main content */}
       <div className="min-w-0 lg:pl-64">
-        {/* Mobile header */}
-        <div className="sticky top-0 z-30 flex h-14 items-center border-b border-gray-200 bg-white px-3 sm:px-4 lg:hidden">
+        <header className="sticky top-0 z-30 flex h-14 items-center border-b border-border bg-surface/95 px-3 shadow-sm backdrop-blur-md sm:px-4 lg:hidden">
           <button
+            type="button"
             onClick={() => setSidebarOpen(true)}
-            className="-ml-1 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+            className="-ml-1 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface-subtle hover:text-foreground"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
           </button>
           <Link to="/" className="ml-1 flex min-w-0 items-center gap-2">
-            <img src={logo} alt="PayDrift logo" className="h-8 w-auto" />
-            <span className="truncate text-sm font-semibold text-gray-900">PayDrift</span>
+            <img src={logo} alt="PayDrift logo" className="h-7 w-auto rounded-md" />
+            <span className="truncate text-sm font-bold tracking-tight text-foreground">PayDrift</span>
           </Link>
           {user?.is_admin && (
             <Link
               to="/admin/command-center"
-              className="ml-auto p-2 text-gray-400 hover:text-blue-600 transition-colors"
+              className="ml-auto rounded-lg p-2 text-muted transition-colors hover:bg-accent-50 hover:text-accent-600"
               aria-label="Command Center"
             >
               <Shield className="h-4 w-4" />
             </Link>
           )}
-        </div>
+        </header>
 
-        <main className="min-w-0 px-3 py-4 pb-[calc(5.25rem+env(safe-area-inset-bottom))] sm:px-4 md:px-6 md:pt-6 lg:pb-6">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="min-w-0 px-3 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-4 md:px-6 md:py-6 lg:max-w-[1400px] lg:pb-8 lg:mx-auto focus:outline-none"
+        >
           <AdminMaintenanceBanner />
           <AnnouncementBanner />
           <Outlet />
