@@ -93,12 +93,14 @@ async def build_pay_calendar_context(
     member_ids = await household_member_ids(db, user)
 
     income_sources = [income] if income else []
+    today = local_today(user)
     plan = await build_paycheck_plan(
         user=user,
         income_sources=income_sources,
         bills=bills,
         debts=debts,
         num_periods=2,
+        current_date=today,
         paycheck_entries=entries,
         paid_debt_ids=set(),
         db=db,
@@ -481,12 +483,14 @@ async def build_full_paycheck_plan_response(
     member_ids = await household_member_ids(db, user)
 
     income_sources = [income] if income else []
+    today = local_today(user)
     plan = await build_paycheck_plan(
         user=user,
         income_sources=income_sources,
         bills=bills,
         debts=debts,
         num_periods=periods,
+        current_date=today,
         paycheck_entries=entries,
         paid_debt_ids=set(),
         db=db,
@@ -500,7 +504,6 @@ async def build_full_paycheck_plan_response(
     ctx: dict[str, Any] | None = None
 
     if paychecks:
-        today = local_today(user)
         try:
             ctx = await build_pay_calendar_context(db, user, budget_id)
             planning = await build_paycheck_planning_state(
@@ -517,6 +520,55 @@ async def build_full_paycheck_plan_response(
             logging.getLogger(__name__).exception(
                 "paycheck planning state failed; using base plan assignments"
             )
+            try:
+                anchor = paychecks[0]["paycheck_date"]
+                all_dates = generate_pay_dates(
+                    anchor, plan["pay_frequency"], min(len(paychecks) + 1, 4)
+                )
+                if len(all_dates) >= 2:
+                    current_end = get_pay_period_window(all_dates[0], all_dates[1])[1]
+                    next_start = all_dates[1] if len(all_dates) > 1 else None
+                    next_end = (
+                        get_pay_period_window(all_dates[1], all_dates[2])[1]
+                        if next_start and len(all_dates) > 2
+                        else current_end
+                    )
+                    overall_end = next_end if next_start else current_end
+                    fallback_paid_bill_map = await get_paid_bill_map(
+                        db,
+                        member_ids,
+                        [b.id for b in bills],
+                        anchor,
+                        overall_end,
+                        bills=bills,
+                        user=user,
+                    )
+                    fallback_ctx = {
+                        "budget_id": budget_id,
+                        "pay_frequency": plan["pay_frequency"],
+                        "bills": bills,
+                        "debts": debts,
+                        "income_sources": income_sources,
+                        "current_start": anchor,
+                        "current_end": current_end,
+                        "next_start": next_start,
+                        "next_end": next_end,
+                        "member_ids": member_ids,
+                        "paid_bill_map": fallback_paid_bill_map,
+                    }
+                    planning = await build_paycheck_planning_state(
+                        db,
+                        user,
+                        budget_id,
+                        ctx=fallback_ctx,
+                        overrides=overrides,
+                        today=today,
+                    )
+                    ctx = fallback_ctx
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "paycheck planning fallback also failed; using base plan assignments"
+                )
 
     if paychecks and planning and ctx:
         current_items = planning["assigned_items"]
@@ -524,6 +576,21 @@ async def build_full_paycheck_plan_response(
 
         anchor = paychecks[0]["paycheck_date"]
         all_dates = generate_pay_dates(anchor, plan["pay_frequency"], len(paychecks) + 1)
+
+        extended_bill_map = None
+        if len(paychecks) > 2 and len(all_dates) >= 3:
+            ext_start = all_dates[2]
+            tail = min(len(paychecks) - 1, len(all_dates) - 2)
+            ext_end = get_pay_period_window(all_dates[tail], all_dates[tail + 1])[1]
+            extended_bill_map = await get_paid_bill_map(
+                db,
+                member_ids,
+                [b.id for b in bills],
+                ext_start,
+                ext_end,
+                bills=bills,
+                user=user,
+            )
 
         for i, pc in enumerate(paychecks):
             if i == 0:
@@ -538,13 +605,24 @@ async def build_full_paycheck_plan_response(
                     paid_d = await get_paid_debt_ids_in_window(
                         db, [d.id for d in debts], ws, we
                     )
+                    paid_bill_map = ctx.get("paid_bill_map") or extended_bill_map
+                    if paid_bill_map is None:
+                        paid_bill_map = await get_paid_bill_map(
+                            db,
+                            member_ids,
+                            [b.id for b in bills],
+                            ws,
+                            we,
+                            bills=bills,
+                            user=user,
+                        )
                     items = await _build_natural_for_period(
                         bills,
                         debts,
                         ws,
                         we,
                         today,
-                        ctx["paid_bill_map"],
+                        paid_bill_map,
                         paid_d,
                     )
                     items = [

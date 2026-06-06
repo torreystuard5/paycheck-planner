@@ -487,10 +487,20 @@ def assign_bills_to_paycheck(
                                 break
                             continue
 
+                        # Legacy Payment rows (paid_date only): match the specific
+                        # occurrence month, not merely any payment in the window.
+                        # Otherwise a May payment incorrectly clears June Rent.
                         pd_date = paid_marker.date() if isinstance(paid_marker, datetime) else (
                             paid_marker if isinstance(paid_marker, date) else date.fromisoformat(str(paid_marker)[:10])
                         )
-                        if window_start <= pd_date <= window_end:
+                        if (
+                            pd_date.year == due_dt.year
+                            and pd_date.month == due_dt.month
+                            and (
+                                pd_date >= due_dt
+                                or abs((pd_date - due_dt).days) <= 7
+                            )
+                        ):
                             paid_for_period = True
                             break
                     except (ValueError, AttributeError, TypeError):

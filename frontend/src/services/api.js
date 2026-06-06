@@ -11,6 +11,8 @@ if (baseURL.startsWith('http://') && typeof window !== 'undefined' && window.loc
 
 const api = axios.create({
   baseURL,
+  /** Render cold starts + heavy paycheck plan can exceed default axios limits. */
+  timeout: 90_000,
 });
 
 /** Absolute API URL (avoids axios baseURL + path merge dropping `/upload`). */

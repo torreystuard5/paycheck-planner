@@ -5,8 +5,11 @@
 export function formatApiError(err) {
   const d = err?.response?.data?.detail;
   if (d == null || d === '') {
+    if (err?.code === 'ECONNABORTED') {
+      return 'Request timed out. Try again in a moment.';
+    }
     if (err?.message === 'Network Error') {
-      return 'Network error. Check your connection and try again.';
+      return 'Could not reach the server. Check your connection or try again shortly.';
     }
     return err?.message || 'Something went wrong. Please try again.';
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { BusinessAccessProvider } from './context/BusinessAccessContext';
 import { BudgetProvider } from './context/BudgetContext';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
@@ -87,6 +88,7 @@ export default function App() {
     <BrowserRouter>
       <ThemeProvider>
       <AuthProvider>
+        <BusinessAccessProvider>
         <BudgetProvider>
         <MaintenanceGate>
         <ToastProvider>
@@ -173,6 +175,7 @@ export default function App() {
         </ToastProvider>
         </MaintenanceGate>
         </BudgetProvider>
+        </BusinessAccessProvider>
       </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

@@ -198,6 +198,126 @@ class TestPaycheckPlanLoading(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_plan_loads_via_fallback_when_calendar_context_fails(self):
+        """Regression: fallback planning ctx must include paid_bill_map for periods 2+."""
+        user = _user()
+        budget_id = uuid4()
+        rent = _bill(due_day=1, name="Rent")
+
+        base_plan = {
+            "pay_frequency": "biweekly",
+            "currency": "USD",
+            "num_periods": 4,
+            "paychecks": [
+                {
+                    "paycheck_date": date(2026, 6, 4),
+                    "paycheck_amount": Decimal("2000"),
+                    "assigned_items": [],
+                    "total_due": Decimal("0"),
+                    "remaining": Decimal("2000"),
+                    "status": "on_track",
+                },
+                {
+                    "paycheck_date": date(2026, 6, 18),
+                    "paycheck_amount": Decimal("2000"),
+                    "assigned_items": [],
+                    "total_due": Decimal("0"),
+                    "remaining": Decimal("2000"),
+                    "status": "on_track",
+                },
+                {
+                    "paycheck_date": date(2026, 7, 2),
+                    "paycheck_amount": Decimal("2000"),
+                    "assigned_items": [],
+                    "total_due": Decimal("0"),
+                    "remaining": Decimal("2000"),
+                    "status": "on_track",
+                },
+                {
+                    "paycheck_date": date(2026, 7, 16),
+                    "paycheck_amount": Decimal("2000"),
+                    "assigned_items": [],
+                    "total_due": Decimal("0"),
+                    "remaining": Decimal("2000"),
+                    "status": "on_track",
+                },
+            ],
+            "total_income": Decimal("8000"),
+            "total_obligations": Decimal("0"),
+            "overall_status": "on_track",
+            "current_paycheck_date": date(2026, 6, 4),
+            "next_paycheck_date": date(2026, 6, 18),
+        }
+
+        async def run():
+            db = AsyncMock()
+            with patch(
+                "app.services.pay_period_planner.resolve_anchor_income",
+                new_callable=AsyncMock,
+                return_value=_income(user.id),
+            ), patch(
+                "app.services.pay_period_planner.fetch_paycheck_entries",
+                new_callable=AsyncMock,
+                return_value=[],
+            ), patch(
+                "app.services.pay_period_planner.fetch_scoped_bills_debts",
+                new_callable=AsyncMock,
+                return_value=([rent], []),
+            ), patch(
+                "app.services.pay_period_planner.household_member_ids",
+                new_callable=AsyncMock,
+                return_value=[user.id],
+            ), patch(
+                "app.services.pay_period_planner.build_paycheck_plan",
+                new_callable=AsyncMock,
+                return_value=base_plan,
+            ), patch(
+                "app.services.pay_period_planner.load_active_overrides",
+                new_callable=AsyncMock,
+                return_value=[],
+            ), patch(
+                "app.services.pay_period_planner.build_pay_calendar_context",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("calendar unavailable"),
+            ), patch(
+                "app.services.pay_period_planner.local_today",
+                return_value=date(2026, 6, 4),
+            ), patch(
+                "app.services.pay_period_planner.get_paid_bill_map",
+                new_callable=AsyncMock,
+                return_value={},
+            ), patch(
+                "app.services.paycheck_planning_state.fetch_widget_bills",
+                new_callable=AsyncMock,
+                return_value=([rent], 1),
+            ), patch(
+                "app.services.paycheck_planning_state.auto_generate_missing_cycle_rows",
+                new_callable=AsyncMock,
+                return_value=0,
+            ), patch(
+                "app.services.paycheck_planning_state.get_paid_bill_map",
+                new_callable=AsyncMock,
+                return_value={},
+            ), patch(
+                "app.services.paycheck_planning_state.get_paid_debt_ids_in_window",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ), patch(
+                "app.services.paycheck_planning_state._checked_items_for_period",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ):
+                plan = await build_full_paycheck_plan_response(
+                    db, user, budget_id, periods=4
+                )
+
+            self.assertEqual(len(plan["paychecks"]), 4)
+            names = [i["name"] for i in plan["current_paycheck"]["assigned_items"]]
+            self.assertIn("Rent", names)
+            PaycheckPlanResponse(**plan)
+
+        asyncio.run(run())
+
     def test_plan_still_returns_when_planning_state_fails(self):
         user = _user()
         budget_id = uuid4()
@@ -421,6 +541,70 @@ class TestRentCarryover(unittest.TestCase):
             # Totals must include the carryover item
             self.assertEqual(result["assigned_total_count"], 1)
             self.assertEqual(result["assigned_total_amount"], Decimal("800"))
+
+        asyncio.run(run())
+
+    def test_may_payment_does_not_clear_june_rent_carryover(self):
+        """A legacy Payment row in May must not mark June Rent as paid."""
+        from app.services.paycheck_planning_state import build_paycheck_planning_state
+
+        user_id = uuid4()
+        budget_id = uuid4()
+        rent = _bill(due_day=1, name="Rent")
+        user = SimpleNamespace(id=user_id, household_id=None)
+        today = date(2026, 6, 4)
+        # May rent was paid; June cycle is still open on Bills.
+        paid_map = {rent.id: [date(2026, 5, 25)]}
+
+        ctx = {
+            "bills": [rent],
+            "debts": [],
+            "current_start": date(2026, 6, 4),
+            "current_end": date(2026, 6, 17),
+            "next_start": date(2026, 6, 18),
+            "next_end": date(2026, 7, 1),
+            "member_ids": [user_id],
+            "pay_frequency": "biweekly",
+        }
+
+        async def run():
+            db = AsyncMock()
+            with patch(
+                "app.services.paycheck_planning_state.fetch_widget_bills",
+                new_callable=AsyncMock,
+                return_value=([rent], 1),
+            ), patch(
+                "app.services.paycheck_planning_state.auto_generate_missing_cycle_rows",
+                new_callable=AsyncMock,
+                return_value=0,
+            ), patch(
+                "app.services.paycheck_planning_state.get_paid_bill_map",
+                new_callable=AsyncMock,
+                return_value=paid_map,
+            ), patch(
+                "app.services.paycheck_planning_state.get_paid_debt_ids_in_window",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ), patch(
+                "app.services.paycheck_planning_state._checked_items_for_period",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ), patch(
+                "app.services.paycheck_assignment.apply_effective_lists",
+                side_effect=lambda nc, nn, cs, ns, ovr: (list(nc), list(nn)),
+            ):
+                result = await build_paycheck_planning_state(
+                    db, user, budget_id,
+                    ctx=ctx,
+                    overrides=[],
+                    today=today,
+                )
+
+            names = [i["name"] for i in result["assigned_items"]]
+            self.assertIn("Rent", names, f"June Rent must carry over; got {names}")
+            rent_item = next(i for i in result["assigned_items"] if i["name"] == "Rent")
+            self.assertFalse(rent_item["is_paid"])
+            self.assertEqual(rent_item["due_date"], date(2026, 6, 1))
 
         asyncio.run(run())
 

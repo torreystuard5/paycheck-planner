@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import api, { onTosRequired, setMaintenanceModeForced, MAINTENANCE_MODE_DETAIL } from '../services/api';
 
 function isMaintenance503(err) {
@@ -23,14 +23,14 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
-  const fetchSubscription = async () => {
+  const fetchSubscription = useCallback(async () => {
     try {
       const { data } = await api.get('/api/v1/subscriptions/status');
       setSubscription(data);
     } catch {
       // not critical
     }
-  };
+  }, []);
 
   const clearTosRequired = async () => {
     setTosRequired(null);
@@ -157,7 +157,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refresh_token', data.refresh_token);
   };
 
-  const updateUser = (updated) => {
+  const updateUser = useCallback((updated) => {
     if (!updated) {
       setUser(null);
       return;
@@ -167,13 +167,13 @@ export function AuthProvider({ children }) {
       ...updated,
       app_mode: updated.app_mode ?? prev?.app_mode ?? 'personal',
     }));
-  };
+  }, []);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     const { data } = await api.get('/api/v1/auth/me');
     updateUser({ ...data, app_mode: data?.app_mode || 'personal' });
     return data;
-  };
+  }, [updateUser]);
 
   return (
     <AuthContext.Provider
