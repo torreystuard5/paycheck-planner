@@ -28,7 +28,7 @@ const PaycheckPlanEnvelope = lazy(() => import('../components/PaycheckPlanEnvelo
 const RecentUpdates = lazy(() => import('../components/RecentUpdates'));
 import usePolling from '../hooks/usePolling';
 import { formatDate } from '../utils/formatDate';
-import { augmentPaycheckPlan } from '../utils/paycheckPlanItems';
+import { augmentPaycheckPlan, patchPaycheckPlanItemPaid } from '../utils/paycheckPlanItems';
 import { formatApiError } from '../utils/formatApiError';
 import {
   Badge,
@@ -115,7 +115,7 @@ function MetricRow({ label, value, valueClassName }) {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { activeBudget, budgetVersion, bumpBudgetVersion, loading: budgetLoading } = useBudget();
+  const { activeBudget, budgetVersion, loading: budgetLoading } = useBudget();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -244,6 +244,7 @@ export default function Dashboard() {
 
   const toggleChecklistItem = async (item, payPeriodStart) => {
     const key = assignItemKey(item);
+    const itemId = item.id || item.item_id;
     const currentState = Boolean(item.is_paid) || !!checklist[key];
     const newState = !currentState;
 
@@ -253,12 +254,30 @@ export default function Dashboard() {
     try {
       await api.put('/api/v1/paycheck-checklist', {
         item_type: item.item_type,
-        item_id: item.id || item.item_id,
+        item_id: itemId,
         pay_period_start: payPeriodStart,
         is_checked: newState,
       });
-      await fetchDashboardData();
-      bumpBudgetVersion();
+
+      setPaycheckPlan((prev) => patchPaycheckPlanItemPaid(prev, item.item_type, itemId, newState));
+
+      if (item.item_type === 'bill') {
+        setBills((prev) =>
+          prev.map((b) => (String(b.id) === String(itemId) ? { ...b, is_paid: newState } : b)),
+        );
+      } else if (item.item_type === 'debt') {
+        setDebts((prev) =>
+          prev.map((d) =>
+            String(d.id) === String(itemId) ? { ...d, is_paid_this_period: newState } : d,
+          ),
+        );
+      }
+
+      setChecklist((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
     } catch {
       setChecklist((prev) => ({ ...prev, [key]: currentState }));
     } finally {

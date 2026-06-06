@@ -26,3 +26,55 @@ export function augmentPaycheckPlan(plan) {
     })),
   };
 }
+
+function recomputePaycheckAssignedStats(paycheck) {
+  const items = paycheck.assigned_items || [];
+  const paidItems = items.filter((i) => i.is_paid);
+  const paidCount = paidItems.length;
+  const totalItems = items.length;
+  const totalAmount = items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const paidAmount = paidItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+
+  return {
+    ...paycheck,
+    assigned_items: items,
+    assigned_paid_count: paidCount,
+    assigned_total_count: totalItems,
+    assigned_total_amount: totalAmount,
+    assigned_paid_amount: paidAmount,
+    assigned_still_owed: totalAmount - paidAmount,
+    assigned_progress_percent: totalItems > 0 ? (paidCount / totalItems) * 100 : 0,
+  };
+}
+
+/** Update is_paid on a current-period assigned item without refetching the full plan. */
+export function patchPaycheckPlanItemPaid(plan, itemType, itemId, isPaid) {
+  if (!plan) return plan;
+  const matchId = String(itemId);
+
+  const patchItems = (items) =>
+    (items || []).map((it) => {
+      const id = String(it.id ?? it.item_id);
+      if (it.item_type === itemType && id === matchId) {
+        return { ...it, is_paid: isPaid };
+      }
+      return it;
+    });
+
+  const patchPaycheck = (pc) => {
+    if (!pc) return pc;
+    return recomputePaycheckAssignedStats({
+      ...pc,
+      assigned_items: patchItems(pc.assigned_items),
+    });
+  };
+
+  const next = { ...plan };
+  if (next.current_paycheck) {
+    next.current_paycheck = patchPaycheck(next.current_paycheck);
+  }
+  if (next.paychecks?.length) {
+    next.paychecks = next.paychecks.map((pc, idx) => (idx === 0 ? patchPaycheck(pc) : pc));
+  }
+  return next;
+}
