@@ -9,8 +9,9 @@ import {
 import {
   DASHBOARD_WIDGET_ORDER,
   DASHBOARD_WIDGETS,
-  DASHBOARD_WIDGET_PLAN_ROW,
+  defaultWidgetOrder,
 } from '../../config/dashboardWidgets';
+import { buildPreviewSections } from '../../utils/dashboardLayout';
 import { Card, IconStat, cn } from '../ui';
 
 const WIDGET_ICONS = {
@@ -28,7 +29,7 @@ const HEIGHT_CLASS = {
   lg: 'h-[4.5rem]',
 };
 
-function PreviewBlock({ widgetId, visible }) {
+function PreviewBlock({ widgetId }) {
   const meta = DASHBOARD_WIDGETS[widgetId];
   const Icon = WIDGET_ICONS[widgetId];
   const height = HEIGHT_CLASS[meta.preview?.height || 'md'];
@@ -36,10 +37,7 @@ function PreviewBlock({ widgetId, visible }) {
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-lg border transition-all duration-200',
-        visible
-          ? 'border-border bg-surface shadow-sm'
-          : 'border-dashed border-border/60 bg-surface-subtle/40 opacity-40',
+        'overflow-hidden rounded-lg border border-border bg-surface shadow-sm transition-all duration-200',
         height,
       )}
       aria-hidden
@@ -61,21 +59,23 @@ function PreviewBlock({ widgetId, visible }) {
   );
 }
 
-function PreviewPlanRow({ visibility }) {
-  const visibleIds = DASHBOARD_WIDGET_PLAN_ROW.filter((id) => visibility[id]);
-  if (visibleIds.length === 0) return null;
-
+function PreviewPlanRow({ ids }) {
   return (
-    <div className={cn('grid gap-2', visibleIds.length === 2 && 'grid-cols-2')}>
-      {visibleIds.map((id) => (
-        <PreviewBlock key={id} widgetId={id} visible />
+    <div className={cn('grid gap-2', ids.length === 2 && 'grid-cols-2')}>
+      {ids.map((id) => (
+        <PreviewBlock key={id} widgetId={id} />
       ))}
     </div>
   );
 }
 
-export default function DashboardLayoutPreview({ visibility, className }) {
+export default function DashboardLayoutPreview({
+  visibility,
+  widgetOrder = defaultWidgetOrder(),
+  className,
+}) {
   const visibleCount = DASHBOARD_WIDGET_ORDER.filter((id) => visibility[id]).length;
+  const sections = buildPreviewSections(widgetOrder, visibility);
 
   return (
     <Card variant="inset" className={cn('p-4', className)}>
@@ -99,16 +99,11 @@ export default function DashboardLayoutPreview({ visibility, className }) {
             <p className="text-caption text-muted">Turn widgets on to see your layout</p>
           </div>
         ) : (
-          DASHBOARD_WIDGET_ORDER.map((widgetId) => {
-            const meta = DASHBOARD_WIDGETS[widgetId];
-            if (meta.preview?.row === 'plan') {
-              if (widgetId !== 'paycheck_plan') return null;
-              return <PreviewPlanRow key="plan-row" visibility={visibility} />;
+          sections.map((section) => {
+            if (section.type === 'plan-row') {
+              return <PreviewPlanRow key={`plan-${section.ids.join('-')}`} ids={section.ids} />;
             }
-            if (!visibility[widgetId]) return null;
-            return (
-              <PreviewBlock key={widgetId} widgetId={widgetId} visible />
-            );
+            return <PreviewBlock key={section.id} widgetId={section.id} />;
           })
         )}
       </div>

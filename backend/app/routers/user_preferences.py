@@ -13,7 +13,11 @@ from app.services.tier_access import (
     has_personal_home_access,
     normalize_plan_tier,
 )
-from app.constants.dashboard_widgets import sanitize_hidden_dashboard_widgets
+from app.constants.dashboard_widgets import (
+    DEFAULT_DASHBOARD_WIDGET_ORDER,
+    sanitize_dashboard_widget_order,
+    sanitize_hidden_dashboard_widgets,
+)
 from app.services.dashboard_widget_preferences import ui_preferences_response
 from app.utils.security import get_current_user
 
@@ -68,6 +72,7 @@ async def update_app_mode(
 class UIPreferencesUpdate(BaseModel):
     collapsed_sections: list[str] | None = None
     hidden_dashboard_widgets: list[str] | None = None
+    dashboard_widget_order: list[str] | None = None
 
 
 @router.get("/me/ui-preferences")
@@ -88,7 +93,11 @@ async def update_ui_preferences(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if body.collapsed_sections is None and body.hidden_dashboard_widgets is None:
+    if (
+        body.collapsed_sections is None
+        and body.hidden_dashboard_widgets is None
+        and body.dashboard_widget_order is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one preference field is required",
@@ -106,12 +115,19 @@ async def update_ui_preferences(
             pref.hidden_dashboard_widgets = sanitize_hidden_dashboard_widgets(
                 body.hidden_dashboard_widgets
             )
+        if body.dashboard_widget_order is not None:
+            pref.dashboard_widget_order = sanitize_dashboard_widget_order(
+                body.dashboard_widget_order
+            )
     else:
         pref = UserUIPreference(
             user_id=current_user.id,
             collapsed_sections=body.collapsed_sections or [],
             hidden_dashboard_widgets=sanitize_hidden_dashboard_widgets(
                 body.hidden_dashboard_widgets or []
+            ),
+            dashboard_widget_order=sanitize_dashboard_widget_order(
+                body.dashboard_widget_order or list(DEFAULT_DASHBOARD_WIDGET_ORDER)
             ),
         )
         db.add(pref)

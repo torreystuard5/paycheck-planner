@@ -3,49 +3,64 @@ import { RotateCcw } from 'lucide-react';
 import Modal from '../Modal';
 import {
   DASHBOARD_WIDGET_ORDER,
-  DASHBOARD_WIDGETS,
   defaultHiddenWidgets,
+  defaultWidgetOrder,
+  visibilityFromHidden,
+  widgetOrderEqual,
 } from '../../config/dashboardWidgets';
-import { Badge, Button, IconStat, Switch, cn } from '../ui';
-import DashboardLayoutPreview, { WIDGET_ICONS } from './DashboardLayoutPreview';
+import { Badge, Button } from '../ui';
+import DashboardLayoutPreview from './DashboardLayoutPreview';
+import SortableWidgetList from './SortableWidgetList';
 
-function defaultVisibilityFromHidden(hidden = []) {
-  return DASHBOARD_WIDGET_ORDER.reduce((acc, id) => {
-    acc[id] = !hidden.includes(id);
-    return acc;
-  }, {});
+function layoutsEqual(a, b) {
+  return (
+    DASHBOARD_WIDGET_ORDER.every((id) => a.visibility[id] === b.visibility[id])
+    && widgetOrderEqual(a.order, b.order)
+  );
 }
 
 export default function CustomizeDashboardModal({
   open,
   onClose,
   visibility,
+  widgetOrder,
   onApply,
   visibleCount,
   saving = false,
 }) {
-  const [draft, setDraft] = useState(visibility);
+  const [draft, setDraft] = useState({ visibility, order: widgetOrder });
 
   useEffect(() => {
-    if (open) setDraft(visibility);
-  }, [open, visibility]);
+    if (open) setDraft({ visibility, order: widgetOrder });
+  }, [open, visibility, widgetOrder]);
+
+  const savedLayout = useMemo(
+    () => ({ visibility, order: widgetOrder }),
+    [visibility, widgetOrder],
+  );
 
   const draftVisibleCount = useMemo(
-    () => DASHBOARD_WIDGET_ORDER.filter((id) => draft[id]).length,
-    [draft],
+    () => DASHBOARD_WIDGET_ORDER.filter((id) => draft.visibility[id]).length,
+    [draft.visibility],
   );
 
   const hasChanges = useMemo(
-    () => DASHBOARD_WIDGET_ORDER.some((id) => draft[id] !== visibility[id]),
-    [draft, visibility],
+    () => !layoutsEqual(draft, savedLayout),
+    [draft, savedLayout],
   );
 
   const setDraftVisible = (widgetId, nextVisible) => {
-    setDraft((prev) => ({ ...prev, [widgetId]: nextVisible }));
+    setDraft((prev) => ({
+      ...prev,
+      visibility: { ...prev.visibility, [widgetId]: nextVisible },
+    }));
   };
 
   const handleResetDraft = () => {
-    setDraft(defaultVisibilityFromHidden(defaultHiddenWidgets()));
+    setDraft({
+      visibility: visibilityFromHidden(defaultHiddenWidgets()),
+      order: defaultWidgetOrder(),
+    });
   };
 
   const handleApply = async () => {
@@ -54,7 +69,7 @@ export default function CustomizeDashboardModal({
   };
 
   const handleCancel = () => {
-    setDraft(visibility);
+    setDraft(savedLayout);
     onClose();
   };
 
@@ -66,7 +81,7 @@ export default function CustomizeDashboardModal({
       className="sm:max-w-3xl"
     >
       <p className="text-body mb-5">
-        Choose which sections appear on your dashboard. Changes preview instantly — click Done to save.
+        Drag to reorder sections, toggle visibility, and preview your layout — click Done to save.
       </p>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,16rem)] lg:items-start">
@@ -85,53 +100,19 @@ export default function CustomizeDashboardModal({
             </Button>
           </div>
 
-          <ul className="space-y-2">
-            {DASHBOARD_WIDGET_ORDER.map((widgetId) => {
-              const meta = DASHBOARD_WIDGETS[widgetId];
-              const Icon = WIDGET_ICONS[widgetId];
-              const checked = draft[widgetId];
-              const switchId = `dashboard-widget-${widgetId}`;
-
-              return (
-                <li key={widgetId}>
-                  <div
-                    className={cn(
-                      'flex items-center gap-3 rounded-xl border px-3 py-3 transition-colors',
-                      checked
-                        ? 'border-border bg-surface'
-                        : 'border-border/60 bg-surface-subtle/50',
-                    )}
-                  >
-                    {Icon && (
-                      <IconStat
-                        icon={Icon}
-                        tone={meta.iconTone || 'accent'}
-                        className="shrink-0 rounded-lg p-2"
-                        iconClassName="h-4 w-4"
-                      />
-                    )}
-                    <label
-                      htmlFor={switchId}
-                      className="min-w-0 flex-1 cursor-pointer"
-                    >
-                      <span className="block text-sm font-medium text-foreground">{meta.label}</span>
-                      <span className="text-caption mt-0.5 block leading-snug">{meta.description}</span>
-                    </label>
-                    <Switch
-                      id={switchId}
-                      checked={checked}
-                      onCheckedChange={(next) => setDraftVisible(widgetId, next)}
-                      aria-label={`Show ${meta.label}`}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <SortableWidgetList
+            order={draft.order}
+            visibility={draft.visibility}
+            onReorder={(order) => setDraft((prev) => ({ ...prev, order }))}
+            onToggle={setDraftVisible}
+          />
         </div>
 
         <div className="order-1 lg:order-2 lg:sticky lg:top-0">
-          <DashboardLayoutPreview visibility={draft} />
+          <DashboardLayoutPreview
+            visibility={draft.visibility}
+            widgetOrder={draft.order}
+          />
         </div>
       </div>
 

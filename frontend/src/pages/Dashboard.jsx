@@ -1,35 +1,29 @@
-import { useState, useEffect, useCallback, lazy, Suspense, memo } from 'react';
+import { useState, useEffect, useCallback, lazy, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DollarSign,
   FileText,
   CreditCard,
   PiggyBank,
-  TrendingUp,
-  Calendar,
   AlertCircle,
   Users,
-  Activity,
-  Clock,
   CheckCircle,
   ChevronRight,
-  Rocket,
 } from 'lucide-react';
-import { parseISO, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import WhatsNewBanner from '../components/WhatsNewBanner';
-import { WhatsNewUnseenBadge } from '../components/RecentUpdates';
 
 const PaycheckPlanEnvelope = lazy(() => import('../components/PaycheckPlanEnvelope'));
 const RecentUpdates = lazy(() => import('../components/RecentUpdates'));
 import usePolling from '../hooks/usePolling';
 import useDashboardWidgetVisibility from '../hooks/useDashboardWidgetVisibility';
-import { DashboardWidget, DashboardCustomizeButton, CustomizeDashboardModal } from '../components/dashboard';
-import { formatDate } from '../utils/formatDate';
+import { DashboardCustomizeButton, CustomizeDashboardModal } from '../components/dashboard';
+import DashboardWidgetSections from '../components/dashboard/DashboardWidgetSections';
 import { augmentPaycheckPlan, patchPaycheckPlanItemPaid } from '../utils/paycheckPlanItems';
 import { formatApiError } from '../utils/formatApiError';
 import {
@@ -37,7 +31,6 @@ import {
   Card,
   IconStat,
   PageHeader,
-  cn,
 } from '../components/ui';
 
 const fmtCurrency = (val) => {
@@ -103,17 +96,6 @@ const SummaryStatCard = memo(function SummaryStatCard({
   );
 });
 
-function MetricRow({ label, value, valueClassName }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-2.5">
-      <span className="text-body">{label}</span>
-      <span className={cn('text-sm font-semibold text-foreground tabular-nums', valueClassName)}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
 export default function Dashboard() {
   const { user } = useAuth();
   const { activeBudget, budgetVersion, loading: budgetLoading } = useBudget();
@@ -155,7 +137,8 @@ export default function Dashboard() {
 
   const {
     visibility: widgetVisibility,
-    applyVisibility,
+    widgetOrder,
+    applyLayout,
     visibleCount,
     ready: widgetsReady,
     saving: widgetsSaving,
@@ -451,9 +434,14 @@ export default function Dashboard() {
   };
 
   const whatsNewExpanded = !collapsedSections.includes('whats_new');
-  const showPaycheckPlan = widgetVisibility.paycheck_plan;
-  const showQuickStats = widgetVisibility.quick_stats;
-  const showPlanRow = showPaycheckPlan || showQuickStats;
+
+  const summaryCardsContent = summaryCards.map((card) => (
+    <SummaryStatCard
+      key={card.label}
+      {...card}
+      onClick={() => navigate(cardLinks[card.label])}
+    />
+  ));
 
   return (
     <div className="page-container min-w-0 space-y-6">
@@ -495,7 +483,8 @@ export default function Dashboard() {
         open={widgetSettingsOpen}
         onClose={() => setWidgetSettingsOpen(false)}
         visibility={widgetVisibility}
-        onApply={applyVisibility}
+        widgetOrder={widgetOrder}
+        onApply={applyLayout}
         visibleCount={visibleCount}
         saving={widgetsSaving}
       />
@@ -507,254 +496,42 @@ export default function Dashboard() {
         </Card>
       )}
 
-      <DashboardWidget
-        widgetId="overview"
-        visible={widgetVisibility.overview}
-        title="At a Glance"
-        icon={DollarSign}
-        iconTone="brand"
-        collapsed={collapsedSections}
-        onToggleCollapse={toggleSection}
-      >
-        <div className="card-grid !gap-4">
-          {summaryCards.map((card) => (
-            <SummaryStatCard
-              key={card.label}
-              {...card}
-              onClick={() => navigate(cardLinks[card.label])}
-            />
-          ))}
-        </div>
-      </DashboardWidget>
-
-      {showPlanRow && (
-        <div
-          className={cn(
-            'grid grid-cols-1 gap-5 lg:gap-6',
-            showPaycheckPlan && showQuickStats && 'lg:grid-cols-2',
-          )}
-        >
-          <DashboardWidget
-            widgetId="paycheck_plan"
-            visible={showPaycheckPlan}
-            title="Current Paycheck Plan"
-            icon={Calendar}
-            iconTone="accent"
-            collapsed={collapsedSections}
-            onToggleCollapse={toggleSection}
-          >
-            <Suspense fallback={<LoadingSpinner label="Loading paycheck plan" />}>
-              <PaycheckPlanEnvelope
-                paycheckPlan={paycheckPlan}
-                assignItemPaid={assignItemPaid}
-                assignItemKey={assignItemKey}
-                checklistLoading={checklistLoading}
-                onToggleItem={toggleChecklistItem}
-                onPullForward={handlePullForward}
-                onRevertOverride={handleRevertOverride}
-                overrideBusyKey={overrideBusyKey}
-                overrideItemKey={overrideItemKey}
-                hidingOverdue={hidingOverdue}
-                onHideOverdue={toggleHideOverdue}
-                showHiddenOverdue={showHiddenOverdue}
-                onToggleShowHidden={() => setShowHiddenOverdue((prev) => !prev)}
-                className="border-0 shadow-none"
-              />
-            </Suspense>
-          </DashboardWidget>
-
-          <DashboardWidget
-            widgetId="quick_stats"
-            visible={showQuickStats}
-            title="Quick Stats"
-            icon={TrendingUp}
-            iconTone="brand"
-            collapsed={collapsedSections}
-            onToggleCollapse={toggleSection}
-          >
-          <div className="space-y-4">
-            {creditScore ? (
-              (() => {
-                const pct = Number(creditScore.overall_utilization_pct || 0);
-                const rating = creditRatingMeta(pct);
-                return (
-                  <div>
-                    <div className="mb-3 flex items-end justify-between gap-3">
-                      <div>
-                        <p className="text-caption">Credit Utilization</p>
-                        <p className="text-money mt-1">
-                          {creditScore.overall_utilization_pct != null ? `${creditScore.overall_utilization_pct}%` : '--'}
-                        </p>
-                      </div>
-                      <Badge variant={rating.variant} className="normal-case">
-                        {rating.label}
-                      </Badge>
-                    </div>
-                    {creditScore.overall_utilization_pct != null && (
-                      <div>
-                        <div className="mb-1.5 flex justify-between text-caption">
-                          <span>Utilization</span>
-                          <span className="font-medium text-foreground">
-                            {(isFinite(pct) ? pct : 0).toFixed(1)}%
-                          </span>
-                        </div>
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-subtle">
-                          <div
-                            className={cn('h-full rounded-full transition-all', rating.bar)}
-                            style={{ width: `${Math.min(pct, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()
-            ) : (
-              <p className="text-body">Add debts to see credit card utilization.</p>
-            )}
-
-            <Card variant="inset" className="divide-y divide-border p-0">
-              <div className="px-4">
-                <MetricRow
-                  label="Monthly Bills"
-                  value={Array.isArray(bills) ? bills.filter((b) => b.is_user_responsible !== false).length : 0}
-                />
-              </div>
-              <div className="px-4">
-                <MetricRow label="Active Debts" value={activeDebts.length} />
-              </div>
-              {totalBillCount > 0 && (
-                <div className="px-4">
-                  <MetricRow
-                    label={
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle className="h-3.5 w-3.5 text-brand-600" />
-                        Bills Paid This Month
-                      </span>
-                    }
-                    value={`${paidCount} of ${totalBillCount}`}
-                    valueClassName={paidCount === totalBillCount ? 'text-brand-600' : undefined}
-                  />
-                </div>
-              )}
-            </Card>
-          </div>
-          </DashboardWidget>
-        </div>
-      )}
-
-      <DashboardWidget
-        widgetId="recent_payments"
-        visible={widgetVisibility.recent_payments}
-        title="Recent Activity"
-        icon={Activity}
-        iconTone="brand"
-        collapsed={collapsedSections}
-        onToggleCollapse={toggleSection}
-      >
-        {Array.isArray(recentPayments) && recentPayments.length > 0 ? (
-          <div className="relative overflow-hidden rounded-xl border border-border bg-surface">
-            <div className="max-h-[min(22rem,52vh)] overflow-x-auto overflow-y-auto overscroll-contain sm:max-h-72">
-              <table className="w-full min-w-[280px] text-sm">
-                <thead className="sticky top-0 z-[1] bg-surface-subtle shadow-[0_1px_0_0_var(--color-border)]">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted">Date</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted">Type</th>
-                    <th className="px-4 py-2.5 text-right font-medium text-muted">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {recentPayments.map((payment) => {
-                    const typeBadge = paymentTypeBadge(payment);
-                    return (
-                      <tr key={payment.id} className="hover:bg-surface-subtle/60">
-                        <td className="px-4 py-3 text-foreground">
-                          {payment.paid_date ? formatDate(payment.paid_date, user?.date_format) : '--'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge variant={typeBadge.variant} className="normal-case">
-                              {typeBadge.label}
-                            </Badge>
-                            {payment.is_extra && (
-                              <Badge variant="purple" className="normal-case">
-                                Extra
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <CurrencyDisplay amount={payment.amount} className="font-medium text-foreground" />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div
-              className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 rounded-b-xl bg-gradient-to-t from-surface to-transparent"
-              aria-hidden
-            />
-          </div>
-        ) : (
-          <p className="text-body">No recent payments recorded.</p>
-        )}
-      </DashboardWidget>
-
-      {household && recentActivity.length > 0 && (
-        <DashboardWidget
-          widgetId="household_activity"
-          visible={widgetVisibility.household_activity}
-          title="Recent Household Activity"
-          icon={Activity}
-          iconTone="accent"
-          collapsed={collapsedSections}
+      {widgetsReady && (
+        <DashboardWidgetSections
+          widgetOrder={widgetOrder}
+          widgetVisibility={widgetVisibility}
+          collapsedSections={collapsedSections}
           onToggleCollapse={toggleSection}
-        >
-          <div className="space-y-3">
-            {recentActivity.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-surface-subtle"
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-100 text-xs font-semibold text-accent-700">
-                  {(item.user_first_name || '?')[0].toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-foreground">
-                    <span className="font-semibold">{item.user_first_name}</span>
-                    {' '}{item.action}{' '}
-                    {item.entity_type.replace(/_/g, ' ')}
-                    {' '}&apos;{item.entity_name}&apos;
-                  </p>
-                  <p className="text-caption mt-0.5 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {item.created_at
-                      ? formatDistanceToNow(parseISO(item.created_at), { addSuffix: true })
-                      : ''}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </DashboardWidget>
+          PaycheckPlanEnvelope={PaycheckPlanEnvelope}
+          RecentUpdates={RecentUpdates}
+          summaryCards={summaryCardsContent}
+          paycheckPlan={paycheckPlan}
+          assignItemPaid={assignItemPaid}
+          assignItemKey={assignItemKey}
+          checklistLoading={checklistLoading}
+          onToggleItem={toggleChecklistItem}
+          onPullForward={handlePullForward}
+          onRevertOverride={handleRevertOverride}
+          overrideBusyKey={overrideBusyKey}
+          overrideItemKey={overrideItemKey}
+          hidingOverdue={hidingOverdue}
+          onHideOverdue={toggleHideOverdue}
+          showHiddenOverdue={showHiddenOverdue}
+          onToggleShowHidden={() => setShowHiddenOverdue((prev) => !prev)}
+          creditScore={creditScore}
+          creditRatingMeta={creditRatingMeta}
+          bills={bills}
+          activeDebts={activeDebts}
+          paidCount={paidCount}
+          totalBillCount={totalBillCount}
+          recentPayments={recentPayments}
+          paymentTypeBadge={paymentTypeBadge}
+          userDateFormat={user?.date_format}
+          household={household}
+          recentActivity={recentActivity}
+          whatsNewExpanded={whatsNewExpanded}
+        />
       )}
-
-      <DashboardWidget
-        widgetId="whats_new"
-        visible={widgetVisibility.whats_new}
-        title="What's New"
-        icon={Rocket}
-        iconTone="purple"
-        collapsed={collapsedSections}
-        onToggleCollapse={toggleSection}
-        badge={<WhatsNewUnseenBadge />}
-      >
-        <Suspense fallback={<LoadingSpinner label="Loading updates" />}>
-          <RecentUpdates embedded isExpanded={whatsNewExpanded} />
-        </Suspense>
-      </DashboardWidget>
     </div>
   );
 }

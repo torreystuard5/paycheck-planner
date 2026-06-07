@@ -68,6 +68,17 @@ export function defaultHiddenWidgets() {
   );
 }
 
+export function defaultWidgetOrder() {
+  return [...DASHBOARD_WIDGET_ORDER];
+}
+
+export function visibilityFromHidden(hidden = []) {
+  return DASHBOARD_WIDGET_ORDER.reduce((acc, id) => {
+    acc[id] = !hidden.includes(id);
+    return acc;
+  }, {});
+}
+
 /** Keep only known widget ids; preserve order and dedupe. */
 export function sanitizeHiddenWidgets(raw) {
   if (!Array.isArray(raw)) return defaultHiddenWidgets();
@@ -79,7 +90,27 @@ export function sanitizeHiddenWidgets(raw) {
   });
 }
 
+/** Keep only known widget ids; preserve order, dedupe, append missing defaults. */
+export function sanitizeWidgetOrder(raw) {
+  if (!Array.isArray(raw)) return defaultWidgetOrder();
+  const seen = new Set();
+  const out = raw.filter((id) => {
+    if (!DASHBOARD_WIDGETS[id] || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  DASHBOARD_WIDGET_ORDER.forEach((id) => {
+    if (!seen.has(id)) out.push(id);
+  });
+  return out;
+}
+
 export function hiddenWidgetListsEqual(a, b) {
+  if (a.length !== b.length) return false;
+  return a.every((id, index) => id === b[index]);
+}
+
+export function widgetOrderEqual(a, b) {
   if (a.length !== b.length) return false;
   return a.every((id, index) => id === b[index]);
 }

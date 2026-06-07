@@ -4,17 +4,25 @@ import {
   DASHBOARD_WIDGET_ORDER,
   DASHBOARD_WIDGETS,
   defaultHiddenWidgets,
+  defaultWidgetOrder,
   hiddenWidgetListsEqual,
   sanitizeHiddenWidgets,
+  sanitizeWidgetOrder,
+  visibilityFromHidden,
+  widgetOrderEqual,
 } from '../config/dashboardWidgets';
 
-function storageKey(userId) {
+function hiddenStorageKey(userId) {
   return `paydrift_dashboard_hidden_widgets_${userId || 'guest'}`;
+}
+
+function orderStorageKey(userId) {
+  return `paydrift_dashboard_widget_order_${userId || 'guest'}`;
 }
 
 function readLocalHidden(userId) {
   try {
-    const raw = localStorage.getItem(storageKey(userId));
+    const raw = localStorage.getItem(hiddenStorageKey(userId));
     if (!raw) return defaultHiddenWidgets();
     return sanitizeHiddenWidgets(JSON.parse(raw));
   } catch {
@@ -22,9 +30,27 @@ function readLocalHidden(userId) {
   }
 }
 
+function readLocalOrder(userId) {
+  try {
+    const raw = localStorage.getItem(orderStorageKey(userId));
+    if (!raw) return defaultWidgetOrder();
+    return sanitizeWidgetOrder(JSON.parse(raw));
+  } catch {
+    return defaultWidgetOrder();
+  }
+}
+
 function writeLocalHidden(userId, hidden) {
   try {
-    localStorage.setItem(storageKey(userId), JSON.stringify(hidden));
+    localStorage.setItem(hiddenStorageKey(userId), JSON.stringify(hidden));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+function writeLocalOrder(userId, order) {
+  try {
+    localStorage.setItem(orderStorageKey(userId), JSON.stringify(order));
   } catch {
     /* ignore quota errors */
   }
@@ -32,12 +58,14 @@ function writeLocalHidden(userId, hidden) {
 
 export default function useDashboardWidgetVisibility(userId) {
   const [hiddenWidgets, setHiddenWidgets] = useState(() => readLocalHidden(userId));
+  const [widgetOrder, setWidgetOrder] = useState(() => readLocalOrder(userId));
   const [ready, setReady] = useState(!userId);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!userId) {
       setHiddenWidgets(readLocalHidden(userId));
+      setWidgetOrder(readLocalOrder(userId));
       setReady(true);
       return undefined;
     }
@@ -47,32 +75,50 @@ export default function useDashboardWidgetVisibility(userId) {
     const load = async () => {
       setReady(false);
       const localHidden = readLocalHidden(userId);
+      const localOrder = readLocalOrder(userId);
 
       try {
         const { data } = await api.get('/api/v1/users/me/ui-preferences');
         if (cancelled) return;
 
         let serverHidden = sanitizeHiddenWidgets(data.hidden_dashboard_widgets);
-        const defaults = defaultHiddenWidgets();
+        let serverOrder = sanitizeWidgetOrder(data.dashboard_widget_order);
+        const defaultHidden = defaultHiddenWidgets();
+        const defaultOrder = defaultWidgetOrder();
 
+        const patchBody = {};
         if (
-          hiddenWidgetListsEqual(serverHidden, defaults)
-          && !hiddenWidgetListsEqual(localHidden, defaults)
+          hiddenWidgetListsEqual(serverHidden, defaultHidden)
+          && !hiddenWidgetListsEqual(localHidden, defaultHidden)
         ) {
           serverHidden = localHidden;
+          patchBody.hidden_dashboard_widgets = serverHidden;
+        }
+        if (
+          widgetOrderEqual(serverOrder, defaultOrder)
+          && !widgetOrderEqual(localOrder, defaultOrder)
+        ) {
+          serverOrder = localOrder;
+          patchBody.dashboard_widget_order = serverOrder;
+        }
+
+        if (Object.keys(patchBody).length > 0) {
           try {
-            await api.patch('/api/v1/users/me/ui-preferences', {
-              hidden_dashboard_widgets: serverHidden,
-            });
+            await api.patch('/api/v1/users/me/ui-preferences', patchBody);
           } catch {
-            /* keep migrated local value in UI even if sync fails */
+            /* keep migrated local values in UI even if sync fails */
           }
         }
 
         setHiddenWidgets(serverHidden);
+        setWidgetOrder(serverOrder);
         writeLocalHidden(userId, serverHidden);
+        writeLocalOrder(userId, serverOrder);
       } catch {
-        if (!cancelled) setHiddenWidgets(localHidden);
+        if (!cancelled) {
+          setHiddenWidgets(localHidden);
+          setWidgetOrder(localOrder);
+        }
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -85,17 +131,21 @@ export default function useDashboardWidgetVisibility(userId) {
   }, [userId]);
 
   const persist = useCallback(
-    async (nextHidden) => {
-      const sanitized = sanitizeHiddenWidgets(nextHidden);
-      setHiddenWidgets(sanitized);
-      writeLocalHidden(userId, sanitized);
+    async (nextHidden, nextOrder) => {
+      const sanitizedHidden = sanitizeHiddenWidgets(nextHidden);
+      const sanitizedOrder = sanitizeWidgetOrder(nextOrder);
+      setHiddenWidgets(sanitizedHidden);
+      setWidgetOrder(sanitizedOrder);
+      writeLocalHidden(userId, sanitizedHidden);
+      writeLocalOrder(userId, sanitizedOrder);
 
       if (!userId) return;
 
       setSaving(true);
       try {
         await api.patch('/api/v1/users/me/ui-preferences', {
-          hidden_dashboard_widgets: sanitized,
+          hidden_dashboard_widgets: sanitizedHidden,
+          dashboard_widget_order: sanitizedOrder,
         });
       } catch {
         /* local cache remains; user can retry on next save */
@@ -119,9 +169,10 @@ export default function useDashboardWidgetVisibility(userId) {
           : hiddenWidgets.includes(widgetId)
             ? hiddenWidgets
             : [...hiddenWidgets, widgetId],
+        widgetOrder,
       );
     },
-    [hiddenWidgets, persist],
+    [hiddenWidgets, persist, widgetOrder],
   );
 
   const toggleWidget = useCallback(
@@ -132,23 +183,25 @@ export default function useDashboardWidgetVisibility(userId) {
   );
 
   const resetWidgets = useCallback(() => {
-    persist(defaultHiddenWidgets());
+    persist(defaultHiddenWidgets(), defaultWidgetOrder());
   }, [persist]);
 
-  const applyVisibility = useCallback(
-    (nextVisibility) => {
-      const hidden = DASHBOARD_WIDGET_ORDER.filter((id) => !nextVisibility[id]);
-      return persist(hidden);
+  const applyLayout = useCallback(
+    ({ visibility, order }) => {
+      const hidden = DASHBOARD_WIDGET_ORDER.filter((id) => !visibility[id]);
+      return persist(hidden, order);
     },
     [persist],
   );
 
+  /** @deprecated use applyLayout */
+  const applyVisibility = useCallback(
+    (nextVisibility) => applyLayout({ visibility: nextVisibility, order: widgetOrder }),
+    [applyLayout, widgetOrder],
+  );
+
   const visibility = useMemo(
-    () =>
-      DASHBOARD_WIDGET_ORDER.reduce((acc, id) => {
-        acc[id] = !hiddenWidgets.includes(id);
-        return acc;
-      }, {}),
+    () => visibilityFromHidden(hiddenWidgets),
     [hiddenWidgets],
   );
 
@@ -156,11 +209,13 @@ export default function useDashboardWidgetVisibility(userId) {
 
   return {
     hiddenWidgets,
+    widgetOrder,
     visibility,
     isVisible,
     setVisible,
     toggleWidget,
     resetWidgets,
+    applyLayout,
     applyVisibility,
     visibleCount,
     ready,
