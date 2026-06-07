@@ -3,14 +3,21 @@ import { RotateCcw } from 'lucide-react';
 import Modal from '../Modal';
 import ConfirmDialog from '../ConfirmDialog';
 import {
+  DASHBOARD_WIDGET_CATEGORIES,
   DASHBOARD_WIDGET_ORDER,
+  DASHBOARD_WIDGETS,
   defaultDashboardLayout,
   isDefaultLayout,
   widgetOrderEqual,
 } from '../../config/dashboardWidgets';
-import { Badge, Button } from '../ui';
+import { Badge, Button, FilterChips } from '../ui';
 import DashboardLayoutPreview from './DashboardLayoutPreview';
 import SortableWidgetList from './SortableWidgetList';
+
+const CATEGORY_FILTERS = [
+  { key: 'all', label: 'All widgets' },
+  ...DASHBOARD_WIDGET_CATEGORIES.map((c) => ({ key: c.key, label: c.label })),
+];
 
 function layoutsEqual(a, b) {
   return (
@@ -31,9 +38,13 @@ export default function CustomizeDashboardModal({
 }) {
   const [draft, setDraft] = useState({ visibility, order: widgetOrder });
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('all');
 
   useEffect(() => {
-    if (open) setDraft({ visibility, order: widgetOrder });
+    if (open) {
+      setDraft({ visibility, order: widgetOrder });
+      setCategoryFilter('all');
+    }
   }, [open, visibility, widgetOrder]);
 
   const savedLayout = useMemo(
@@ -94,13 +105,17 @@ export default function CustomizeDashboardModal({
     ? 'Unsaved changes'
     : `${visibleCount} of ${DASHBOARD_WIDGET_ORDER.length} widgets visible`;
 
+  const filteredCount = categoryFilter === 'all'
+    ? DASHBOARD_WIDGET_ORDER.length
+    : draft.order.filter((id) => DASHBOARD_WIDGETS[id]?.category === categoryFilter).length;
+
   return (
     <>
       <Modal
         isOpen={open}
         onClose={handleCancel}
         title="Customize Dashboard"
-        description="Drag to reorder sections and toggle what appears on your dashboard."
+        description="Drag to reorder sections, filter by category, and toggle what appears on your dashboard."
         className="sm:max-w-2xl lg:max-w-4xl"
         footer={(
           <div className="border-t border-border bg-surface-subtle/40 px-4 py-4 sm:px-6">
@@ -153,15 +168,15 @@ export default function CustomizeDashboardModal({
         )}
       >
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)] lg:items-start lg:gap-8">
-          {/* Widget list */}
           <section aria-labelledby="customize-widgets-heading" className="order-2 min-w-0 lg:order-1">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 id="customize-widgets-heading" className="text-sm font-semibold text-foreground">
-                  Widgets
+                  Widget catalog
                 </h3>
                 <p className="text-caption mt-1 max-w-prose leading-relaxed">
-                  Use the grip handle to reorder. Toggle off anything you want to hide.
+                  {DASHBOARD_WIDGET_ORDER.length} widgets across {DASHBOARD_WIDGET_CATEGORIES.length} categories.
+                  Use the grip handle to reorder.
                 </p>
               </div>
               <Button
@@ -177,16 +192,31 @@ export default function CustomizeDashboardModal({
               </Button>
             </div>
 
+            <FilterChips
+              options={CATEGORY_FILTERS}
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              className="mb-4"
+              aria-label="Filter widgets by category"
+            />
+
+            {categoryFilter !== 'all' && (
+              <p className="text-caption mb-3 text-muted">
+                Showing {filteredCount} widget{filteredCount === 1 ? '' : 's'} in this category.
+                Drag still updates your full dashboard order.
+              </p>
+            )}
+
             <SortableWidgetList
               order={draft.order}
               visibility={draft.visibility}
               onReorder={(order) => setDraft((prev) => ({ ...prev, order }))}
               onToggle={setDraftVisible}
               disabled={saving}
+              categoryFilter={categoryFilter}
             />
           </section>
 
-          {/* Live preview — top on mobile, sticky right column on desktop */}
           <section
             aria-labelledby="customize-preview-heading"
             className="order-1 min-w-0 lg:order-2 lg:sticky lg:top-0"
@@ -213,7 +243,7 @@ export default function CustomizeDashboardModal({
         isOpen={resetConfirmOpen}
         onClose={() => setResetConfirmOpen(false)}
         title="Reset to Default Layout?"
-        message="This restores all widgets, the original order, and saves immediately. Your current customization will be replaced."
+        message="This restores the default six visible widgets, full catalog order, and saves immediately. Optional widgets stay hidden."
         confirmText="Reset & Save"
         onConfirm={handleResetAndSave}
       />

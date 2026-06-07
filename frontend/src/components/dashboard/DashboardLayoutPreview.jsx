@@ -1,27 +1,11 @@
 import {
-  Activity,
-  Calendar,
-  DollarSign,
-  Rocket,
-  TrendingUp,
-  Users,
-} from 'lucide-react';
-import {
   DASHBOARD_WIDGET_ORDER,
   DASHBOARD_WIDGETS,
   defaultWidgetOrder,
 } from '../../config/dashboardWidgets';
+import { getWidgetIcon } from '../../config/dashboardWidgetIcons';
 import { buildPreviewSections } from '../../utils/dashboardLayout';
 import { Badge, IconStat, cn } from '../ui';
-
-const WIDGET_ICONS = {
-  overview: DollarSign,
-  paycheck_plan: Calendar,
-  quick_stats: TrendingUp,
-  recent_payments: Activity,
-  household_activity: Users,
-  whats_new: Rocket,
-};
 
 function SkeletonLine({ width = 'w-full' }) {
   return <div className={cn('h-1.5 rounded-full bg-border/80', width)} aria-hidden />;
@@ -47,10 +31,95 @@ function TablePreviewMini() {
   );
 }
 
+function BarChartPreviewMini() {
+  return (
+    <div className="mt-2 flex items-end gap-1" style={{ height: '2.5rem' }} aria-hidden>
+      {[40, 70, 55, 85, 60].map((h, i) => (
+        <div
+          key={i}
+          className="flex-1 rounded-t bg-brand-500/40"
+          style={{ height: `${h}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ListPreviewMini({ rows = 3 }) {
+  return (
+    <div className="mt-2 space-y-1.5" aria-hidden>
+      {Array.from({ length: rows }).map((_, i) => (
+        <SkeletonLine key={i} width={i === rows - 1 ? 'w-[66%]' : 'w-full'} />
+      ))}
+    </div>
+  );
+}
+
+function ProgressPreviewMini() {
+  return (
+    <div className="mt-2 space-y-2" aria-hidden>
+      <SkeletonLine width="w-[50%]" />
+      <div className="h-2 overflow-hidden rounded-full bg-surface-subtle">
+        <div className="h-full w-[60%] rounded-full bg-purple-500/40" />
+      </div>
+    </div>
+  );
+}
+
+function PreviewBody({ kind }) {
+  switch (kind) {
+    case 'overview':
+      return <OverviewPreviewMini />;
+    case 'paycheck_plan':
+      return <ListPreviewMini rows={4} />;
+    case 'quick_stats':
+      return (
+        <div className="mt-2 space-y-2" aria-hidden>
+          <SkeletonLine width="w-[50%]" />
+          <div className="h-2 overflow-hidden rounded-full bg-surface-subtle">
+            <div className="h-full w-[60%] rounded-full bg-brand-500/40" />
+          </div>
+          <SkeletonLine width="w-[75%]" />
+        </div>
+      );
+    case 'recent_payments':
+    case 'payments_history':
+    case 'upcoming_bills':
+    case 'debt_snapshot':
+    case 'calendar':
+      return <TablePreviewMini />;
+    case 'household_activity':
+    case 'whats_new':
+    case 'shopping_list':
+    case 'chore_list':
+      return <ListPreviewMini rows={2} />;
+    case 'bills_debts':
+      return (
+        <div className="mt-2 grid grid-cols-2 gap-1.5" aria-hidden>
+          <div className="h-8 rounded-md border border-border/60 bg-surface-subtle/80" />
+          <div className="h-8 rounded-md border border-border/60 bg-surface-subtle/80" />
+        </div>
+      );
+    case 'savings':
+      return <ProgressPreviewMini />;
+    case 'income':
+    case 'budgets':
+    case 'tax_prep':
+      return <SkeletonLine width="w-[45%]" />;
+    case 'reports_spending':
+      return <BarChartPreviewMini />;
+    case 'reports_trends':
+      return <BarChartPreviewMini />;
+    default:
+      return <ListPreviewMini rows={2} />;
+  }
+}
+
 function PreviewBlock({ widgetId, position }) {
   const meta = DASHBOARD_WIDGETS[widgetId];
-  const Icon = WIDGET_ICONS[widgetId];
+  const Icon = getWidgetIcon(widgetId);
   const height = meta.preview?.height || 'md';
+  const kind = meta.preview?.kind || widgetId;
   const isCompact = height === 'sm';
   const isTall = height === 'lg';
 
@@ -83,32 +152,7 @@ function PreviewBlock({ widgetId, position }) {
           </Badge>
         )}
       </div>
-
-      {widgetId === 'overview' && <OverviewPreviewMini />}
-      {widgetId === 'recent_payments' && <TablePreviewMini />}
-      {widgetId === 'paycheck_plan' && (
-        <div className="mt-2 space-y-1.5" aria-hidden>
-          <SkeletonLine />
-          <SkeletonLine width="w-[83%]" />
-          <SkeletonLine width="w-[66%]" />
-          <SkeletonLine width="w-[80%]" />
-        </div>
-      )}
-      {widgetId === 'quick_stats' && (
-        <div className="mt-2 space-y-2" aria-hidden>
-          <SkeletonLine width="w-[50%]" />
-          <div className="h-2 overflow-hidden rounded-full bg-surface-subtle">
-            <div className="h-full w-[60%] rounded-full bg-brand-500/40" />
-          </div>
-          <SkeletonLine width="w-[75%]" />
-        </div>
-      )}
-      {(widgetId === 'household_activity' || widgetId === 'whats_new') && (
-        <div className="mt-2 space-y-1.5" aria-hidden>
-          <SkeletonLine width="w-full" />
-          <SkeletonLine width="w-[80%]" />
-        </div>
-      )}
+      <PreviewBody kind={kind} />
     </div>
   );
 }
@@ -158,7 +202,6 @@ export default function DashboardLayoutPreview({
         </div>
       )}
 
-      {/* Mini dashboard frame */}
       <div className={cn('p-3 sm:p-4', embedded && 'pt-3')}>
         <div className="mb-3 flex items-center gap-2 px-1" aria-hidden>
           <div className="flex gap-1">
@@ -210,5 +253,3 @@ export default function DashboardLayoutPreview({
     </div>
   );
 }
-
-export { WIDGET_ICONS };

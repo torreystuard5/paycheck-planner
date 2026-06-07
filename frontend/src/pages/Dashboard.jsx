@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DollarSign,
@@ -118,6 +118,12 @@ export default function Dashboard() {
   const [paycheckPlan, setPaycheckPlan] = useState(null);
   const [creditScore, setCreditScore] = useState(null);
   const [recentPayments, setRecentPayments] = useState([]);
+  const [allPayments, setAllPayments] = useState([]);
+  const [shoppingItems, setShoppingItems] = useState([]);
+  const [chores, setChores] = useState([]);
+  const [calendarEvents, setCalendarEvents] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [taxSummary, setTaxSummary] = useState(null);
   const [household, setHousehold] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -237,6 +243,78 @@ export default function Dashboard() {
   }, [fetchDashboardData, budgetVersion, budgetLoading]);
 
   usePolling(fetchDashboardData, 30000, !!household && user?.app_mode !== 'business');
+
+  const fetchOptionalWidgetData = useCallback(async () => {
+    if (!widgetsReady || user?.app_mode === 'business') return;
+
+    const v = widgetVisibility;
+    const budgetId = activeBudget?.id || localStorage.getItem('active_budget_id');
+    const bq = budgetId ? `budget_id=${budgetId}` : '';
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+
+    const tasks = [];
+
+    if (v.reports_trends || v.payments_history) {
+      tasks.push(
+        api.get(bq ? `/api/v1/payments?${bq}` : '/api/v1/payments')
+          .then((res) => setAllPayments(Array.isArray(res.data) ? res.data : []))
+          .catch(() => setAllPayments([])),
+      );
+    }
+
+    if (v.budgets_overview) {
+      tasks.push(
+        api.get('/api/v1/budgets')
+          .then((res) => setBudgets(Array.isArray(res.data) ? res.data : []))
+          .catch(() => setBudgets([])),
+      );
+    }
+
+    if (v.tax_prep_reminder) {
+      const params = { tax_year: year, ...(budgetId ? { budget_id: budgetId } : {}) };
+      tasks.push(
+        api.get('/api/v1/tax/summary', { params })
+          .then((res) => setTaxSummary(res.data || null))
+          .catch(() => setTaxSummary(null)),
+      );
+    }
+
+    if (v.calendar_upcoming) {
+      tasks.push(
+        api.get('/api/v1/calendar', { params: { year, month, ...(budgetId ? { budget_id: budgetId } : {}) } })
+          .then((res) => setCalendarEvents(Array.isArray(res.data?.events) ? res.data.events : []))
+          .catch(() => setCalendarEvents([])),
+      );
+    }
+
+    if (household && (v.shopping_list || v.chore_list)) {
+      if (v.shopping_list) {
+        tasks.push(
+          api.get('/api/v1/households/shopping-list')
+            .then((res) => setShoppingItems(res.data?.items || []))
+            .catch(() => setShoppingItems([])),
+        );
+      }
+      if (v.chore_list) {
+        tasks.push(
+          api.get('/api/v1/households/chores')
+            .then((res) => setChores(res.data?.items || []))
+            .catch(() => setChores([])),
+        );
+      }
+    } else {
+      setShoppingItems([]);
+      setChores([]);
+    }
+
+    await Promise.allSettled(tasks);
+  }, [widgetsReady, widgetVisibility, user?.app_mode, activeBudget?.id, household]);
+
+  useEffect(() => {
+    fetchOptionalWidgetData();
+  }, [fetchOptionalWidgetData, budgetVersion]);
 
   const toggleChecklistItem = async (item, payPeriodStart) => {
     const key = assignItemKey(item);
@@ -436,6 +514,32 @@ export default function Dashboard() {
     return { label: 'Payment', variant: 'neutral' };
   };
 
+  const categoryData = useMemo(() => {
+    if (!Array.isArray(bills)) return [];
+    return bills.reduce((acc, bill) => {
+      const cat = bill.category || 'Other';
+      const existing = acc.find((item) => item.name === cat);
+      const amount = Number(bill.amount) || 0;
+      if (existing) existing.value += amount;
+      else acc.push({ name: cat, value: amount });
+      return acc;
+    }, []).sort((a, b) => b.value - a.value);
+  }, [bills]);
+
+  const monthlyPayments = useMemo(() => {
+    const source = allPayments.length > 0 ? allPayments : recentPayments;
+    if (!Array.isArray(source)) return [];
+    return source.reduce((acc, payment) => {
+      if (!payment.paid_date) return acc;
+      const month = payment.paid_date.substring(0, 7);
+      const existing = acc.find((item) => item.month === month);
+      const amount = Number(payment.amount) || 0;
+      if (existing) existing.amount += amount;
+      else acc.push({ month, amount });
+      return acc;
+    }, []).sort((a, b) => a.month.localeCompare(b.month));
+  }, [allPayments, recentPayments]);
+
   const whatsNewExpanded = !collapsedSections.includes('whats_new');
 
   const summaryCardsContent = summaryCards.map((card) => (
@@ -542,11 +646,22 @@ export default function Dashboard() {
           paidCount={paidCount}
           totalBillCount={totalBillCount}
           recentPayments={recentPayments}
+          allPayments={allPayments}
           paymentTypeBadge={paymentTypeBadge}
           userDateFormat={user?.date_format}
           household={household}
           recentActivity={recentActivity}
           whatsNewExpanded={whatsNewExpanded}
+          incomeSummary={incomeSummary}
+          savingsGoals={savingsGoals}
+          categoryData={categoryData}
+          monthlyPayments={monthlyPayments}
+          shoppingItems={shoppingItems}
+          chores={chores}
+          calendarEvents={calendarEvents}
+          activeBudget={activeBudget}
+          budgets={budgets}
+          taxSummary={taxSummary}
         />
       )}
     </div>

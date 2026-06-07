@@ -7,6 +7,7 @@ import {
   defaultWidgetOrder,
   hiddenWidgetListsEqual,
   isDefaultLayout,
+  migrateCatalogHidden,
   sanitizeHiddenWidgets,
   sanitizeWidgetOrder,
   visibilityFromHidden,
@@ -24,10 +25,10 @@ function orderStorageKey(userId) {
 function readLocalHidden(userId) {
   try {
     const raw = localStorage.getItem(hiddenStorageKey(userId));
-    if (!raw) return defaultHiddenWidgets();
-    return sanitizeHiddenWidgets(JSON.parse(raw));
+    if (!raw) return migrateCatalogHidden(defaultHiddenWidgets(), userId);
+    return migrateCatalogHidden(sanitizeHiddenWidgets(JSON.parse(raw)), userId);
   } catch {
-    return defaultHiddenWidgets();
+    return migrateCatalogHidden(defaultHiddenWidgets(), userId);
   }
 }
 
@@ -86,6 +87,7 @@ export default function useDashboardWidgetVisibility(userId) {
         let serverOrder = sanitizeWidgetOrder(data.dashboard_widget_order);
         const defaultHidden = defaultHiddenWidgets();
         const defaultOrder = defaultWidgetOrder();
+        const rawServerHidden = [...serverHidden];
 
         const patchBody = {};
         if (
@@ -101,6 +103,11 @@ export default function useDashboardWidgetVisibility(userId) {
         ) {
           serverOrder = localOrder;
           patchBody.dashboard_widget_order = serverOrder;
+        }
+
+        serverHidden = migrateCatalogHidden(serverHidden, userId);
+        if (!hiddenWidgetListsEqual(serverHidden, rawServerHidden)) {
+          patchBody.hidden_dashboard_widgets = serverHidden;
         }
 
         if (Object.keys(patchBody).length > 0) {

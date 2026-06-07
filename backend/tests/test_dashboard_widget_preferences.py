@@ -1,4 +1,5 @@
 from app.constants.dashboard_widgets import (
+    DEFAULT_DASHBOARD_WIDGET_ORDER,
     sanitize_dashboard_widget_order,
     sanitize_hidden_dashboard_widgets,
 )
@@ -6,26 +7,14 @@ from app.constants.dashboard_widgets import (
 
 def test_sanitize_dashboard_widget_order_fills_missing_and_dedupes():
     raw = ["whats_new", "invalid", "overview", "whats_new", "paycheck_plan"]
-    assert sanitize_dashboard_widget_order(raw) == [
-        "whats_new",
-        "overview",
-        "paycheck_plan",
-        "quick_stats",
-        "recent_payments",
-        "household_activity",
-    ]
+    result = sanitize_dashboard_widget_order(raw)
+    assert result[:3] == ["whats_new", "overview", "paycheck_plan"]
+    assert set(result) == set(DEFAULT_DASHBOARD_WIDGET_ORDER)
+    assert len(result) == len(DEFAULT_DASHBOARD_WIDGET_ORDER)
 
 
 def test_sanitize_dashboard_widget_order_empty_uses_default():
-    assert sanitize_dashboard_widget_order(None) == [
-        "overview",
-        "paycheck_plan",
-        "quick_stats",
-        "recent_payments",
-        "household_activity",
-        "whats_new",
-    ]
-
+    assert sanitize_dashboard_widget_order(None) == DEFAULT_DASHBOARD_WIDGET_ORDER
 
 
 def test_sanitize_hidden_dashboard_widgets_filters_invalid_and_dedupes():
@@ -37,11 +26,13 @@ def test_sanitize_hidden_dashboard_widgets_filters_invalid_and_dedupes():
         "overview",
         "whats_new",
         "not_a_widget",
+        "savings_goals",
     ]
     assert sanitize_hidden_dashboard_widgets(raw) == [
         "overview",
         "quick_stats",
         "whats_new",
+        "savings_goals",
     ]
 
 

@@ -8,6 +8,19 @@ DASHBOARD_WIDGET_IDS = frozenset(
         "recent_payments",
         "household_activity",
         "whats_new",
+        "bills_debts_overview",
+        "savings_goals",
+        "income_summary",
+        "upcoming_bills",
+        "debt_snapshot",
+        "reports_spending",
+        "reports_trends",
+        "shopping_list",
+        "chore_list",
+        "calendar_upcoming",
+        "budgets_overview",
+        "tax_prep_reminder",
+        "payments_history",
     }
 )
 
@@ -18,6 +31,19 @@ DEFAULT_DASHBOARD_WIDGET_ORDER = [
     "recent_payments",
     "household_activity",
     "whats_new",
+    "bills_debts_overview",
+    "savings_goals",
+    "income_summary",
+    "upcoming_bills",
+    "debt_snapshot",
+    "reports_spending",
+    "reports_trends",
+    "shopping_list",
+    "chore_list",
+    "calendar_upcoming",
+    "budgets_overview",
+    "tax_prep_reminder",
+    "payments_history",
 ]
 
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -17,9 +17,28 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
-import { DASHBOARD_WIDGETS } from '../../config/dashboardWidgets';
+import {
+  DASHBOARD_WIDGET_CATEGORIES,
+  DASHBOARD_WIDGETS,
+  getCategoryMeta,
+} from '../../config/dashboardWidgets';
+import { getWidgetIcon } from '../../config/dashboardWidgetIcons';
 import { Badge, IconStat, Switch, cn } from '../ui';
-import { WIDGET_ICONS } from './DashboardLayoutPreview';
+
+function CategoryDivider({ categoryKey }) {
+  const meta = getCategoryMeta(categoryKey);
+  if (!meta) return null;
+  return (
+    <div className="pt-2 first:pt-0" role="presentation">
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
+          {meta.label}
+        </span>
+        <span className="h-px flex-1 bg-border" />
+      </div>
+    </div>
+  );
+}
 
 function WidgetRowContent({
   widgetId,
@@ -28,10 +47,12 @@ function WidgetRowContent({
   position,
   isOverlay = false,
   dragHandleProps = null,
+  showCategory = false,
 }) {
   const meta = DASHBOARD_WIDGETS[widgetId];
-  const Icon = WIDGET_ICONS[widgetId];
+  const Icon = getWidgetIcon(widgetId);
   const switchId = `dashboard-widget-${widgetId}`;
+  const categoryMeta = getCategoryMeta(meta.category);
 
   return (
     <div
@@ -43,7 +64,6 @@ function WidgetRowContent({
         isOverlay && 'border-accent-300/70 bg-surface shadow-lg ring-2 ring-accent-500/15',
       )}
     >
-      {/* Drag handle */}
       <button
         type="button"
         className={cn(
@@ -63,7 +83,6 @@ function WidgetRowContent({
         )}
       </button>
 
-      {/* Icon — visible on sm+ in its own column */}
       {Icon && (
         <IconStat
           icon={Icon}
@@ -76,7 +95,6 @@ function WidgetRowContent({
         />
       )}
 
-      {/* Label */}
       <label
         htmlFor={isOverlay ? undefined : switchId}
         className="min-w-0 cursor-pointer py-0.5"
@@ -89,9 +107,19 @@ function WidgetRowContent({
           >
             {meta.label}
           </span>
+          {showCategory && categoryMeta && (
+            <Badge variant="neutral" className="normal-case px-1.5 py-0 text-[10px]">
+              {categoryMeta.label}
+            </Badge>
+          )}
           {!checked && (
             <Badge variant="neutral" className="normal-case px-1.5 py-0 text-[10px]">
               Hidden
+            </Badge>
+          )}
+          {meta.requiresHousehold && (
+            <Badge variant="info" className="normal-case px-1.5 py-0 text-[10px]">
+              Household
             </Badge>
           )}
         </span>
@@ -100,7 +128,6 @@ function WidgetRowContent({
         </span>
       </label>
 
-      {/* Toggle */}
       {!isOverlay && (
         <div className="flex shrink-0 items-center justify-end pl-1 sm:pl-0">
           <Switch
@@ -121,6 +148,7 @@ function SortableWidgetRow({
   onToggle,
   position,
   disabled,
+  showCategory,
 }) {
   const {
     attributes,
@@ -147,6 +175,7 @@ function SortableWidgetRow({
         checked={checked}
         onToggle={onToggle}
         position={position}
+        showCategory={showCategory}
         dragHandleProps={{
           ...attributes,
           ...listeners,
@@ -162,6 +191,8 @@ export default function SortableWidgetList({
   onReorder,
   onToggle,
   disabled = false,
+  categoryFilter = 'all',
+  showCategoryBadges = false,
 }) {
   const [activeId, setActiveId] = useState(null);
 
@@ -192,6 +223,12 @@ export default function SortableWidgetList({
     onReorder(next);
   };
 
+  const displayOrder = categoryFilter === 'all'
+    ? order
+    : order.filter((id) => DASHBOARD_WIDGETS[id]?.category === categoryFilter);
+
+  const showDividers = categoryFilter === 'all';
+
   return (
     <DndContext
       sensors={sensors}
@@ -202,16 +239,27 @@ export default function SortableWidgetList({
     >
       <SortableContext items={order} strategy={verticalListSortingStrategy}>
         <ul className="space-y-3" aria-label="Dashboard widgets">
-          {order.map((widgetId, index) => (
-            <SortableWidgetRow
-              key={widgetId}
-              widgetId={widgetId}
-              checked={visibility[widgetId]}
-              position={index + 1}
-              onToggle={(next) => onToggle(widgetId, next)}
-              disabled={disabled}
-            />
-          ))}
+          {displayOrder.map((widgetId, index) => {
+            const position = order.indexOf(widgetId) + 1;
+            const category = DASHBOARD_WIDGETS[widgetId]?.category;
+            const prevId = index > 0 ? displayOrder[index - 1] : null;
+            const prevCategory = prevId ? DASHBOARD_WIDGETS[prevId]?.category : null;
+            const showDivider = showDividers && category !== prevCategory;
+
+            return (
+              <Fragment key={widgetId}>
+                {showDivider && <CategoryDivider categoryKey={category} />}
+                <SortableWidgetRow
+                  widgetId={widgetId}
+                  checked={visibility[widgetId]}
+                  position={position}
+                  onToggle={(next) => onToggle(widgetId, next)}
+                  disabled={disabled}
+                  showCategory={showCategoryBadges}
+                />
+              </Fragment>
+            );
+          })}
         </ul>
       </SortableContext>
 
@@ -228,3 +276,5 @@ export default function SortableWidgetList({
     </DndContext>
   );
 }
+
+export { DASHBOARD_WIDGET_CATEGORIES };
