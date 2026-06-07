@@ -376,6 +376,7 @@ async def build_paycheck_planning_state(
                 today,
                 ctx=debug_ctx,
                 assigned_items=current_assigned,
+                paid_bill_map=paid_bill_map,
                 source="build_paycheck_planning_state",
             )
             break

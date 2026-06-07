@@ -27,12 +27,29 @@ def log_amanda_car(event: str, **payload: Any) -> None:
     print(f"AMANDA_CAR_DEBUG | {event} | {payload}", flush=True)
 
 
+def _serialize_paid_markers(markers: Any) -> list[Any]:
+    out: list[Any] = []
+    for marker in markers or []:
+        if isinstance(marker, dict):
+            out.append(
+                {
+                    "due_date": str(marker.get("due_date")),
+                    "paid_date": str(marker.get("paid_date")),
+                    "source": marker.get("source"),
+                }
+            )
+        else:
+            out.append(str(marker))
+    return out
+
+
 def snapshot_amanda_car_bill(
     bill: Any,
     today: date,
     *,
     ctx: dict[str, Any] | None = None,
     assigned_items: list[dict] | None = None,
+    paid_bill_map: dict | None = None,
     source: str = "unknown",
 ) -> dict[str, Any]:
     """Build a JSON-serializable debug snapshot for Amanda Car."""
@@ -98,6 +115,20 @@ def snapshot_amanda_car_bill(
             for item in assigned_items
             if is_amanda_car(item.get("name"))
         ]
+        overdue_rows = [
+            r for r in snap.get("dashboard_assigned_rows", []) if r.get("is_overdue")
+        ]
+        if overdue_rows:
+            snap["overdue_explanation"] = (
+                "Dashboard shows overdue from pay-period carryover rows, not from "
+                f"next_due_date ({snap['next_due_date']}). Unpaid past occurrences: "
+                f"{[r['due_date'] for r in overdue_rows]}. Mark those paid or fix "
+                "paid_bill_map cycle matching."
+            )
+
+    bill_id = getattr(bill, "id", None)
+    if paid_bill_map is not None and bill_id is not None:
+        snap["paid_bill_map_entries"] = _serialize_paid_markers(paid_bill_map.get(bill_id))
 
     log_amanda_car("snapshot", **snap)
     return snap
