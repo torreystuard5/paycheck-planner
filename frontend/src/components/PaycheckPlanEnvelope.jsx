@@ -13,12 +13,31 @@ import PaycheckPlanItemActions from './PaycheckPlanItemActions';
 import EmptyState from './EmptyState';
 import { Badge, Button, Card, cn } from './ui';
 import { formatPaycheckDate } from '../utils/formatDate';
+import { formatAssignedItemDueLabel } from '../utils/assignedItemDueLabel';
 
 const fmtCurrency = (val) => {
   const n = Number(val);
   const v = isNaN(n) ? 0 : n;
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
+
+function AssignedItemDueLabel({ item, isChecked }) {
+  const dueLabel = formatAssignedItemDueLabel(item);
+  if (!dueLabel) return null;
+
+  return (
+    <p
+      className={cn(
+        'text-caption mt-0.5 tabular-nums',
+        isChecked && 'text-muted',
+        !isChecked && dueLabel.isOverdue && 'text-danger-600',
+        !isChecked && !dueLabel.isOverdue && 'text-muted',
+      )}
+    >
+      {dueLabel.text}
+    </p>
+  );
+}
 
 export default function PaycheckPlanEnvelope({
   paycheckPlan,
@@ -316,6 +335,7 @@ export default function PaycheckPlanEnvelope({
                         {item.item_type}
                       </Badge>
                     </div>
+                    <AssignedItemDueLabel item={item} isChecked={isChecked} />
                     {item.pulled_forward && item.original_pay_period_start && (
                       <p className="text-caption mt-0.5">
                         From {formatPaycheckDate(item.original_pay_period_start)}
@@ -392,12 +412,15 @@ export default function PaycheckPlanEnvelope({
                         className="flex items-center gap-2 rounded-lg bg-surface-subtle px-3 py-2.5 text-sm opacity-70"
                       >
                         <span className="w-4 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-muted">
-                          {item.name}
-                          <Badge variant="neutral" className="ml-1.5 normal-case px-1.5 py-0 text-[10px]">
-                            Hidden
-                          </Badge>
-                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <span className="truncate text-muted">{item.name}</span>
+                            <Badge variant="neutral" className="normal-case px-1.5 py-0 text-[10px]">
+                              Hidden
+                            </Badge>
+                          </div>
+                          <AssignedItemDueLabel item={item} isChecked={false} />
+                        </div>
                         <CurrencyDisplay amount={item.amount} className="shrink-0 text-sm text-muted" />
                         {onHideOverdue && (
                           <Button
