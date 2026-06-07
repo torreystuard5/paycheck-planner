@@ -1,39 +1,106 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import api from '../services/api';
 import {
   DASHBOARD_WIDGET_ORDER,
   DASHBOARD_WIDGETS,
   defaultHiddenWidgets,
+  hiddenWidgetListsEqual,
+  sanitizeHiddenWidgets,
 } from '../config/dashboardWidgets';
 
 function storageKey(userId) {
   return `paydrift_dashboard_hidden_widgets_${userId || 'guest'}`;
 }
 
-function readHidden(userId) {
+function readLocalHidden(userId) {
   try {
     const raw = localStorage.getItem(storageKey(userId));
     if (!raw) return defaultHiddenWidgets();
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : defaultHiddenWidgets();
+    return sanitizeHiddenWidgets(JSON.parse(raw));
   } catch {
     return defaultHiddenWidgets();
   }
 }
 
+function writeLocalHidden(userId, hidden) {
+  try {
+    localStorage.setItem(storageKey(userId), JSON.stringify(hidden));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
 export default function useDashboardWidgetVisibility(userId) {
-  const [hiddenWidgets, setHiddenWidgets] = useState(() => readHidden(userId));
+  const [hiddenWidgets, setHiddenWidgets] = useState(() => readLocalHidden(userId));
+  const [ready, setReady] = useState(!userId);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setHiddenWidgets(readHidden(userId));
+    if (!userId) {
+      setHiddenWidgets(readLocalHidden(userId));
+      setReady(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const load = async () => {
+      setReady(false);
+      const localHidden = readLocalHidden(userId);
+
+      try {
+        const { data } = await api.get('/api/v1/users/me/ui-preferences');
+        if (cancelled) return;
+
+        let serverHidden = sanitizeHiddenWidgets(data.hidden_dashboard_widgets);
+        const defaults = defaultHiddenWidgets();
+
+        if (
+          hiddenWidgetListsEqual(serverHidden, defaults)
+          && !hiddenWidgetListsEqual(localHidden, defaults)
+        ) {
+          serverHidden = localHidden;
+          try {
+            await api.patch('/api/v1/users/me/ui-preferences', {
+              hidden_dashboard_widgets: serverHidden,
+            });
+          } catch {
+            /* keep migrated local value in UI even if sync fails */
+          }
+        }
+
+        setHiddenWidgets(serverHidden);
+        writeLocalHidden(userId, serverHidden);
+      } catch {
+        if (!cancelled) setHiddenWidgets(localHidden);
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   const persist = useCallback(
-    (nextHidden) => {
-      setHiddenWidgets(nextHidden);
+    async (nextHidden) => {
+      const sanitized = sanitizeHiddenWidgets(nextHidden);
+      setHiddenWidgets(sanitized);
+      writeLocalHidden(userId, sanitized);
+
+      if (!userId) return;
+
+      setSaving(true);
       try {
-        localStorage.setItem(storageKey(userId), JSON.stringify(nextHidden));
+        await api.patch('/api/v1/users/me/ui-preferences', {
+          hidden_dashboard_widgets: sanitized,
+        });
       } catch {
-        /* ignore quota errors */
+        /* local cache remains; user can retry on next save */
+      } finally {
+        setSaving(false);
       }
     },
     [userId],
@@ -71,7 +138,7 @@ export default function useDashboardWidgetVisibility(userId) {
   const applyVisibility = useCallback(
     (nextVisibility) => {
       const hidden = DASHBOARD_WIDGET_ORDER.filter((id) => !nextVisibility[id]);
-      persist(hidden);
+      return persist(hidden);
     },
     [persist],
   );
@@ -96,6 +163,8 @@ export default function useDashboardWidgetVisibility(userId) {
     resetWidgets,
     applyVisibility,
     visibleCount,
+    ready,
+    saving,
     widgets: DASHBOARD_WIDGETS,
   };
 }

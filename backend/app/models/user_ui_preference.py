@@ -21,6 +21,9 @@ class UserUIPreference(Base):
     collapsed_sections: Mapped[list] = mapped_column(
         JSON, server_default=text("'[]'::json"), nullable=False
     )
+    hidden_dashboard_widgets: Mapped[list] = mapped_column(
+        JSON, server_default=text("'[]'::json"), nullable=False
+    )
     business_mileage_rate_per_mile: Mapped[float | None] = mapped_column(
         Numeric(8, 4), nullable=True
     )

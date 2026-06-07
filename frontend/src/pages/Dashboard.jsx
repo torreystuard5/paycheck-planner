@@ -157,6 +157,8 @@ export default function Dashboard() {
     visibility: widgetVisibility,
     applyVisibility,
     visibleCount,
+    ready: widgetsReady,
+    saving: widgetsSaving,
   } = useDashboardWidgetVisibility(user?.id);
 
   useEffect(() => {
@@ -489,20 +491,21 @@ export default function Dashboard() {
 
       <WhatsNewBanner compact />
 
-      {visibleCount === 0 && (
-        <Card className="p-4 text-center sm:p-6">
-          <p className="text-sm text-foreground">All dashboard widgets are hidden.</p>
-          <p className="text-caption mt-1">Use Customize Dashboard above to turn sections back on.</p>
-        </Card>
-      )}
-
       <CustomizeDashboardModal
         open={widgetSettingsOpen}
         onClose={() => setWidgetSettingsOpen(false)}
         visibility={widgetVisibility}
         onApply={applyVisibility}
         visibleCount={visibleCount}
+        saving={widgetsSaving}
       />
+
+      {widgetsReady && visibleCount === 0 && (
+        <Card className="p-4 text-center sm:p-6">
+          <p className="text-sm text-foreground">All dashboard widgets are hidden.</p>
+          <p className="text-caption mt-1">Use Customize Dashboard above to turn sections back on.</p>
+        </Card>
+      )}
 
       <DashboardWidget
         widgetId="overview"

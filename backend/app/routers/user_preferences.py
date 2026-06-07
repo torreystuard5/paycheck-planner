@@ -13,7 +13,8 @@ from app.services.tier_access import (
     has_personal_home_access,
     normalize_plan_tier,
 )
-from app.utils.security import get_current_user
+from app.constants.dashboard_widgets import sanitize_hidden_dashboard_widgets
+from app.services.dashboard_widget_preferences import ui_preferences_response
 
 router = APIRouter(prefix="/users", tags=["User Preferences"])
 
@@ -64,7 +65,8 @@ async def update_app_mode(
 # ── UI Preferences ────────────────────────────────────────────────
 
 class UIPreferencesUpdate(BaseModel):
-    collapsed_sections: list[str]
+    collapsed_sections: list[str] | None = None
+    hidden_dashboard_widgets: list[str] | None = None
 
 
 @router.get("/me/ui-preferences")
@@ -76,7 +78,7 @@ async def get_ui_preferences(
         select(UserUIPreference).where(UserUIPreference.user_id == current_user.id)
     )
     pref = result.scalar_one_or_none()
-    return {"collapsed_sections": pref.collapsed_sections if pref else []}
+    return ui_preferences_response(pref)
 
 
 @router.patch("/me/ui-preferences")
@@ -85,19 +87,33 @@ async def update_ui_preferences(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if body.collapsed_sections is None and body.hidden_dashboard_widgets is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one preference field is required",
+        )
+
     result = await db.execute(
         select(UserUIPreference).where(UserUIPreference.user_id == current_user.id)
     )
     pref = result.scalar_one_or_none()
 
     if pref:
-        pref.collapsed_sections = body.collapsed_sections
+        if body.collapsed_sections is not None:
+            pref.collapsed_sections = body.collapsed_sections
+        if body.hidden_dashboard_widgets is not None:
+            pref.hidden_dashboard_widgets = sanitize_hidden_dashboard_widgets(
+                body.hidden_dashboard_widgets
+            )
     else:
         pref = UserUIPreference(
             user_id=current_user.id,
-            collapsed_sections=body.collapsed_sections,
+            collapsed_sections=body.collapsed_sections or [],
+            hidden_dashboard_widgets=sanitize_hidden_dashboard_widgets(
+                body.hidden_dashboard_widgets or []
+            ),
         )
         db.add(pref)
 
     await db.flush()
-    return {"collapsed_sections": pref.collapsed_sections}
+    return ui_preferences_response(pref)

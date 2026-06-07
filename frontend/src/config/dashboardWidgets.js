@@ -67,3 +67,19 @@ export function defaultHiddenWidgets() {
     (id) => !DASHBOARD_WIDGETS[id].defaultVisible,
   );
 }
+
+/** Keep only known widget ids; preserve order and dedupe. */
+export function sanitizeHiddenWidgets(raw) {
+  if (!Array.isArray(raw)) return defaultHiddenWidgets();
+  const seen = new Set();
+  return raw.filter((id) => {
+    if (!DASHBOARD_WIDGETS[id] || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+export function hiddenWidgetListsEqual(a, b) {
+  if (a.length !== b.length) return false;
+  return a.every((id, index) => id === b[index]);
+}

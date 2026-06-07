@@ -22,6 +22,7 @@ export default function CustomizeDashboardModal({
   visibility,
   onApply,
   visibleCount,
+  saving = false,
 }) {
   const [draft, setDraft] = useState(visibility);
 
@@ -47,8 +48,8 @@ export default function CustomizeDashboardModal({
     setDraft(defaultVisibilityFromHidden(defaultHiddenWidgets()));
   };
 
-  const handleApply = () => {
-    onApply(draft);
+  const handleApply = async () => {
+    await onApply(draft);
     onClose();
   };
 
@@ -147,8 +148,8 @@ export default function CustomizeDashboardModal({
           <Button type="button" variant="secondary" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleApply} disabled={draftVisibleCount === 0}>
-            Done
+          <Button type="button" onClick={handleApply} disabled={draftVisibleCount === 0 || saving}>
+            {saving ? 'Saving…' : 'Done'}
           </Button>
         </div>
       </div>
