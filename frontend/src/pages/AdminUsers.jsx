@@ -78,7 +78,7 @@ function SortHeader({ label, field, sortBy, sortOrder, onSort }) {
   );
 }
 
-export default function AdminUsers({ embedded = false }) {
+export default function AdminUsers({ embedded = false, initialUserId = null, onInitialUserOpened }) {
   const { user: currentUser, startImpersonation } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
@@ -345,6 +345,12 @@ export default function AdminUsers({ embedded = false }) {
     setShowEmailConfirm(false);
     resetDetailPasswordForm();
   };
+
+  useEffect(() => {
+    if (!initialUserId) return;
+    openDetail(initialUserId);
+    onInitialUserOpened?.();
+  }, [initialUserId]);
 
   const handleDetailGeneratePassword = () => {
     setDetailNewPassword(generatePassword(12));
@@ -759,20 +765,37 @@ export default function AdminUsers({ embedded = false }) {
 
   return (
     <div className={embedded ? 'space-y-4' : 'min-h-screen bg-gray-50 p-6'}>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Users className="h-7 w-7 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-          <span className="text-sm text-gray-500 ml-1">({total})</span>
+      {!embedded && (
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Users className="h-7 w-7 text-blue-600" />
+            <h1 className="text-2xl font-bold text-gray-900">Users</h1>
+            <span className="text-sm text-gray-500 ml-1">({total})</span>
+          </div>
+          <button
+            onClick={openGlobalFeatures}
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Settings2 className="w-4 h-4" />
+            Global Features
+          </button>
         </div>
-        <button
-          onClick={openGlobalFeatures}
-          className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-        >
-          <Settings2 className="w-4 h-4" />
-          Global Features
-        </button>
-      </div>
+      )}
+
+      {embedded && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-gray-500">
+            <span className="font-medium text-gray-700">{total.toLocaleString()}</span> registered users
+          </p>
+          <button
+            onClick={openGlobalFeatures}
+            className="flex items-center gap-2 self-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <Settings2 className="w-4 h-4" />
+            Global Features
+          </button>
+        </div>
+      )}
 
       {toggleError && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">

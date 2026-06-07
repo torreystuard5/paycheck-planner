@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Shield,
   Users,
   Crown,
   User,
@@ -20,21 +19,18 @@ import {
   AlertCircle,
   Send,
   X,
-  Search,
   Settings,
   ScrollText,
-  LayoutDashboard,
   Megaphone,
   Plus,
   Trash2,
-  ToggleLeft,
-  ToggleRight,
-  Power,
   RefreshCw,
   Radio,
   MailIcon,
   UserMinus,
   UserPlus,
+  Search,
+  Command,
 } from 'lucide-react';
 import {
   LineChart,
@@ -48,42 +44,25 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 import { formatFriendlyDate } from '../utils/formatDate';
-import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
-import SortDropdown from '../components/SortDropdown';
 import AdminDrillDown from '../components/AdminDrillDown';
 import AdminUsers from './AdminUsers';
+import SupportTab from '../components/admin/command-center/SupportTab';
+import CommandCenterLayout from '../components/admin/command-center/CommandCenterLayout';
+import CommandCenterPanel, {
+  CommandCenterSectionHeader,
+  CommandCenterStatCard,
+  CommandCenterTabContent,
+} from '../components/admin/command-center/CommandCenterPanel';
+import GlobalControlsPanel from '../components/admin/command-center/GlobalControlsPanel';
+import DashboardQuickActions from '../components/admin/command-center/DashboardQuickActions';
+import { useCommandPalette } from '../components/admin/command-center/CommandPalette';
+import { AUDIT_ACTION_CATEGORIES } from '../components/admin/command-center/constants';
 
-const TABS = [
-  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { key: 'users', label: 'Users', icon: Users },
-  { key: 'support', label: 'Support', icon: MessageSquare },
-  { key: 'settings', label: 'Settings', icon: Settings },
-  { key: 'audit', label: 'Audit Log', icon: ScrollText },
-  { key: 'broadcast', label: 'Broadcast', icon: Radio },
-];
-
-// ─── Status helpers ──────────────────────────────────────────────────
-const TICKET_STATUS_BADGE = {
-  open: 'bg-amber-100 text-amber-700',
-  in_progress: 'bg-blue-100 text-blue-700',
-  resolved: 'bg-green-100 text-green-700',
-};
-const TICKET_STATUS_ICON = {
-  open: Clock,
-  in_progress: ArrowRightCircle,
-  resolved: CheckCircle2,
-};
-const TICKET_STATUS_TABS = [
-  { key: null, label: 'All' },
-  { key: 'open', label: 'Open' },
-  { key: 'in_progress', label: 'In Progress' },
-  { key: 'resolved', label: 'Resolved' },
-];
-
+// â”€â”€â”€ Status helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const AUDIT_ACTION_COLORS = {
   disable: 'bg-red-100 text-red-700',
   delete: 'bg-red-100 text-red-700',
@@ -123,12 +102,14 @@ const AUDIT_ACTION_LABELS = {
   toggle_global_feature: 'Toggled global feature',
   updated_ticket: 'Updated support ticket',
   replied_to_ticket: 'Replied to support ticket',
+  assigned_ticket: 'Assigned support ticket',
+  added_ticket_note: 'Added ticket internal note',
   user_unsubscribed: 'User unsubscribed (self-service)',
   updated_subscription_tier: 'Updated user plan tier',
 };
 
 function formatAuditActionLabel(action) {
-  if (!action) return '—';
+  if (!action) return 'â€”';
   if (AUDIT_ACTION_LABELS[action]) return AUDIT_ACTION_LABELS[action];
   return action
     .replace(/_/g, ' ')
@@ -136,17 +117,17 @@ function formatAuditActionLabel(action) {
 }
 
 function formatAuditDetailsPreview(raw) {
-  if (!raw) return '—';
+  if (!raw) return 'â€”';
   try {
     const o = JSON.parse(raw);
     const parts = Object.entries(o).map(([k, v]) => {
       const val = v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v);
       return `${k}: ${val}`;
     });
-    const line = parts.join(' · ');
-    return line.length > 100 ? `${line.slice(0, 100)}…` : line;
+    const line = parts.join(' Â· ');
+    return line.length > 100 ? `${line.slice(0, 100)}â€¦` : line;
   } catch {
-    return raw.length > 100 ? `${raw.slice(0, 100)}…` : raw;
+    return raw.length > 100 ? `${raw.slice(0, 100)}â€¦` : raw;
   }
 }
 
@@ -167,25 +148,54 @@ const ANNOUNCEMENT_TYPES = [
   { value: 'coming_soon', label: 'Coming Soon' },
 ];
 
-// ─── Helpers ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const formatDate = (dateStr) => {
-  if (!dateStr) return '—';
+  if (!dateStr) return 'â€”';
   return formatFriendlyDate(dateStr);
 };
 
 const formatDateTime = (dateStr) => {
-  if (!dateStr) return '—';
+  if (!dateStr) return 'â€”';
   return new Date(dateStr).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
 const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm';
 
-// ─── Main Component ──────────────────────────────────────────────────
+// â”€â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function CommandCenter() {
-  const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [usersFocusId, setUsersFocusId] = useState(null);
   const [forbidden, setForbidden] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [settingsFocusAnnouncement, setSettingsFocusAnnouncement] = useState(false);
+  const refreshHandlers = useRef({});
+
+  const registerRefresh = useCallback((tab, fn) => {
+    refreshHandlers.current[tab] = fn;
+    return () => {
+      if (refreshHandlers.current[tab] === fn) delete refreshHandlers.current[tab];
+    };
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    const fn = refreshHandlers.current[activeTab];
+    if (!fn) return;
+    setRefreshing(true);
+    try {
+      await fn();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [activeTab]);
+
+  const handleNavigate = useCallback((tab) => setActiveTab(tab), []);
+
+  const handlePaletteAction = useCallback((actionKey) => {
+    if (actionKey === 'new-announcement') setSettingsFocusAnnouncement(true);
+  }, []);
+
+  const { palette, setPaletteOpen } = useCommandPalette(handleNavigate, handlePaletteAction);
 
   useEffect(() => {
     // Quick admin check + log access
@@ -217,62 +227,76 @@ export default function CommandCenter() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Shield className="h-7 w-7 text-blue-600" />
-        <h1 className="text-2xl font-bold text-gray-900">Command Center</h1>
-      </div>
-
-      {/* Tab bar */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-0 -mb-px overflow-x-auto">
-          {TABS.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === key
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Tab content */}
-      {activeTab === 'dashboard' && <DashboardTab />}
-      {activeTab === 'users' && <AdminUsers embedded />}
-      {activeTab === 'support' && <SupportTab />}
-      {activeTab === 'settings' && <SettingsTab />}
-      {activeTab === 'audit' && <AuditLogTab />}
-      {activeTab === 'broadcast' && <BroadcastTab />}
-    </div>
+    <>
+      <CommandCenterLayout
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+        topBarActions={(
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-blue-600"
+            title="Quick jump (Ctrl+K)"
+          >
+            <Command className="h-4 w-4" />
+            <span className="hidden sm:inline">Quick jump</span>
+          </button>
+        )}
+      >
+        {activeTab === 'dashboard' && (
+          <DashboardTab onNavigate={handleNavigate} onRegisterRefresh={registerRefresh} />
+        )}
+        {activeTab === 'users' && (
+          <AdminUsers
+            embedded
+            initialUserId={usersFocusId}
+            onInitialUserOpened={() => setUsersFocusId(null)}
+          />
+        )}
+        {activeTab === 'support' && (
+          <SupportTab
+            onRegisterRefresh={registerRefresh}
+            onViewUser={(userId) => {
+              setUsersFocusId(userId);
+              setActiveTab('users');
+            }}
+          />
+        )}
+        {activeTab === 'settings' && (
+          <SettingsTab
+            onRegisterRefresh={registerRefresh}
+            openAnnouncementForm={settingsFocusAnnouncement}
+            onAnnouncementFormOpened={() => setSettingsFocusAnnouncement(false)}
+          />
+        )}
+        {activeTab === 'audit' && <AuditLogTab onRegisterRefresh={registerRefresh} />}
+        {activeTab === 'broadcast' && <BroadcastTab onRegisterRefresh={registerRefresh} />}
+      </CommandCenterLayout>
+      {palette}
+    </>
   );
 }
 
-// ─── Dashboard Tab ───────────────────────────────────────────────────
-function DashboardTab() {
+// â”€â”€â”€ Dashboard Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function DashboardTab({ onNavigate, onRegisterRefresh }) {
   const [stats, setStats] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [drillDown, setDrillDown] = useState(null);
 
   const fetchAll = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
-    setRefreshing(true);
     try {
-      const [statsRes, announcementsRes, activityRes] = await Promise.allSettled([
+      const [statsRes, announcementsRes, activityRes, settingsRes] = await Promise.allSettled([
         api.get('/api/v1/admin/stats'),
         api.get('/api/v1/admin/announcements'),
         api.get('/api/v1/admin/audit-log', { params: { page: 1, per_page: 5 } }),
+        api.get('/api/v1/admin/settings'),
       ]);
       if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
       if (announcementsRes.status === 'fulfilled') {
@@ -283,11 +307,15 @@ function DashboardTab() {
         const d = activityRes.value.data;
         setRecentActivity(Array.isArray(d) ? d : d.entries || d.items || []);
       }
+      if (settingsRes.status === 'fulfilled') {
+        const settings = Array.isArray(settingsRes.value.data) ? settingsRes.value.data : [];
+        const mm = settings.find((s) => s.key === 'maintenance_mode');
+        setMaintenanceMode(mm ? mm.value === 'true' : false);
+      }
     } catch {
       setError('Failed to load dashboard data.');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
@@ -297,15 +325,20 @@ function DashboardTab() {
     return () => clearInterval(interval);
   }, [fetchAll]);
 
+  useEffect(() => {
+    if (!onRegisterRefresh) return undefined;
+    return onRegisterRefresh('dashboard', () => fetchAll({ silent: true }));
+  }, [onRegisterRefresh, fetchAll]);
+
   if (loading) return <LoadingSpinner />;
   if (error) return <p className="text-red-600 text-center py-8">{error}</p>;
   if (!stats) return <p className="text-gray-500 text-center py-8">No data available.</p>;
 
   const cards = [
     { label: 'Total Signups', value: stats.total_users, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', drillKey: 'total_signups' },
-    { label: 'Pro Subscribers', value: stats.total_pro_subscribers, icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50', drillKey: 'pro_subscribers' },
+    { label: 'Pro Subscribers', value: stats.total_pro_subscribers, icon: Crown, color: 'text-amber-600', bg: 'bg-amber-50', drillKey: 'pro_subscribers', sublabel: 'Paid plans' },
     { label: 'Free Users', value: stats.total_free_users, icon: User, color: 'text-gray-600', bg: 'bg-gray-100', drillKey: 'free_users' },
-    { label: 'Active Last 30 Days', value: stats.total_active_users_30d, icon: Activity, color: 'text-green-600', bg: 'bg-green-50', drillKey: 'active_30d' },
+    { label: 'Active (30d)', value: stats.total_active_users_30d, icon: Activity, color: 'text-green-600', bg: 'bg-green-50', drillKey: 'active_30d', sublabel: 'Logged in recently' },
     { label: 'Households', value: stats.total_households, icon: Home, color: 'text-purple-600', bg: 'bg-purple-50', drillKey: 'households' },
     { label: 'Support Tickets', value: stats.total_support_tickets, icon: MessageSquare, color: 'text-rose-600', bg: 'bg-rose-50', drillKey: 'support_tickets' },
   ];
@@ -320,69 +353,123 @@ function DashboardTab() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Refresh bar */}
-      <div className="flex items-center justify-end">
-        <button
-          onClick={() => fetchAll({ silent: true })}
-          disabled={refreshing}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
-      </div>
+    <CommandCenterTabContent>
+      <DashboardQuickActions
+        onNavigate={onNavigate}
+        maintenanceMode={maintenanceMode}
+        openTicketCount={stats.open_support_tickets ?? 0}
+      />
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {cards.map(({ label, value, icon: Icon, color, bg, drillKey }) => (
-          <button
-            key={label}
-            onClick={() => setDrillDown(drillKey)}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex items-center gap-4 text-left hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group w-full"
-          >
-            <div className={`${bg} p-3 rounded-lg group-hover:scale-105 transition-transform`}>
-              <Icon className={`h-6 w-6 ${color}`} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm text-gray-500 group-hover:text-blue-600 transition-colors">{label}</p>
-              <p className="text-2xl font-bold text-gray-900">{(value ?? 0).toLocaleString()}</p>
-            </div>
-          </button>
-        ))}
+      <div>
+        <CommandCenterSectionHeader
+          title="Platform overview"
+          description="Click a metric to drill down into details"
+        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {cards.map(({ label, value, icon, color, bg, drillKey, sublabel }) => (
+            <CommandCenterStatCard
+              key={label}
+              label={label}
+              value={value}
+              icon={icon}
+              color={color}
+              bg={bg}
+              sublabel={sublabel}
+              onClick={() => setDrillDown(drillKey)}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Signups chart */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Signups — Last 7 Days</h2>
-        {chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Line type="monotone" dataKey="signups" stroke="#2563eb" strokeWidth={2} dot={{ fill: '#2563eb' }} />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-gray-500 text-center py-8">No signup data available.</p>
-        )}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+        {/* Signups chart */}
+        <CommandCenterPanel>
+          <CommandCenterSectionHeader title="Signups â€” last 7 days" />
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="signups" stroke="#2563eb" strokeWidth={2} dot={{ fill: '#2563eb', r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="py-8 text-center text-sm text-gray-500">No signup data available.</p>
+          )}
+        </CommandCenterPanel>
+
+        {/* Recent Activity */}
+        <CommandCenterPanel>
+          <CommandCenterSectionHeader
+            title="Recent activity"
+            icon={Activity}
+            iconClassName="text-green-600"
+            action={
+              onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('audit')}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                >
+                  View all
+                </button>
+              )
+            }
+          />
+          {recentActivity.length === 0 ? (
+            <p className="text-sm text-gray-500">No recent activity.</p>
+          ) : (
+            <div className="space-y-1">
+              {recentActivity.map((entry, i) => {
+                const action = (entry.action || '').toLowerCase();
+                const badgeColor = AUDIT_ACTION_COLORS[action] || 'bg-gray-100 text-gray-700';
+                return (
+                  <div key={entry.id || i} className="flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-gray-50">
+                    <span className={`inline-flex shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}>
+                      {formatAuditActionLabel(entry.action)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-gray-900">{entry.details || entry.target || 'â€”'}</p>
+                      <p className="text-xs text-gray-500">{entry.admin_email || 'â€”'}</p>
+                    </div>
+                    <span className="shrink-0 text-xs text-gray-400 whitespace-nowrap" title={formatDateTime(entry.created_at)}>
+                      {entry.created_at ? formatDistanceToNow(new Date(entry.created_at), { addSuffix: true }) : 'â€”'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CommandCenterPanel>
       </div>
 
       {/* Active Announcements */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Megaphone className="h-5 w-5 text-blue-600" />
-          Active Announcements
-        </h2>
+      <CommandCenterPanel>
+        <CommandCenterSectionHeader
+          title="Active announcements"
+          icon={Megaphone}
+          action={
+            onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('settings')}
+                className="text-xs font-medium text-blue-600 hover:text-blue-800"
+              >
+                Manage
+              </button>
+            )
+          }
+        />
         {announcements.length === 0 ? (
-          <p className="text-gray-500 text-sm">No active announcements.</p>
+          <p className="text-sm text-gray-500">No active announcements.</p>
         ) : (
           <div className="space-y-3">
             {announcements.map((a) => (
-              <div key={a.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+              <div key={a.id} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <span className={`inline-flex shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${
                   a.type === 'warning' ? 'bg-amber-100 text-amber-700'
                   : a.type === 'error' ? 'bg-red-100 text-red-700'
                   : a.type === 'success' ? 'bg-green-100 text-green-700'
@@ -390,7 +477,7 @@ function DashboardTab() {
                 }`}>
                   {a.type}
                 </span>
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   {a.title && <p className="text-sm font-medium text-gray-900">{a.title}</p>}
                   <p className="text-sm text-gray-600">{a.message}</p>
                 </div>
@@ -398,373 +485,8 @@ function DashboardTab() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Recent Activity */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Activity className="h-5 w-5 text-green-600" />
-          Recent Activity
-        </h2>
-        {recentActivity.length === 0 ? (
-          <p className="text-gray-500 text-sm">No recent activity.</p>
-        ) : (
-          <div className="space-y-3">
-            {recentActivity.map((entry, i) => {
-              const action = (entry.action || '').toLowerCase();
-              const badgeColor = AUDIT_ACTION_COLORS[action] || 'bg-gray-100 text-gray-700';
-              return (
-                <div key={entry.id || i} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}>
-                    {entry.action}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 truncate">{entry.details || entry.target || '—'}</p>
-                    <p className="text-xs text-gray-500">{entry.admin_email || '—'}</p>
-                  </div>
-                  <span className="text-xs text-gray-400 whitespace-nowrap" title={formatDateTime(entry.created_at)}>
-                    {entry.created_at ? formatDistanceToNow(new Date(entry.created_at), { addSuffix: true }) : '—'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Support Tab ─────────────────────────────────────────────────────
-function SupportTab() {
-  const [tickets, setTickets] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [perPage] = useState(20);
-  const [statusFilter, setStatusFilter] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState('desc');
-
-  // Detail modal
-  const [selectedId, setSelectedId] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detail, setDetail] = useState(null);
-  const [editStatus, setEditStatus] = useState('open');
-  const [editNotes, setEditNotes] = useState('');
-  const [replyMessage, setReplyMessage] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [detailError, setDetailError] = useState('');
-  const [detailSuccess, setDetailSuccess] = useState('');
-
-  useEffect(() => { setPage(1); }, [statusFilter]);
-
-  useEffect(() => {
-    fetchTickets();
-  }, [page, statusFilter, sortBy, sortOrder]);
-
-  const fetchTickets = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = { page, per_page: perPage, sort_by: sortBy, sort_order: sortOrder };
-      if (statusFilter) params.status = statusFilter;
-      const { data } = await api.get('/api/v1/support/all', { params });
-      setTickets(data.tickets);
-      setTotal(data.total);
-    } catch {
-      setError('Failed to load support tickets.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const openDetail = async (id) => {
-    setSelectedId(id);
-    setDetailLoading(true);
-    setDetail(null);
-    setDetailError('');
-    setDetailSuccess('');
-    setReplyMessage('');
-    try {
-      const { data } = await api.get(`/api/v1/support/${id}`);
-      setDetail(data);
-      setEditStatus(data.status);
-      setEditNotes(data.admin_notes || '');
-    } catch {
-      setDetail(null);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const closeDetail = () => {
-    setSelectedId(null);
-    setDetail(null);
-    setReplyMessage('');
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    setDetailError('');
-    setDetailSuccess('');
-    try {
-      const { data } = await api.patch(`/api/v1/support/${detail.id}`, { status: editStatus, admin_notes: editNotes || null });
-      setDetail(data);
-      setDetailSuccess('Updated successfully.');
-      setTimeout(() => setDetailSuccess(''), 3000);
-      fetchTickets();
-    } catch (err) {
-      setDetailError(err.response?.data?.detail || 'Failed to update.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleResolve = async () => {
-    setSaving(true);
-    setDetailError('');
-    setDetailSuccess('');
-    try {
-      const { data } = await api.patch(`/api/v1/support/${detail.id}`, { status: 'resolved', admin_notes: editNotes || null });
-      setDetail(data);
-      setEditStatus('resolved');
-      setDetailSuccess('Marked as resolved.');
-      setTimeout(() => setDetailSuccess(''), 3000);
-      fetchTickets();
-    } catch (err) {
-      setDetailError(err.response?.data?.detail || 'Failed to resolve.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSendReply = async () => {
-    if (!replyMessage.trim() || !detail) return;
-    setSending(true);
-    setDetailError('');
-    setDetailSuccess('');
-    try {
-      await api.post(`/api/v1/support/${detail.id}/reply`, { message: replyMessage.trim() });
-      setReplyMessage('');
-      setDetailSuccess('Reply sent successfully.');
-      const { data } = await api.get(`/api/v1/support/${detail.id}`);
-      setDetail(data);
-      setTimeout(() => setDetailSuccess(''), 3000);
-      fetchTickets();
-    } catch {
-      setDetailError('Failed to send reply.');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // Status badge counts
-  const badgeCounts = {
-    open: tickets.filter((t) => t.status === 'open').length,
-    in_progress: tickets.filter((t) => t.status === 'in_progress').length,
-    resolved: tickets.filter((t) => t.status === 'resolved').length,
-  };
-
-  const totalPages = Math.ceil(total / perPage);
-
-  return (
-    <div className="space-y-4">
-      {/* Filter + Sort */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex gap-1 flex-wrap">
-          {TICKET_STATUS_TABS.map((tab) => (
-            <button
-              key={tab.key ?? 'all'}
-              onClick={() => setStatusFilter(tab.key)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                statusFilter === tab.key
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              {tab.label}
-              {tab.key && badgeCounts[tab.key] > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-xs bg-white/20">{badgeCounts[tab.key]}</span>
-              )}
-            </button>
-          ))}
-        </div>
-        <SortDropdown
-          sortBy={sortBy}
-          sortOrder={sortOrder}
-          onSortChange={(sb, so) => { setSortBy(sb); setSortOrder(so); }}
-          options={[
-            { value: 'created_at', label: 'Date' },
-            { value: 'status', label: 'Status' },
-            { value: 'priority', label: 'Priority' },
-          ]}
-        />
-      </div>
-
-      {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>}
-
-      {loading ? (
-        <LoadingSpinner />
-      ) : tickets.length === 0 ? (
-        <EmptyState icon={MessageSquare} title="No Support Tickets" message={statusFilter ? `No ${statusFilter.replace('_', ' ')} tickets found.` : 'No support tickets yet.'} />
-      ) : (
-        <>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-4 py-3 font-medium text-gray-600">Status</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Name / Email</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Subject</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tickets.map((ticket) => {
-                    const Icon = TICKET_STATUS_ICON[ticket.status] || Clock;
-                    return (
-                      <tr key={ticket.id} onClick={() => openDetail(ticket.id)} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors">
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${TICKET_STATUS_BADGE[ticket.status] || 'bg-gray-100 text-gray-600'}`}>
-                            <Icon className="w-3 h-3" />
-                            {ticket.status?.replace('_', ' ')}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="text-gray-900">{ticket.name || 'Anonymous'}</div>
-                          <div className="text-xs text-gray-500">{ticket.email || '—'}</div>
-                        </td>
-                        <td className="px-4 py-3 text-gray-700 max-w-xs truncate">{ticket.subject || 'No Subject'}</td>
-                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatDateTime(ticket.created_at)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-500">Page {page} of {totalPages} ({total} tickets)</p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="p-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Detail Modal */}
-      {selectedId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/40" onClick={closeDetail} />
-          <div className="relative bg-white rounded-lg shadow-xl border border-gray-200 w-[calc(100%-2rem)] sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto z-[100]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Ticket Detail</h2>
-              <button onClick={closeDetail} className="p-1 text-gray-400 hover:text-gray-600" aria-label="Close">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="px-6 py-4">
-              {detailLoading ? (
-                <LoadingSpinner />
-              ) : detail ? (
-                <div className="space-y-5">
-                  {detailError && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{detailError}</div>}
-                  {detailSuccess && <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">{detailSuccess}</div>}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div><p className="text-xs text-gray-500 uppercase tracking-wide">Name</p><p className="text-sm text-gray-900 mt-0.5">{detail.name || 'Anonymous'}</p></div>
-                    <div><p className="text-xs text-gray-500 uppercase tracking-wide">Email</p><p className="text-sm text-gray-900 mt-0.5">{detail.email || '—'}</p></div>
-                    <div><p className="text-xs text-gray-500 uppercase tracking-wide">Subject</p><p className="text-sm text-gray-900 mt-0.5">{detail.subject || 'No Subject'}</p></div>
-                    <div><p className="text-xs text-gray-500 uppercase tracking-wide">Created</p><p className="text-sm text-gray-900 mt-0.5">{formatDateTime(detail.created_at)}</p></div>
-                    {detail.cant_access_email && (
-                      <div className="sm:col-span-2">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                          <AlertCircle className="w-3 h-3" />Can&apos;t access email
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Message */}
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Message</p>
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-800 whitespace-pre-wrap min-h-[60px]">{detail.message || 'No message provided.'}</div>
-                  </div>
-
-                  {/* Replies */}
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Replies ({detail.replies?.length || 0})</p>
-                    {detail.replies?.length > 0 ? (
-                      <div className="space-y-3">
-                        {detail.replies.map((reply) => (
-                          <div key={reply.id} className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap">{reply.reply_message}</p>
-                            <p className="text-xs text-gray-500 mt-2">{formatDateTime(reply.created_at)}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-400 italic">No replies yet.</p>
-                    )}
-                  </div>
-
-                  {/* Reply textarea */}
-                  <div>
-                    <label className="text-xs text-gray-500 uppercase tracking-wide block mb-1">Reply</label>
-                    <textarea value={replyMessage} onChange={(e) => setReplyMessage(e.target.value)} placeholder="Type your reply..." rows={3} className={inputClass + ' resize-none'} />
-                    <div className="flex justify-end mt-2">
-                      <button onClick={handleSendReply} disabled={!replyMessage.trim() || sending} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                        {sending ? <><Loader2 className="h-4 w-4 animate-spin" />Sending...</> : <><Send className="w-4 h-4" />Send Reply</>}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Admin Notes */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Admin Notes</label>
-                    <textarea rows={3} value={editNotes} onChange={(e) => setEditNotes(e.target.value)} className={inputClass} placeholder="Internal notes..." />
-                  </div>
-
-                  {/* Status */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                    <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)} className={inputClass}>
-                      <option value="open">Open</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="resolved">Resolved</option>
-                    </select>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2 pt-2">
-                    <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}Save
-                    </button>
-                    {detail.status !== 'resolved' && (
-                      <button onClick={handleResolve} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">Resolve</button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-red-600 text-sm py-4"><AlertCircle className="w-4 h-4 shrink-0" />Failed to load ticket details.</div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      </CommandCenterPanel>
+    </CommandCenterTabContent>
   );
 }
 
@@ -775,12 +497,7 @@ const UPDATE_TYPES = [
   { value: 'new_feature', label: 'New Feature', color: 'bg-green-100 text-green-700' },
 ];
 
-function SettingsTab() {
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [settingsLoading, setSettingsLoading] = useState(true);
-  const [toggling, setToggling] = useState(false);
-  const [confirmMaintenance, setConfirmMaintenance] = useState(false);
-
+function SettingsTab({ onRegisterRefresh, openAnnouncementForm, onAnnouncementFormOpened }) {
   // Announcements
   const [announcements, setAnnouncements] = useState([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
@@ -807,27 +524,6 @@ function SettingsTab() {
   const [comingSoonForm, setComingSoonForm] = useState({ feature_name: '', description: '', eta: '' });
   const [savingComingSoon, setSavingComingSoon] = useState(false);
   const [deleteComingSoonTarget, setDeleteComingSoonTarget] = useState(null);
-
-  useEffect(() => {
-    fetchSettings();
-    fetchAnnouncements();
-    fetchAppUpdates();
-    fetchComingSoon();
-  }, []);
-
-  const fetchSettings = async () => {
-    setSettingsLoading(true);
-    try {
-      const { data } = await api.get('/api/v1/admin/settings');
-      const settings = Array.isArray(data) ? data : [];
-      const mm = settings.find((s) => s.key === 'maintenance_mode');
-      setMaintenanceMode(mm ? mm.value === 'true' : false);
-    } catch {
-      // silent
-    } finally {
-      setSettingsLoading(false);
-    }
-  };
 
   const fetchAnnouncements = async () => {
     setAnnouncementsLoading(true);
@@ -865,26 +561,27 @@ function SettingsTab() {
     }
   };
 
-  const handleToggleMaintenance = () => {
-    if (!maintenanceMode) {
-      setConfirmMaintenance(true);
-    } else {
-      doToggleMaintenance();
-    }
-  };
+  const refreshAll = useCallback(async () => {
+    await Promise.all([fetchAnnouncements(), fetchAppUpdates(), fetchComingSoon()]);
+  }, []);
 
-  const doToggleMaintenance = async () => {
-    setToggling(true);
-    setConfirmMaintenance(false);
-    try {
-      await api.put('/api/v1/admin/settings/maintenance_mode', { value: String(!maintenanceMode) });
-      setMaintenanceMode(!maintenanceMode);
-    } catch {
-      setError('Failed to update maintenance mode.');
-    } finally {
-      setToggling(false);
+  useEffect(() => {
+    fetchAnnouncements();
+    fetchAppUpdates();
+    fetchComingSoon();
+  }, []);
+
+  useEffect(() => {
+    if (openAnnouncementForm) {
+      setShowAnnouncementForm(true);
+      onAnnouncementFormOpened?.();
     }
-  };
+  }, [openAnnouncementForm, onAnnouncementFormOpened]);
+
+  useEffect(() => {
+    if (!onRegisterRefresh) return undefined;
+    return onRegisterRefresh('settings', refreshAll);
+  }, [onRegisterRefresh, refreshAll]);
 
   const handleCreateAnnouncement = async (e) => {
     e.preventDefault();
@@ -1016,56 +713,26 @@ function SettingsTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <CommandCenterTabContent>
       {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>}
 
-      {/* Maintenance Mode */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Power className="h-5 w-5 text-gray-600" />
-          Maintenance Mode
-        </h2>
-        {settingsLoading ? (
-          <LoadingSpinner />
-        ) : (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`h-3 w-3 rounded-full ${maintenanceMode ? 'bg-red-500' : 'bg-green-500'}`} />
-              <span className="text-sm font-medium text-gray-700">
-                {maintenanceMode ? 'Maintenance mode is ON' : 'Maintenance mode is OFF'}
-              </span>
-            </div>
-            <button
-              onClick={handleToggleMaintenance}
-              disabled={toggling}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                maintenanceMode
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'bg-red-600 text-white hover:bg-red-700'
-              } disabled:opacity-50`}
-            >
-              {toggling ? <Loader2 className="h-4 w-4 animate-spin" /> : maintenanceMode ? <ToggleLeft className="h-4 w-4" /> : <ToggleRight className="h-4 w-4" />}
-              {maintenanceMode ? 'Disable' : 'Enable'}
-            </button>
-          </div>
-        )}
-      </div>
+      <GlobalControlsPanel onError={setError} />
 
       {/* Announcements */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Megaphone className="h-5 w-5 text-blue-600" />
-            Announcements
-          </h2>
-          <button
-            onClick={() => setShowAnnouncementForm(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            New
-          </button>
-        </div>
+      <CommandCenterPanel>
+        <CommandCenterSectionHeader
+          title="Announcements"
+          icon={Megaphone}
+          action={
+            <button
+              onClick={() => setShowAnnouncementForm(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New
+            </button>
+          }
+        />
 
         {announcementsLoading ? (
           <LoadingSpinner />
@@ -1103,23 +770,23 @@ function SettingsTab() {
             ))}
           </div>
         )}
-      </div>
+      </CommandCenterPanel>
 
       {/* Recent Updates Manager */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Clock className="h-5 w-5 text-blue-600" />
-            Recent Updates
-          </h2>
-          <button
-            onClick={() => { setEditingUpdate(null); setUpdateForm({ date: new Date().toISOString().split('T')[0], description: '', type: 'update' }); setShowUpdateForm(true); }}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            New
-          </button>
-        </div>
+      <CommandCenterPanel>
+        <CommandCenterSectionHeader
+          title="Recent updates"
+          icon={Clock}
+          action={
+            <button
+              onClick={() => { setEditingUpdate(null); setUpdateForm({ date: new Date().toISOString().split('T')[0], description: '', type: 'update' }); setShowUpdateForm(true); }}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New
+            </button>
+          }
+        />
 
         {appUpdatesLoading ? (
           <LoadingSpinner />
@@ -1148,23 +815,24 @@ function SettingsTab() {
             ))}
           </div>
         )}
-      </div>
+      </CommandCenterPanel>
 
       {/* Coming Soon Manager */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <ArrowRightCircle className="h-5 w-5 text-green-600" />
-            Coming Soon
-          </h2>
-          <button
-            onClick={() => { setEditingComingSoon(null); setComingSoonForm({ feature_name: '', description: '', eta: '' }); setShowComingSoonForm(true); }}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            New
-          </button>
-        </div>
+      <CommandCenterPanel>
+        <CommandCenterSectionHeader
+          title="Coming soon"
+          icon={ArrowRightCircle}
+          iconClassName="text-green-600"
+          action={
+            <button
+              onClick={() => { setEditingComingSoon(null); setComingSoonForm({ feature_name: '', description: '', eta: '' }); setShowComingSoonForm(true); }}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New
+            </button>
+          }
+        />
 
         {comingSoonLoading ? (
           <LoadingSpinner />
@@ -1191,7 +859,7 @@ function SettingsTab() {
             ))}
           </div>
         )}
-      </div>
+      </CommandCenterPanel>
 
       {/* Create/Edit Update Modal */}
       <Modal isOpen={showUpdateForm} onClose={() => { setShowUpdateForm(false); setEditingUpdate(null); }} title={editingUpdate ? 'Edit Update' : 'New Update'}>
@@ -1275,17 +943,6 @@ function SettingsTab() {
         </form>
       </Modal>
 
-      {/* Confirm maintenance */}
-      <ConfirmDialog
-        isOpen={confirmMaintenance}
-        onClose={() => setConfirmMaintenance(false)}
-        onConfirm={doToggleMaintenance}
-        title="Enable Maintenance Mode"
-        message="This will prevent all non-admin users from accessing the app. Are you sure?"
-        confirmText="Enable"
-        danger
-      />
-
       {/* Delete announcement confirm */}
       <ConfirmDialog
         isOpen={!!deleteAnnouncementTarget}
@@ -1318,12 +975,12 @@ function SettingsTab() {
         confirmText="Delete"
         danger
       />
-    </div>
+    </CommandCenterTabContent>
   );
 }
 
-// ─── Audit Log Tab ───────────────────────────────────────────────────
-function AuditLogTab() {
+// â”€â”€â”€ Audit Log Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function AuditLogTab({ onRegisterRefresh }) {
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -1331,20 +988,38 @@ function AuditLogTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionFilter, setActionFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [detailEntry, setDetailEntry] = useState(null);
 
   const actionFilterKeys = Object.keys(AUDIT_ACTION_LABELS).sort();
 
   useEffect(() => {
-    fetchAuditLog();
-  }, [page, actionFilter]);
+    const t = setTimeout(() => setSearchQuery(searchInput.trim()), 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
-  const fetchAuditLog = async () => {
+  useEffect(() => {
+    setPage(1);
+  }, [actionFilter, categoryFilter, searchQuery, dateFrom, dateTo]);
+
+  const fetchAuditLog = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const params = { page, per_page: perPage };
-      if (actionFilter) params.action = actionFilter;
+      if (actionFilter) {
+        params.action = actionFilter;
+      } else if (categoryFilter) {
+        const cat = AUDIT_ACTION_CATEGORIES.find((c) => c.key === categoryFilter);
+        if (cat?.actions?.length) params.actions = cat.actions.join(',');
+      }
+      if (searchQuery) params.search = searchQuery;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
       const { data } = await api.get('/api/v1/admin/audit-log', { params });
       const items = Array.isArray(data) ? data : data.entries || data.items || [];
       setEntries(items);
@@ -1354,34 +1029,121 @@ function AuditLogTab() {
     } finally {
       setLoading(false);
     }
+  }, [page, perPage, actionFilter, categoryFilter, searchQuery, dateFrom, dateTo]);
+
+  useEffect(() => {
+    fetchAuditLog();
+  }, [fetchAuditLog]);
+
+  useEffect(() => {
+    if (!onRegisterRefresh) return undefined;
+    return onRegisterRefresh('audit', fetchAuditLog);
+  }, [onRegisterRefresh, fetchAuditLog]);
+
+  const clearFilters = () => {
+    setActionFilter('');
+    setCategoryFilter('');
+    setSearchInput('');
+    setSearchQuery('');
+    setDateFrom('');
+    setDateTo('');
   };
 
+  const hasFilters = actionFilter || categoryFilter || searchQuery || dateFrom || dateTo;
   const totalPages = Math.ceil(total / perPage) || 1;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <select
-          value={actionFilter}
-          onChange={(e) => { setActionFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-        >
-          <option value="">All actions</option>
-          {actionFilterKeys.map((key) => (
-            <option key={key} value={key}>{AUDIT_ACTION_LABELS[key]}</option>
+    <CommandCenterTabContent>
+      <CommandCenterPanel padding className="!p-4 space-y-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search admin email, action, target, or detailsâ€¦"
+            className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {AUDIT_ACTION_CATEGORIES.map((cat) => (
+            <button
+              key={cat.key || 'all'}
+              type="button"
+              onClick={() => {
+                setCategoryFilter(cat.key);
+                setActionFilter('');
+              }}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                categoryFilter === cat.key && !actionFilter
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {cat.label}
+            </button>
           ))}
-        </select>
-      </div>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="min-w-[10rem] flex-1">
+            <label className="mb-1 block text-xs font-medium text-gray-500">Specific action</label>
+            <select
+              value={actionFilter}
+              onChange={(e) => {
+                setActionFilter(e.target.value);
+                if (e.target.value) setCategoryFilter('');
+              }}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All actions</option>
+              {actionFilterKeys.map((key) => (
+                <option key={key} value={key}>{AUDIT_ACTION_LABELS[key]}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">From</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      </CommandCenterPanel>
 
       {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>}
 
       {loading ? (
         <LoadingSpinner />
       ) : entries.length === 0 ? (
-        <EmptyState icon={ScrollText} title="No Audit Entries" message="No audit log entries found." />
+        <CommandCenterPanel>
+          <EmptyState icon={ScrollText} title="No Audit Entries" message="No audit log entries found." />
+        </CommandCenterPanel>
       ) : (
         <>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <CommandCenterPanel padding={false}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead>
@@ -1402,15 +1164,17 @@ function AuditLogTab() {
                     return (
                       <tr key={entry.id || i} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-gray-500 whitespace-nowrap" title={formatDateTime(entry.created_at)}>
-                          {entry.created_at ? formatDistanceToNow(new Date(entry.created_at), { addSuffix: true }) : '—'}
+                          {entry.created_at ? formatDistanceToNow(new Date(entry.created_at), { addSuffix: true }) : 'â€”'}
                         </td>
-                        <td className="px-4 py-3 text-gray-900">{entry.admin_email || '—'}</td>
+                        <td className="px-4 py-3 text-gray-900">{entry.admin_email || 'â€”'}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}>
                             {formatAuditActionLabel(actionKey)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-gray-700 max-w-[14rem]">{entry.target || '—'}</td>
+                        <td className="px-4 py-3 text-gray-700 max-w-[14rem]">
+                          <span className="line-clamp-2">{entry.target || 'â€”'}</span>
+                        </td>
                         <td className="px-4 py-3 text-gray-500 max-w-xs">
                           <div className="flex items-center gap-2">
                             <span className="truncate flex-1 min-w-0">{formatAuditDetailsPreview(entry.details)}</span>
@@ -1431,7 +1195,7 @@ function AuditLogTab() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </CommandCenterPanel>
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
@@ -1452,7 +1216,7 @@ function AuditLogTab() {
       <Modal
         isOpen={!!detailEntry}
         onClose={() => setDetailEntry(null)}
-        title={detailEntry ? `Details — ${formatAuditActionLabel(detailEntry.action)}` : 'Details'}
+        title={detailEntry ? `Details â€” ${formatAuditActionLabel(detailEntry.action)}` : 'Details'}
       >
         {detailEntry && (
           <div className="space-y-3 text-sm">
@@ -1465,11 +1229,11 @@ function AuditLogTab() {
           </div>
         )}
       </Modal>
-    </div>
+    </CommandCenterTabContent>
   );
 }
 
-// ─── Broadcast Tab ──────────────────────────────────────────────────
+// â”€â”€â”€ Broadcast Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const AUDIENCE_OPTIONS = [
   { value: 'all', label: 'All Users' },
   { value: 'free', label: 'Free Tier Only' },
@@ -1477,7 +1241,7 @@ const AUDIENCE_OPTIONS = [
   { value: 'active_30d', label: 'Active in Last 30 Days' },
 ];
 
-function BroadcastTab() {
+function BroadcastTab({ onRegisterRefresh }) {
   const [view, setView] = useState('compose'); // compose | history | unsubscribed
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -1524,6 +1288,16 @@ function BroadcastTab() {
     if (view === 'unsubscribed') fetchUnsubscribed();
   }, [view, fetchHistory, fetchUnsubscribed]);
 
+  const refreshView = useCallback(async () => {
+    if (view === 'history') await fetchHistory();
+    else if (view === 'unsubscribed') await fetchUnsubscribed();
+  }, [view, fetchHistory, fetchUnsubscribed]);
+
+  useEffect(() => {
+    if (!onRegisterRefresh) return undefined;
+    return onRegisterRefresh('broadcast', refreshView);
+  }, [onRegisterRefresh, refreshView]);
+
   const handleSendClick = async () => {
     if (!subject.trim() || !body.trim()) {
       setError('Subject and body are required.');
@@ -1568,16 +1342,16 @@ function BroadcastTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <CommandCenterTabContent>
       {/* Sub-nav */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {[{ key: 'compose', label: 'Compose', icon: MailIcon }, { key: 'history', label: 'History', icon: ScrollText }, { key: 'unsubscribed', label: 'Unsubscribed', icon: UserMinus }].map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setView(key)}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               view === key
-                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
             }`}
           >
@@ -1587,13 +1361,13 @@ function BroadcastTab() {
         ))}
       </div>
 
-      {/* ─── Compose view ─── */}
+      {/* â”€â”€â”€ Compose view â”€â”€â”€ */}
       {view === 'compose' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Radio className="h-5 w-5 text-blue-600" />
-            Compose Broadcast
-          </h2>
+        <CommandCenterPanel>
+          <CommandCenterSectionHeader
+            title="Compose broadcast"
+            icon={Radio}
+          />
 
           {error && (
             <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
@@ -1653,18 +1427,20 @@ function BroadcastTab() {
               {sending ? 'Sending...' : 'Send Broadcast'}
             </button>
           </div>
-        </div>
+        </CommandCenterPanel>
       )}
 
-      {/* ─── History view ─── */}
+      {/* â”€â”€â”€ History view â”€â”€â”€ */}
       {view === 'history' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Broadcast History</h2>
-            <button onClick={fetchHistory} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
-              <RefreshCw className={`h-4 w-4 text-gray-500 ${loadingHistory ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+        <CommandCenterPanel>
+          <CommandCenterSectionHeader
+            title="Broadcast history"
+            action={
+              <button onClick={fetchHistory} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
+                <RefreshCw className={`h-4 w-4 text-gray-500 ${loadingHistory ? 'animate-spin' : ''}`} />
+              </button>
+            }
+          />
 
           {loadingHistory ? (
             <LoadingSpinner />
@@ -1698,18 +1474,20 @@ function BroadcastTab() {
               </table>
             </div>
           )}
-        </div>
+        </CommandCenterPanel>
       )}
 
-      {/* ─── Unsubscribed view ─── */}
+      {/* â”€â”€â”€ Unsubscribed view â”€â”€â”€ */}
       {view === 'unsubscribed' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Unsubscribed Users</h2>
-            <button onClick={fetchUnsubscribed} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
-              <RefreshCw className={`h-4 w-4 text-gray-500 ${loadingUnsub ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+        <CommandCenterPanel>
+          <CommandCenterSectionHeader
+            title="Unsubscribed users"
+            action={
+              <button onClick={fetchUnsubscribed} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
+                <RefreshCw className={`h-4 w-4 text-gray-500 ${loadingUnsub ? 'animate-spin' : ''}`} />
+              </button>
+            }
+          />
 
           {loadingUnsub ? (
             <LoadingSpinner />
@@ -1747,10 +1525,10 @@ function BroadcastTab() {
               </table>
             </div>
           )}
-        </div>
+        </CommandCenterPanel>
       )}
 
-      {/* ─── Confirmation modal ─── */}
+      {/* â”€â”€â”€ Confirmation modal â”€â”€â”€ */}
       {showConfirm && preview && (
         <Modal isOpen={showConfirm && !!preview} onClose={() => setShowConfirm(false)} title="Confirm Broadcast">
           <div className="space-y-4">
@@ -1776,6 +1554,6 @@ function BroadcastTab() {
           </div>
         </Modal>
       )}
-    </div>
+    </CommandCenterTabContent>
   );
 }
