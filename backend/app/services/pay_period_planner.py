@@ -663,6 +663,8 @@ async def build_full_paycheck_plan_response(
             paycheck_meta=paycheck_meta,
             ctx=ctx,
         )
+        if planning.get("_debug_amanda_car"):
+            plan["_debug_amanda_car"] = planning["_debug_amanda_car"]
     elif paychecks:
         empty_current = {
             "paycheck_context": {

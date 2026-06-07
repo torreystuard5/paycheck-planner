@@ -258,8 +258,28 @@ def next_due_date_for_bill(bill: Bill, today: date | None = None) -> date | None
     dates = occurrence_dates_for_bill(bill, today, _add_months(today, 18))
     for due in dates:
         if due >= today:
-            return due
-    return dates[0] if dates else None
+            result = due
+            break
+    else:
+        result = dates[0] if dates else None
+
+    if (getattr(bill, "name", None) or "").strip().lower() == "amanda car":
+        try:
+            from app.services.debug_bill_dates import log_amanda_car
+
+            log_amanda_car(
+                "next_due_date_for_bill",
+                today=str(today),
+                start_date=str(getattr(bill, "start_date", None)),
+                day_of_week=getattr(bill, "day_of_week", None),
+                frequency=getattr(bill, "frequency", None),
+                candidate_dates=[str(d) for d in dates[:6]],
+                next_due_date=str(result) if result else None,
+            )
+        except Exception:
+            pass
+
+    return result
 
 
 def cycle_window_start(today: date | None = None) -> date:

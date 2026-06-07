@@ -30,6 +30,7 @@ from app.services.paycheck_engine import (
     occurrence_key,
     previous_period_bounds,
 )
+from app.services.debug_bill_dates import is_amanda_car, snapshot_amanda_car_bill
 
 
 async def _checked_items_for_period(
@@ -363,6 +364,22 @@ async def build_paycheck_planning_state(
         else 0.0
     )
 
+    # TEMPORARY: debug Amanda Car overdue investigation
+    debug_amanda_car = None
+    for bill in bills:
+        if is_amanda_car(getattr(bill, "name", None)):
+            debug_ctx = dict(ctx)
+            if bounds is not None:
+                debug_ctx["_debug_prev_bounds"] = bounds
+            debug_amanda_car = snapshot_amanda_car_bill(
+                bill,
+                today,
+                ctx=debug_ctx,
+                assigned_items=current_assigned,
+                source="build_paycheck_planning_state",
+            )
+            break
+
     return {
         "paycheck_context": {
             "pay_period_start": current_start,
@@ -381,6 +398,7 @@ async def build_paycheck_planning_state(
         "assigned_total_amount": assigned_total_amount,
         "assigned_still_owed": assigned_still_owed,
         "assigned_progress_percent": assigned_progress_percent,
+        "_debug_amanda_car": debug_amanda_car,
     }
 
 
