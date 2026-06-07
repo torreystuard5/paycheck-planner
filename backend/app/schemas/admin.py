@@ -23,6 +23,7 @@ class AdminStatsResponse(BaseModel):
     total_free_users: int
     total_households: int
     total_support_tickets: int
+    open_support_tickets: int = 0
     signups_last_7_days: list[SignupDay]
 
 

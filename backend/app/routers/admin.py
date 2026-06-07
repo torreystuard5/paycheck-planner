@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import cast, Date, func, select
+from sqlalchemy import cast, Date, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -121,6 +121,12 @@ async def get_admin_stats(
         await db.execute(select(func.count(SupportTicket.id)))
     ).scalar() or 0
 
+    open_tickets = (
+        await db.execute(
+            select(func.count(SupportTicket.id)).where(SupportTicket.status == "open")
+        )
+    ).scalar() or 0
+
     signup_rows = (
         await db.execute(
             select(
@@ -146,6 +152,7 @@ async def get_admin_stats(
         total_free_users=free_users,
         total_households=total_households,
         total_support_tickets=total_tickets,
+        open_support_tickets=open_tickets,
         signups_last_7_days=signups_last_7_days,
     )
 
@@ -1042,7 +1049,15 @@ async def get_audit_log(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     action: str | None = Query(default=None),
+    actions: str | None = Query(
+        default=None,
+        description="Comma-separated action keys (category filter)",
+    ),
     admin_id: UUID | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=200),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    target_type: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1052,17 +1067,47 @@ async def get_audit_log(
             detail="Admin access required",
         )
 
-    query = select(AdminAuditLog).where(AdminAuditLog.action != "accessed_command_center")
-    count_query = select(func.count(AdminAuditLog.id)).where(
-        AdminAuditLog.action != "accessed_command_center"
-    )
+    base_filter = AdminAuditLog.action != "accessed_command_center"
+    query = select(AdminAuditLog).where(base_filter)
+    count_query = select(func.count(AdminAuditLog.id)).where(base_filter)
 
-    if action:
+    action_list: list[str] | None = None
+    if actions:
+        action_list = [a.strip() for a in actions.split(",") if a.strip()]
+    if action_list:
+        query = query.where(AdminAuditLog.action.in_(action_list))
+        count_query = count_query.where(AdminAuditLog.action.in_(action_list))
+    elif action:
         query = query.where(AdminAuditLog.action == action)
         count_query = count_query.where(AdminAuditLog.action == action)
     if admin_id:
         query = query.where(AdminAuditLog.admin_id == admin_id)
         count_query = count_query.where(AdminAuditLog.admin_id == admin_id)
+    if target_type:
+        query = query.where(AdminAuditLog.target_type == target_type)
+        count_query = count_query.where(AdminAuditLog.target_type == target_type)
+    if date_from:
+        start = datetime.combine(date_from, datetime.min.time(), tzinfo=timezone.utc)
+        query = query.where(AdminAuditLog.created_at >= start)
+        count_query = count_query.where(AdminAuditLog.created_at >= start)
+    if date_to:
+        end = datetime.combine(
+            date_to + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc
+        )
+        query = query.where(AdminAuditLog.created_at < end)
+        count_query = count_query.where(AdminAuditLog.created_at < end)
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        admin_ids_subq = select(User.id).where(User.email.ilike(term))
+        search_cond = or_(
+            AdminAuditLog.action.ilike(term),
+            AdminAuditLog.details.ilike(term),
+            AdminAuditLog.target_id.ilike(term),
+            AdminAuditLog.target_type.ilike(term),
+            AdminAuditLog.admin_id.in_(admin_ids_subq),
+        )
+        query = query.where(search_cond)
+        count_query = count_query.where(search_cond)
 
     total = (await db.execute(count_query)).scalar() or 0
 
