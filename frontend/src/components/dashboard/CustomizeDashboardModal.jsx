@@ -90,22 +90,27 @@ export default function CustomizeDashboardModal({
     onClose();
   };
 
+  const statusLabel = hasChanges
+    ? 'Unsaved changes'
+    : `${visibleCount} of ${DASHBOARD_WIDGET_ORDER.length} widgets visible`;
+
   return (
     <>
       <Modal
         isOpen={open}
         onClose={handleCancel}
         title="Customize Dashboard"
-        className="sm:max-w-3xl"
+        description="Drag to reorder sections and toggle what appears on your dashboard."
+        className="sm:max-w-2xl lg:max-w-4xl"
         footer={(
-          <div className="border-t border-border bg-surface px-4 py-4 sm:px-6">
-            <div className="flex flex-col gap-3">
+          <div className="border-t border-border bg-surface-subtle/40 px-4 py-4 sm:px-6">
+            <div className="flex flex-col gap-4">
               {!savedIsDefault && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="w-full gap-1.5 text-muted sm:w-auto sm:self-start"
+                  className="w-full gap-1.5 self-start text-muted"
                   onClick={() => setResetConfirmOpen(true)}
                   disabled={saving}
                 >
@@ -113,16 +118,23 @@ export default function CustomizeDashboardModal({
                   Reset to Default Layout
                 </Button>
               )}
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-caption text-center sm:text-left">
-                  {hasChanges ? 'Unsaved changes' : `${visibleCount}/${DASHBOARD_WIDGET_ORDER.length} widgets visible`}
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                  <Badge
+                    variant={hasChanges ? 'warning' : 'neutral'}
+                    className="normal-case px-2.5 py-1 text-xs"
+                  >
+                    {statusLabel}
+                  </Badge>
                   {draftVisibleCount !== visibleCount && hasChanges && (
-                    <Badge variant="neutral" className="ml-2 normal-case">
-                      Preview: {draftVisibleCount} visible
-                    </Badge>
+                    <span className="text-caption text-muted">
+                      Previewing {draftVisibleCount} visible
+                    </span>
                   )}
-                </p>
-                <div className="flex flex-col gap-2 sm:flex-row">
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                   <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>
                     Cancel
                   </Button>
@@ -130,8 +142,9 @@ export default function CustomizeDashboardModal({
                     type="button"
                     onClick={handleApply}
                     disabled={draftVisibleCount === 0 || saving}
+                    className="min-w-[7rem]"
                   >
-                    {saving ? 'Saving…' : 'Done'}
+                    {saving ? 'Saving…' : 'Save layout'}
                   </Button>
                 </div>
               </div>
@@ -139,27 +152,25 @@ export default function CustomizeDashboardModal({
           </div>
         )}
       >
-        <p className="text-body mb-4">
-          Drag to reorder, toggle visibility, and preview your layout.
-        </p>
-
-        <div className="grid gap-5 pb-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,16rem)] lg:items-start lg:gap-6">
-          <div className="order-2 lg:order-1">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)] lg:items-start lg:gap-8">
+          {/* Widget list */}
+          <section aria-labelledby="customize-widgets-heading" className="order-2 min-w-0 lg:order-1">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-foreground">Widgets</p>
-                <p className="text-caption mt-0.5 sm:hidden">
-                  Hold the grip handle, then drag to reorder.
+                <h3 id="customize-widgets-heading" className="text-sm font-semibold text-foreground">
+                  Widgets
+                </h3>
+                <p className="text-caption mt-1 max-w-prose leading-relaxed">
+                  Use the grip handle to reorder. Toggle off anything you want to hide.
                 </p>
               </div>
               <Button
                 type="button"
-                variant="ghost"
+                variant="secondary"
                 size="sm"
-                className="gap-1.5 px-2 text-muted"
+                className="shrink-0 gap-1.5"
                 onClick={handleResetDraft}
                 disabled={draftIsDefault || saving}
-                title="Reset preview to default layout"
               >
                 <RotateCcw className="h-3.5 w-3.5" aria-hidden />
                 Preview default
@@ -173,14 +184,28 @@ export default function CustomizeDashboardModal({
               onToggle={setDraftVisible}
               disabled={saving}
             />
-          </div>
+          </section>
 
-          <div className="order-1 lg:order-2 lg:sticky lg:top-0">
+          {/* Live preview — top on mobile, sticky right column on desktop */}
+          <section
+            aria-labelledby="customize-preview-heading"
+            className="order-1 min-w-0 lg:order-2 lg:sticky lg:top-0"
+          >
+            <div className="mb-3 lg:mb-4">
+              <h3 id="customize-preview-heading" className="text-sm font-semibold text-foreground">
+                Live preview
+              </h3>
+              <p className="text-caption mt-1 hidden sm:block">
+                Updates as you reorder and toggle widgets.
+              </p>
+            </div>
+
             <DashboardLayoutPreview
               visibility={draft.visibility}
               widgetOrder={draft.order}
+              embedded
             />
-          </div>
+          </section>
         </div>
       </Modal>
 

@@ -12,7 +12,7 @@ import {
   defaultWidgetOrder,
 } from '../../config/dashboardWidgets';
 import { buildPreviewSections } from '../../utils/dashboardLayout';
-import { Card, IconStat, cn } from '../ui';
+import { Badge, IconStat, cn } from '../ui';
 
 const WIDGET_ICONS = {
   overview: DollarSign,
@@ -23,52 +23,105 @@ const WIDGET_ICONS = {
   whats_new: Rocket,
 };
 
-const HEIGHT_CLASS = {
-  sm: 'h-10',
-  md: 'h-14',
-  lg: 'h-[4.5rem]',
-};
+function SkeletonLine({ width = 'w-full' }) {
+  return <div className={cn('h-1.5 rounded-full bg-border/80', width)} aria-hidden />;
+}
 
-function PreviewBlock({ widgetId, className, style }) {
-  const meta = DASHBOARD_WIDGETS[widgetId];
-  const Icon = WIDGET_ICONS[widgetId];
-  const height = HEIGHT_CLASS[meta.preview?.height || 'md'];
-
+function OverviewPreviewMini() {
   return (
-    <div
-      className={cn(
-        'overflow-hidden rounded-lg border border-border bg-surface shadow-sm transition-all duration-200',
-        height,
-        className,
-      )}
-      style={style}
-      aria-hidden
-    >
-      <div className="flex h-full items-center gap-2 px-2.5">
-        {Icon && (
-          <IconStat
-            icon={Icon}
-            tone={meta.iconTone || 'accent'}
-            className="rounded-md p-1.5"
-            iconClassName="h-3 w-3"
-          />
-        )}
-        <span className="truncate text-[10px] font-medium text-foreground sm:text-xs">
-          {meta.label}
-        </span>
-      </div>
+    <div className="mt-2 grid grid-cols-2 gap-1.5" aria-hidden>
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="h-6 rounded-md border border-border/60 bg-surface-subtle/80" />
+      ))}
     </div>
   );
 }
 
-function PreviewPlanRow({ ids, className, style }) {
+function TablePreviewMini() {
+  return (
+    <div className="mt-2 space-y-1.5" aria-hidden>
+      <SkeletonLine />
+      <SkeletonLine width="w-[92%]" />
+      <SkeletonLine width="w-[80%]" />
+    </div>
+  );
+}
+
+function PreviewBlock({ widgetId, position }) {
+  const meta = DASHBOARD_WIDGETS[widgetId];
+  const Icon = WIDGET_ICONS[widgetId];
+  const height = meta.preview?.height || 'md';
+  const isCompact = height === 'sm';
+  const isTall = height === 'lg';
+
   return (
     <div
-      className={cn('grid gap-2', ids.length === 2 && 'grid-cols-2', className)}
-      style={style}
+      className={cn(
+        'rounded-lg border border-border bg-surface p-3 shadow-sm transition-all duration-200',
+        isCompact && 'py-2.5',
+        isTall && 'pb-3.5',
+      )}
+      aria-hidden
     >
-      {ids.map((id) => (
-        <PreviewBlock key={id} widgetId={id} />
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {Icon && (
+            <IconStat
+              icon={Icon}
+              tone={meta.iconTone || 'accent'}
+              className="rounded-md p-1.5"
+              iconClassName="h-3.5 w-3.5"
+            />
+          )}
+          <span className="truncate text-xs font-semibold text-foreground">
+            {meta.label}
+          </span>
+        </div>
+        {position != null && (
+          <Badge variant="neutral" className="shrink-0 px-1.5 py-0 text-[10px] tabular-nums">
+            {position}
+          </Badge>
+        )}
+      </div>
+
+      {widgetId === 'overview' && <OverviewPreviewMini />}
+      {widgetId === 'recent_payments' && <TablePreviewMini />}
+      {widgetId === 'paycheck_plan' && (
+        <div className="mt-2 space-y-1.5" aria-hidden>
+          <SkeletonLine />
+          <SkeletonLine width="w-[83%]" />
+          <SkeletonLine width="w-[66%]" />
+          <SkeletonLine width="w-[80%]" />
+        </div>
+      )}
+      {widgetId === 'quick_stats' && (
+        <div className="mt-2 space-y-2" aria-hidden>
+          <SkeletonLine width="w-[50%]" />
+          <div className="h-2 overflow-hidden rounded-full bg-surface-subtle">
+            <div className="h-full w-[60%] rounded-full bg-brand-500/40" />
+          </div>
+          <SkeletonLine width="w-[75%]" />
+        </div>
+      )}
+      {(widgetId === 'household_activity' || widgetId === 'whats_new') && (
+        <div className="mt-2 space-y-1.5" aria-hidden>
+          <SkeletonLine width="w-full" />
+          <SkeletonLine width="w-[80%]" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PreviewPlanRow({ ids, startPosition }) {
+  return (
+    <div className={cn('grid gap-2', ids.length === 2 && 'grid-cols-2')}>
+      {ids.map((id, i) => (
+        <PreviewBlock
+          key={id}
+          widgetId={id}
+          position={startPosition + i}
+        />
       ))}
     </div>
   );
@@ -78,14 +131,24 @@ export default function DashboardLayoutPreview({
   visibility,
   widgetOrder = defaultWidgetOrder(),
   className,
+  embedded = false,
 }) {
   const visibleCount = DASHBOARD_WIDGET_ORDER.filter((id) => visibility[id]).length;
   const sections = buildPreviewSections(widgetOrder, visibility);
 
+  let positionCounter = 0;
+
   return (
-    <Card variant="inset" className={cn('p-4', className)}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
+    <div
+      className={cn(
+        embedded
+          ? 'overflow-hidden rounded-xl border border-border bg-surface-subtle/50'
+          : 'rounded-xl border border-border bg-surface-subtle/50 p-4',
+        className,
+      )}
+    >
+      {!embedded && (
+        <div className="mb-4 px-4 pt-4">
           <p className="text-sm font-semibold text-foreground">Live preview</p>
           <p className="text-caption mt-0.5">
             {visibleCount === 0
@@ -93,40 +156,58 @@ export default function DashboardLayoutPreview({
               : `${visibleCount} widget${visibleCount === 1 ? '' : 's'} visible`}
           </p>
         </div>
-      </div>
+      )}
 
-      <div
-        className="mx-auto max-w-sm space-y-2 rounded-xl border border-border/80 bg-background p-3"
-        aria-label="Dashboard layout preview"
-      >
-        {visibleCount === 0 ? (
-          <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center">
-            <p className="text-caption text-muted">Turn widgets on to see your layout</p>
+      {/* Mini dashboard frame */}
+      <div className={cn('p-3 sm:p-4', embedded && 'pt-3')}>
+        <div className="mb-3 flex items-center gap-2 px-1" aria-hidden>
+          <div className="flex gap-1">
+            <span className="h-2 w-2 rounded-full bg-border" />
+            <span className="h-2 w-2 rounded-full bg-border" />
+            <span className="h-2 w-2 rounded-full bg-border" />
           </div>
-        ) : (
-          sections.map((section, index) => {
-            if (section.type === 'plan-row') {
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
+            Dashboard
+          </span>
+        </div>
+
+        <div
+          className="space-y-2.5 rounded-lg border border-border/80 bg-background p-3 sm:space-y-3 sm:p-4"
+          aria-label="Dashboard layout preview"
+        >
+          {visibleCount === 0 ? (
+            <div className="flex min-h-[8rem] flex-col items-center justify-center rounded-lg border border-dashed border-border px-4 py-8 text-center">
+              <p className="text-sm font-medium text-foreground">No widgets visible</p>
+              <p className="text-caption mt-1 max-w-[14rem]">
+                Turn on at least one widget to preview your layout.
+              </p>
+            </div>
+          ) : (
+            sections.map((section) => {
+              if (section.type === 'plan-row') {
+                const start = positionCounter + 1;
+                positionCounter += section.ids.length;
+                return (
+                  <PreviewPlanRow
+                    key={`plan-${section.ids.join('-')}`}
+                    ids={section.ids}
+                    startPosition={start}
+                  />
+                );
+              }
+              positionCounter += 1;
               return (
-                <PreviewPlanRow
-                  key={`plan-${section.ids.join('-')}`}
-                  ids={section.ids}
-                  className="animate-fade-in"
-                  style={{ animationDelay: `${index * 40}ms` }}
+                <PreviewBlock
+                  key={section.id}
+                  widgetId={section.id}
+                  position={positionCounter}
                 />
               );
-            }
-            return (
-              <PreviewBlock
-                key={section.id}
-                widgetId={section.id}
-                className="animate-fade-in"
-                style={{ animationDelay: `${index * 40}ms` }}
-              />
-            );
-          })
-        )}
+            })
+          )}
+        </div>
       </div>
-    </Card>
+    </div>
   );
 }
 

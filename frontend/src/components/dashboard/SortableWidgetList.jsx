@@ -25,6 +25,7 @@ function WidgetRowContent({
   widgetId,
   checked,
   onToggle,
+  position,
   isOverlay = false,
   dragHandleProps = null,
 }) {
@@ -35,56 +36,80 @@ function WidgetRowContent({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 rounded-xl border px-2 py-3 sm:gap-3 sm:px-3',
+        'grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-xl border p-3 sm:grid-cols-[auto_auto_1fr_auto] sm:gap-4 sm:p-4',
         checked
-          ? 'border-border bg-surface'
-          : 'border-border/60 bg-surface-subtle/50 opacity-90',
-        isOverlay && 'border-accent-300/60 shadow-lg ring-2 ring-accent-500/20',
+          ? 'border-border bg-surface shadow-[var(--shadow-card)]'
+          : 'border-dashed border-border/70 bg-surface-subtle/60',
+        isOverlay && 'border-accent-300/70 bg-surface shadow-lg ring-2 ring-accent-500/15',
       )}
     >
-      <div
+      {/* Drag handle */}
+      <button
+        type="button"
         className={cn(
-          'flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-muted',
-          dragHandleProps ? 'cursor-grab hover:bg-surface-subtle hover:text-foreground active:cursor-grabbing' : '',
+          'flex min-h-11 min-w-11 shrink-0 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-lg border border-border bg-surface-subtle text-muted',
+          'transition-colors hover:border-accent-300/50 hover:bg-surface hover:text-foreground',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
+          dragHandleProps ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
         )}
         {...dragHandleProps}
+        aria-label={dragHandleProps ? `Drag to reorder ${meta.label}` : undefined}
       >
         <GripVertical className="h-4 w-4" aria-hidden />
-      </div>
+        {position != null && (
+          <span className="text-[10px] font-semibold tabular-nums leading-none text-muted">
+            {position}
+          </span>
+        )}
+      </button>
 
+      {/* Icon — visible on sm+ in its own column */}
       {Icon && (
         <IconStat
           icon={Icon}
-          tone={meta.iconTone || 'accent'}
-          className="shrink-0 rounded-lg p-1.5 sm:p-2"
-          iconClassName="h-3.5 w-3.5 sm:h-4 sm:w-4"
+          tone={checked ? (meta.iconTone || 'accent') : 'neutral'}
+          className={cn(
+            'hidden rounded-lg p-2 sm:flex',
+            !checked && 'opacity-70',
+          )}
+          iconClassName="h-4 w-4"
         />
       )}
 
+      {/* Label */}
       <label
         htmlFor={isOverlay ? undefined : switchId}
-        className="min-w-0 flex-1 cursor-pointer"
+        className="min-w-0 cursor-pointer py-0.5"
       >
-        <span className="flex flex-wrap items-center gap-1.5">
-          <span className="text-sm font-medium text-foreground">{meta.label}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <span className={cn(
+            'text-sm font-semibold leading-snug',
+            checked ? 'text-foreground' : 'text-muted',
+          )}
+          >
+            {meta.label}
+          </span>
           {!checked && (
             <Badge variant="neutral" className="normal-case px-1.5 py-0 text-[10px]">
               Hidden
             </Badge>
           )}
         </span>
-        <span className="text-caption mt-0.5 line-clamp-2 block leading-snug sm:line-clamp-none">
+        <span className="text-caption mt-1 block leading-relaxed text-muted">
           {meta.description}
         </span>
       </label>
 
+      {/* Toggle */}
       {!isOverlay && (
-        <Switch
-          id={switchId}
-          checked={checked}
-          onCheckedChange={onToggle}
-          aria-label={`Show ${meta.label}`}
-        />
+        <div className="flex shrink-0 items-center justify-end pl-1 sm:pl-0">
+          <Switch
+            id={switchId}
+            checked={checked}
+            onCheckedChange={onToggle}
+            aria-label={`Show ${meta.label}`}
+          />
+        </div>
       )}
     </div>
   );
@@ -94,10 +119,9 @@ function SortableWidgetRow({
   widgetId,
   checked,
   onToggle,
+  position,
   disabled,
 }) {
-  const meta = DASHBOARD_WIDGETS[widgetId];
-
   const {
     attributes,
     listeners,
@@ -116,17 +140,16 @@ function SortableWidgetRow({
     <li
       ref={setNodeRef}
       style={style}
-      className={cn('list-none', isDragging && 'opacity-40')}
+      className={cn('list-none', isDragging && 'opacity-50')}
     >
       <WidgetRowContent
         widgetId={widgetId}
         checked={checked}
         onToggle={onToggle}
+        position={position}
         dragHandleProps={{
           ...attributes,
           ...listeners,
-          role: 'button',
-          'aria-label': `Drag to reorder ${meta.label}`,
         }}
       />
     </li>
@@ -147,7 +170,7 @@ export default function SortableWidgetList({
       activationConstraint: { distance: 8 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 180, tolerance: 6 },
+      activationConstraint: { delay: 200, tolerance: 8 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -178,12 +201,13 @@ export default function SortableWidgetList({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={order} strategy={verticalListSortingStrategy}>
-        <ul className="space-y-2" aria-label="Dashboard widgets">
-          {order.map((widgetId) => (
+        <ul className="space-y-3" aria-label="Dashboard widgets">
+          {order.map((widgetId, index) => (
             <SortableWidgetRow
               key={widgetId}
               widgetId={widgetId}
               checked={visibility[widgetId]}
+              position={index + 1}
               onToggle={(next) => onToggle(widgetId, next)}
               disabled={disabled}
             />
@@ -191,11 +215,12 @@ export default function SortableWidgetList({
         </ul>
       </SortableContext>
 
-      <DragOverlay dropAnimation={{ duration: 180, easing: 'ease-out' }}>
+      <DragOverlay dropAnimation={{ duration: 200, easing: 'ease-out' }}>
         {activeId ? (
           <WidgetRowContent
             widgetId={activeId}
             checked={visibility[activeId]}
+            position={order.indexOf(activeId) + 1}
             isOverlay
           />
         ) : null}

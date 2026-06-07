@@ -2,7 +2,16 @@ import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from './ui/cn';
 
-export default function Modal({ isOpen, onClose, title, children, className, contentClassName, footer }) {
+export default function Modal({
+  isOpen,
+  onClose,
+  title,
+  description,
+  children,
+  className,
+  contentClassName,
+  footer,
+}) {
   const scrollPosRef = useRef(0);
   const panelRef = useRef(null);
   const closeRef = useRef(null);
@@ -74,21 +83,30 @@ export default function Modal({ isOpen, onClose, title, children, className, con
         aria-modal="true"
         aria-labelledby="modal-title"
       >
-        <div className="flex items-center justify-between border-b border-border px-4 py-4 sm:px-6">
-          <h2 id="modal-title" className="min-w-0 truncate text-title sm:text-lg">
-            {title}
-          </h2>
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            className="ml-2 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
-            aria-label="Close dialog"
-          >
-            <X className="h-5 w-5" aria-hidden />
-          </button>
+        <div className="border-b border-border px-4 py-4 sm:px-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h2 id="modal-title" className="text-title sm:text-lg">
+                {title}
+              </h2>
+              {description && (
+                <p className="text-caption mt-1.5 max-w-prose leading-relaxed text-muted">
+                  {description}
+                </p>
+              )}
+            </div>
+            <button
+              ref={closeRef}
+              type="button"
+              onClick={onClose}
+              className="ml-1 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+              aria-label="Close dialog"
+            >
+              <X className="h-5 w-5" aria-hidden />
+            </button>
+          </div>
         </div>
-        <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6', contentClassName)}>
+        <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6 sm:py-6', contentClassName)}>
           {children}
         </div>
         {footer}
