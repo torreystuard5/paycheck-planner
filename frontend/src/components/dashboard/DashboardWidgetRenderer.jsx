@@ -20,10 +20,10 @@ import {
   ReportsSpendingWidget,
   ReportsTrendsWidget,
   SavingsGoalsWidget,
-  ShoppingListWidget,
   TaxPrepReminderWidget,
   UpcomingBillsWidget,
 } from './widgets/DashboardMiniWidgets';
+import ShoppingListWidget from './widgets/ShoppingListWidget';
 
 function MetricRow({ label, value, valueClassName }) {
   return (
@@ -73,6 +73,7 @@ export default function DashboardWidgetRenderer({
   monthlyPayments,
   shoppingItems,
   chores,
+  onRefreshShoppingList,
   calendarEvents,
   activeBudget,
   budgets,
@@ -353,7 +354,12 @@ export default function DashboardWidgetRenderer({
     case 'shopping_list':
       return (
         <DashboardWidget key={widgetId} {...shellProps}>
-          <ShoppingListWidget items={shoppingItems} household={household} href={config.href} />
+          <ShoppingListWidget
+            items={shoppingItems}
+            household={household}
+            href={config.href}
+            onRefresh={onRefreshShoppingList}
+          />
         </DashboardWidget>
       );
 

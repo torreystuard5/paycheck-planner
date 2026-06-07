@@ -1,0 +1,15 @@
+---
+description: Default to commit and push when finishing implementation work
+alwaysApply: true
+---
+
+# Commit and push by default
+
+When implementation work is complete (features, fixes, refactors that ship user-facing or repo changes):
+
+1. **Commit and push** to the current branch unless the user explicitly says not to (e.g. "don't commit", "no push", "WIP only").
+2. Use conventional commit messages (`feat`, `fix`, etc.) with a public scope when user-facing.
+3. Run a quick verify step first when relevant (`npm run build`, focused tests).
+4. Do not commit secrets (`.env`, credentials).
+
+If the user only wanted a review, spike, or question answered with no code changes, do not commit.

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, CheckCircle, Clock, ShoppingCart } from 'lucide-react';
+import { ArrowRight, CheckCircle, Clock } from 'lucide-react';
 import CurrencyDisplay from '../../CurrencyDisplay';
 import { Badge, Card, cn } from '../../ui';
 import { formatDate } from '../../../utils/formatDate';
@@ -308,68 +308,6 @@ export function ReportsTrendsWidget({ monthlyPayments, href }) {
         })}
       </div>
       <WidgetViewAllLink href={href} label="Full reports" />
-    </>
-  );
-}
-
-export function ShoppingListWidget({ items, household, href }) {
-  if (!household) {
-    return <EmptyWidgetMessage>Create or join a household to use the shopping list.</EmptyWidgetMessage>;
-  }
-
-  const pending = (items || []).filter((i) => !i.is_completed).slice(0, 6);
-
-  if (pending.length === 0) {
-    const hasCompleted = (items || []).some((i) => i.is_completed);
-    return (
-      <>
-        <div className="flex flex-col items-center rounded-xl border border-dashed border-border bg-surface-subtle/50 px-4 py-8 text-center">
-          <ShoppingCart className="h-8 w-8 text-muted" aria-hidden />
-          <p className="mt-3 text-sm font-medium text-foreground">
-            {hasCompleted ? 'All items checked off' : 'Shopping list is empty'}
-          </p>
-          <p className="text-caption mt-1 max-w-[14rem]">
-            {hasCompleted
-              ? 'Add more items from the household shopping tab.'
-              : 'Add groceries and supplies from your household page.'}
-          </p>
-        </div>
-        <WidgetViewAllLink href={href} label="Open shopping list" />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <ul className="space-y-2.5">
-        {pending.map((item) => (
-          <li
-            key={item.id}
-            className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-surface-subtle/40 px-3 py-2"
-          >
-            <span
-              className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-500"
-              aria-hidden
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">
-                {item.item_name}
-              </p>
-              {(item.quantity || item.category) && (
-                <p className="text-caption mt-0.5 truncate">
-                  {[item.quantity, item.category].filter(Boolean).join(' · ')}
-                </p>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-      {(items || []).filter((i) => !i.is_completed).length > pending.length && (
-        <p className="text-caption mt-2 text-muted">
-          +{(items || []).filter((i) => !i.is_completed).length - pending.length} more on the full list
-        </p>
-      )}
-      <WidgetViewAllLink href={href} label="Open shopping list" />
     </>
   );
 }

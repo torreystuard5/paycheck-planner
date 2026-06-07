@@ -316,6 +316,15 @@ export default function Dashboard() {
     fetchOptionalWidgetData();
   }, [fetchOptionalWidgetData, budgetVersion]);
 
+  const refreshShoppingList = useCallback(async () => {
+    try {
+      const res = await api.get('/api/v1/households/shopping-list');
+      setShoppingItems(res.data?.items || []);
+    } catch {
+      setShoppingItems([]);
+    }
+  }, []);
+
   const toggleChecklistItem = async (item, payPeriodStart) => {
     const key = assignItemKey(item);
     const itemId = item.id || item.item_id;
@@ -662,6 +671,7 @@ export default function Dashboard() {
           monthlyPayments={monthlyPayments}
           shoppingItems={shoppingItems}
           chores={chores}
+          onRefreshShoppingList={refreshShoppingList}
           calendarEvents={calendarEvents}
           activeBudget={activeBudget}
           budgets={budgets}
