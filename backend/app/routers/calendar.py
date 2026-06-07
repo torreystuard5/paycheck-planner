@@ -2,7 +2,7 @@
 
 import calendar
 import json
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, Query
@@ -16,6 +16,7 @@ from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
 from app.models.paycheck_entry import PaycheckEntry
 from app.models.user import User
+from app.services.bill_cycles import occurrence_dates_for_bill
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/calendar", tags=["Calendar"])
@@ -67,32 +68,10 @@ def _bill_due_date_in_month(bill: Bill, year: int, month: int) -> date | None:
 
 def _bill_weekly_dates_in_month(bill: Bill, year: int, month: int) -> list[date]:
     """Return all weekly/biweekly occurrence dates for a bill in a given month."""
-    freq = bill.frequency or "monthly"
-    dow = bill.day_of_week
-    if dow is None:
-        return []
-
     first_day = date(year, month, 1)
     last_day_num = calendar.monthrange(year, month)[1]
     last_day = date(year, month, last_day_num)
-
-    # Find first occurrence of this day-of-week in the month
-    days_ahead = dow - first_day.weekday()
-    if days_ahead < 0:
-        days_ahead += 7
-    current = first_day + timedelta(days=days_ahead)
-
-    dates = []
-    while current <= last_day:
-        if freq == "biweekly" and bill.start_date:
-            delta_days = (current - bill.start_date).days
-            weeks_diff = delta_days // 7
-            if weeks_diff % 2 != 0:
-                current += timedelta(days=7)
-                continue
-        dates.append(current)
-        current += timedelta(days=7)
-    return dates
+    return occurrence_dates_for_bill(bill, first_day, last_day)
 
 
 @router.get("", response_model=list[CalendarEvent])

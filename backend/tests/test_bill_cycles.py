@@ -4,9 +4,12 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from app.services.bill_cycles import (
+    biweekly_occurrences_in_window,
+    biweekly_anchor,
     current_month_due_date,
     cycle_window_start,
     due_date_for_month,
+    first_biweekly_on_or_after,
     next_due_date_for_bill,
     occurrence_dates_for_bill,
 )
@@ -130,3 +133,60 @@ def test_assign_bills_includes_monthly_rent_in_june_window():
     assert len(bill_items) == 1
     assert bill_items[0]["due_date"] == date(2026, 6, 5)
     assert bill_items[0]["is_paid"] is False
+
+
+def test_biweekly_friday_anchor_may22_next_due_june5():
+    """Amanda Car style: every other Friday anchored on May 22."""
+    bill = _bill(
+        name="Amanda Car",
+        frequency="biweekly",
+        day_of_week=4,
+        start_date=date(2026, 5, 22),
+        due_day=None,
+    )
+
+    assert next_due_date_for_bill(bill, today=date(2026, 6, 3)) == date(2026, 6, 5)
+
+    june = occurrence_dates_for_bill(bill, date(2026, 6, 1), date(2026, 6, 30))
+    assert june == [date(2026, 6, 5), date(2026, 6, 19)]
+
+    pay_window = occurrence_dates_for_bill(bill, date(2026, 6, 4), date(2026, 6, 17))
+    assert pay_window == [date(2026, 6, 5)]
+
+
+def test_biweekly_does_not_treat_even_week_count_as_aligned():
+    """May 1 anchor must not produce June 5 (old week-parity check was wrong)."""
+    bill = _bill(
+        frequency="biweekly",
+        day_of_week=4,
+        start_date=date(2026, 5, 1),
+        due_day=None,
+    )
+
+    june = occurrence_dates_for_bill(bill, date(2026, 6, 1), date(2026, 6, 30))
+    assert date(2026, 6, 5) not in june
+    assert june == [date(2026, 6, 12), date(2026, 6, 26)]
+
+
+def test_biweekly_prev_pay_window_excludes_off_cadence_friday():
+    """Off-cadence Fridays must not appear as unpaid carryover candidates."""
+    bill = _bill(
+        name="Amanda Car",
+        frequency="biweekly",
+        day_of_week=4,
+        start_date=date(2026, 5, 22),
+        due_day=None,
+    )
+    prev_window = occurrence_dates_for_bill(bill, date(2026, 5, 21), date(2026, 6, 3))
+    assert prev_window == [date(2026, 5, 22)]
+    assert date(2026, 5, 29) not in prev_window
+
+
+def test_biweekly_anchor_snaps_start_date_to_day_of_week():
+    assert biweekly_anchor(date(2026, 5, 23), 4) == date(2026, 5, 29)
+    assert first_biweekly_on_or_after(date(2026, 5, 22), date(2026, 6, 3)) == date(2026, 6, 5)
+
+
+def test_biweekly_occurrences_without_start_date_step_by_14():
+    dates = biweekly_occurrences_in_window(4, None, date(2026, 6, 1), date(2026, 6, 30))
+    assert dates == [date(2026, 6, 5), date(2026, 6, 19)]

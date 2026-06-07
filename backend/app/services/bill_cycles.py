@@ -109,6 +109,59 @@ def _as_date(value: Any) -> date | None:
         return None
 
 
+def biweekly_anchor(start_date: date, day_of_week: int) -> date:
+    """First day_of_week on or after start_date — anchor for every-other-week cadence."""
+    days = (day_of_week - start_date.weekday()) % 7
+    return start_date + timedelta(days=days)
+
+
+def first_biweekly_on_or_after(anchor: date, on_or_after: date) -> date:
+    """First date on anchor's 14-day cadence that falls on or after on_or_after."""
+    if on_or_after <= anchor:
+        return anchor
+    delta = (on_or_after - anchor).days
+    periods = (delta + 13) // 14
+    return anchor + timedelta(days=periods * 14)
+
+
+def weekly_occurrences_in_window(
+    day_of_week: int,
+    window_start: date,
+    window_end: date,
+) -> list[date]:
+    if window_end < window_start:
+        return []
+    days_ahead = (day_of_week - window_start.weekday()) % 7
+    candidate = window_start + timedelta(days=days_ahead)
+    occurrences: list[date] = []
+    while candidate <= window_end:
+        occurrences.append(candidate)
+        candidate += timedelta(days=7)
+    return occurrences
+
+
+def biweekly_occurrences_in_window(
+    day_of_week: int,
+    start_date: date | None,
+    window_start: date,
+    window_end: date,
+) -> list[date]:
+    """Every-other day_of_week occurrence in [window_start, window_end], anchored on start_date."""
+    if window_end < window_start:
+        return []
+    if start_date is not None:
+        anchor = biweekly_anchor(start_date, day_of_week)
+        candidate = first_biweekly_on_or_after(anchor, window_start)
+    else:
+        days_ahead = (day_of_week - window_start.weekday()) % 7
+        candidate = window_start + timedelta(days=days_ahead)
+    occurrences: list[date] = []
+    while candidate <= window_end:
+        occurrences.append(candidate)
+        candidate += timedelta(days=14)
+    return occurrences
+
+
 def occurrence_dates_for_bill(
     bill: Bill,
     window_start: date,
@@ -126,25 +179,20 @@ def occurrence_dates_for_bill(
         start = _as_date(bill.start_date)
         return [start] if start and window_start <= start <= window_end else []
 
-    if freq in ("weekly", "biweekly"):
+    if freq == "weekly":
         if bill.day_of_week is None:
             return []
-        step_days = 7 if freq == "weekly" else 14
-        days_ahead = (bill.day_of_week - window_start.weekday()) % 7
-        candidate = window_start + timedelta(days=days_ahead)
-        start_date = _as_date(bill.start_date)
-        if freq == "biweekly" and start_date:
-            while candidate < start_date:
-                candidate += timedelta(days=step_days)
-            delta_days = (candidate - start_date).days
-            if (delta_days // 7) % 2 != 0:
-                candidate += timedelta(days=7)
+        return weekly_occurrences_in_window(bill.day_of_week, window_start, window_end)
 
-        occurrences: list[date] = []
-        while candidate <= window_end:
-            occurrences.append(candidate)
-            candidate += timedelta(days=step_days)
-        return occurrences
+    if freq == "biweekly":
+        if bill.day_of_week is None:
+            return []
+        return biweekly_occurrences_in_window(
+            bill.day_of_week,
+            _as_date(bill.start_date),
+            window_start,
+            window_end,
+        )
 
     if freq == "semi_monthly":
         due_day = bill.due_day or 1
@@ -202,8 +250,15 @@ def next_due_date_for_bill(bill: Bill, today: date | None = None) -> date | None
     today = today or date.today()
     month_due = current_month_due_date(bill, today)
     if month_due is not None:
-        return month_due
+        if month_due >= today:
+            return month_due
+        freq = bill.frequency or "monthly"
+        if freq not in ("weekly", "biweekly"):
+            return month_due
     dates = occurrence_dates_for_bill(bill, today, _add_months(today, 18))
+    for due in dates:
+        if due >= today:
+            return due
     return dates[0] if dates else None
 
 

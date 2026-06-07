@@ -340,25 +340,16 @@ def _due_dates_in_window(
 
     # ── Weekly / biweekly: walk by week cadence ──────────────────
     if frequency in ("weekly", "biweekly") and day_of_week is not None:
-        step_days = 7 if frequency == "weekly" else 14
+        from app.services.bill_cycles import (
+            biweekly_occurrences_in_window,
+            weekly_occurrences_in_window,
+        )
 
-        # Find the first occurrence of this day-of-week on or after window_start
-        days_ahead = (day_of_week - window_start.weekday()) % 7
-        candidate = window_start + timedelta(days=days_ahead)
-
-        # For biweekly, align to the anchor cadence using start_date
-        if frequency == "biweekly" and start_date is not None:
-            delta = (candidate - start_date).days
-            weeks_off = delta // 7
-            if weeks_off % 2 != 0:
-                candidate += timedelta(days=7)
-
-        candidates: list[date] = []
-        while candidate <= window_end:
-            if candidate >= window_start:
-                candidates.append(candidate)
-            candidate += timedelta(days=step_days)
-        return candidates
+        if frequency == "weekly":
+            return weekly_occurrences_in_window(day_of_week, window_start, window_end)
+        return biweekly_occurrences_in_window(
+            day_of_week, start_date, window_start, window_end
+        )
 
     # ── Monthly / semi-monthly / longer cycles: iterate months ───
     due_days = [due_day]
