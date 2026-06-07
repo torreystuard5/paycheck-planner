@@ -114,3 +114,17 @@ export function widgetOrderEqual(a, b) {
   if (a.length !== b.length) return false;
   return a.every((id, index) => id === b[index]);
 }
+
+export function defaultDashboardLayout() {
+  return {
+    visibility: visibilityFromHidden(defaultHiddenWidgets()),
+    order: defaultWidgetOrder(),
+  };
+}
+
+export function isDefaultLayout({ visibility, order }) {
+  return (
+    widgetOrderEqual(order, defaultWidgetOrder())
+    && DASHBOARD_WIDGET_ORDER.every((id) => visibility[id] === true)
+  );
+}

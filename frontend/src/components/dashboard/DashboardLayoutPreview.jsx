@@ -29,7 +29,7 @@ const HEIGHT_CLASS = {
   lg: 'h-[4.5rem]',
 };
 
-function PreviewBlock({ widgetId }) {
+function PreviewBlock({ widgetId, className, style }) {
   const meta = DASHBOARD_WIDGETS[widgetId];
   const Icon = WIDGET_ICONS[widgetId];
   const height = HEIGHT_CLASS[meta.preview?.height || 'md'];
@@ -39,7 +39,9 @@ function PreviewBlock({ widgetId }) {
       className={cn(
         'overflow-hidden rounded-lg border border-border bg-surface shadow-sm transition-all duration-200',
         height,
+        className,
       )}
+      style={style}
       aria-hidden
     >
       <div className="flex h-full items-center gap-2 px-2.5">
@@ -59,9 +61,12 @@ function PreviewBlock({ widgetId }) {
   );
 }
 
-function PreviewPlanRow({ ids }) {
+function PreviewPlanRow({ ids, className, style }) {
   return (
-    <div className={cn('grid gap-2', ids.length === 2 && 'grid-cols-2')}>
+    <div
+      className={cn('grid gap-2', ids.length === 2 && 'grid-cols-2', className)}
+      style={style}
+    >
       {ids.map((id) => (
         <PreviewBlock key={id} widgetId={id} />
       ))}
@@ -99,11 +104,25 @@ export default function DashboardLayoutPreview({
             <p className="text-caption text-muted">Turn widgets on to see your layout</p>
           </div>
         ) : (
-          sections.map((section) => {
+          sections.map((section, index) => {
             if (section.type === 'plan-row') {
-              return <PreviewPlanRow key={`plan-${section.ids.join('-')}`} ids={section.ids} />;
+              return (
+                <PreviewPlanRow
+                  key={`plan-${section.ids.join('-')}`}
+                  ids={section.ids}
+                  className="animate-fade-in"
+                  style={{ animationDelay: `${index * 40}ms` }}
+                />
+              );
             }
-            return <PreviewBlock key={section.id} widgetId={section.id} />;
+            return (
+              <PreviewBlock
+                key={section.id}
+                widgetId={section.id}
+                className="animate-fade-in"
+                style={{ animationDelay: `${index * 40}ms` }}
+              />
+            );
           })
         )}
       </div>

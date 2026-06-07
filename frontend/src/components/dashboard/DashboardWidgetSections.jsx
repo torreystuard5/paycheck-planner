@@ -81,21 +81,31 @@ export default function DashboardWidgetSections({
 
   return (
     <div className="space-y-6">
-      {sections.map((section) => {
+      {sections.map((section, index) => {
+        const sectionKey = section.type === 'plan-row'
+          ? `plan-${section.ids.join('-')}`
+          : section.id;
+        const animStyle = { animationDelay: `${Math.min(index * 50, 200)}ms` };
+
         if (section.type === 'plan-row') {
           return (
             <div
-              key={`plan-${section.ids.join('-')}`}
+              key={sectionKey}
               className={cn(
-                'grid grid-cols-1 gap-5 lg:gap-6',
+                'grid grid-cols-1 gap-5 animate-fade-in lg:gap-6',
                 section.ids.length === 2 && 'lg:grid-cols-2',
               )}
+              style={animStyle}
             >
               {section.ids.map((widgetId) => renderWidgetBody(widgetId))}
             </div>
           );
         }
-        return renderWidgetBody(section.id);
+        return (
+          <div key={sectionKey} className="animate-fade-in" style={animStyle}>
+            {renderWidgetBody(section.id)}
+          </div>
+        );
       })}
     </div>
   );

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from './ui/cn';
 
-export default function Modal({ isOpen, onClose, title, children, className }) {
+export default function Modal({ isOpen, onClose, title, children, className, contentClassName, footer }) {
   const scrollPosRef = useRef(0);
   const panelRef = useRef(null);
   const closeRef = useRef(null);
@@ -64,9 +64,9 @@ export default function Modal({ isOpen, onClose, title, children, className }) {
       <div
         ref={panelRef}
         className={cn(
-          'relative z-[100] max-h-[92dvh] w-full overflow-x-hidden overflow-y-auto',
+          'relative z-[100] flex max-h-[92dvh] w-full flex-col overflow-hidden',
           'rounded-t-2xl border border-border bg-surface shadow-[var(--shadow-card-hover)]',
-          'animate-[slideUp_0.28s_ease-out] sm:w-full sm:max-w-lg sm:rounded-xl',
+          'animate-[slideUp_0.28s_ease-out] sm:max-h-[94dvh] sm:w-full sm:max-w-lg sm:rounded-xl',
           'pb-[max(0px,env(safe-area-inset-bottom))]',
           className,
         )}
@@ -88,7 +88,10 @@ export default function Modal({ isOpen, onClose, title, children, className }) {
             <X className="h-5 w-5" aria-hidden />
           </button>
         </div>
-        <div className="px-4 py-4 sm:px-6">{children}</div>
+        <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6', contentClassName)}>
+          {children}
+        </div>
+        {footer}
       </div>
     </div>
   );

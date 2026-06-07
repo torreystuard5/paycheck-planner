@@ -24,10 +24,12 @@ import usePolling from '../hooks/usePolling';
 import useDashboardWidgetVisibility from '../hooks/useDashboardWidgetVisibility';
 import { DashboardCustomizeButton, CustomizeDashboardModal } from '../components/dashboard';
 import DashboardWidgetSections from '../components/dashboard/DashboardWidgetSections';
+import DashboardWidgetsSkeleton from '../components/dashboard/DashboardWidgetsSkeleton';
 import { augmentPaycheckPlan, patchPaycheckPlanItemPaid } from '../utils/paycheckPlanItems';
 import { formatApiError } from '../utils/formatApiError';
 import {
   Badge,
+  Button,
   Card,
   IconStat,
   PageHeader,
@@ -139,6 +141,7 @@ export default function Dashboard() {
     visibility: widgetVisibility,
     widgetOrder,
     applyLayout,
+    resetWidgets,
     visibleCount,
     ready: widgetsReady,
     saving: widgetsSaving,
@@ -453,6 +456,7 @@ export default function Dashboard() {
             <DashboardCustomizeButton
               onClick={() => setWidgetSettingsOpen(true)}
               visibleCount={visibleCount}
+              loading={!widgetsReady}
             />
             {household ? (
               <Badge variant="info" className="gap-1.5 px-3 py-1">
@@ -485,18 +489,31 @@ export default function Dashboard() {
         visibility={widgetVisibility}
         widgetOrder={widgetOrder}
         onApply={applyLayout}
+        onResetToDefault={resetWidgets}
         visibleCount={visibleCount}
         saving={widgetsSaving}
       />
 
+      {!widgetsReady && <DashboardWidgetsSkeleton />}
+
       {widgetsReady && visibleCount === 0 && (
         <Card className="p-4 text-center sm:p-6">
-          <p className="text-sm text-foreground">All dashboard widgets are hidden.</p>
-          <p className="text-caption mt-1">Use Customize Dashboard above to turn sections back on.</p>
+          <p className="text-sm font-medium text-foreground">All dashboard widgets are hidden.</p>
+          <p className="text-caption mt-1">Restore the default layout or choose which sections to show.</p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="mt-4"
+            onClick={() => resetWidgets()}
+            disabled={widgetsSaving}
+          >
+            {widgetsSaving ? 'Saving…' : 'Reset to Default Layout'}
+          </Button>
         </Card>
       )}
 
-      {widgetsReady && (
+      {widgetsReady && visibleCount > 0 && (
         <DashboardWidgetSections
           widgetOrder={widgetOrder}
           widgetVisibility={widgetVisibility}

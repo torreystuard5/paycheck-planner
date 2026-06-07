@@ -6,6 +6,7 @@ import {
   defaultHiddenWidgets,
   defaultWidgetOrder,
   hiddenWidgetListsEqual,
+  isDefaultLayout,
   sanitizeHiddenWidgets,
   sanitizeWidgetOrder,
   visibilityFromHidden,
@@ -207,6 +208,11 @@ export default function useDashboardWidgetVisibility(userId) {
 
   const visibleCount = DASHBOARD_WIDGET_ORDER.length - hiddenWidgets.length;
 
+  const layoutIsDefault = useMemo(
+    () => isDefaultLayout({ visibility: visibilityFromHidden(hiddenWidgets), order: widgetOrder }),
+    [hiddenWidgets, widgetOrder],
+  );
+
   return {
     hiddenWidgets,
     widgetOrder,
@@ -218,6 +224,7 @@ export default function useDashboardWidgetVisibility(userId) {
     applyLayout,
     applyVisibility,
     visibleCount,
+    layoutIsDefault,
     ready,
     saving,
     widgets: DASHBOARD_WIDGETS,
