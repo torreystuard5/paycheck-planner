@@ -68,6 +68,14 @@ export default function useDashboardWidgetVisibility(userId) {
     persist(defaultHiddenWidgets());
   }, [persist]);
 
+  const applyVisibility = useCallback(
+    (nextVisibility) => {
+      const hidden = DASHBOARD_WIDGET_ORDER.filter((id) => !nextVisibility[id]);
+      persist(hidden);
+    },
+    [persist],
+  );
+
   const visibility = useMemo(
     () =>
       DASHBOARD_WIDGET_ORDER.reduce((acc, id) => {
@@ -86,6 +94,7 @@ export default function useDashboardWidgetVisibility(userId) {
     setVisible,
     toggleWidget,
     resetWidgets,
+    applyVisibility,
     visibleCount,
     widgets: DASHBOARD_WIDGETS,
   };

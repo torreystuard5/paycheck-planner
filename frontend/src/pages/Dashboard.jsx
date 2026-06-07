@@ -28,7 +28,7 @@ const PaycheckPlanEnvelope = lazy(() => import('../components/PaycheckPlanEnvelo
 const RecentUpdates = lazy(() => import('../components/RecentUpdates'));
 import usePolling from '../hooks/usePolling';
 import useDashboardWidgetVisibility from '../hooks/useDashboardWidgetVisibility';
-import { DashboardWidget, DashboardWidgetSettings } from '../components/dashboard';
+import { DashboardWidget, DashboardCustomizeButton, CustomizeDashboardModal } from '../components/dashboard';
 import { formatDate } from '../utils/formatDate';
 import { augmentPaycheckPlan, patchPaycheckPlanItemPaid } from '../utils/paycheckPlanItems';
 import { formatApiError } from '../utils/formatApiError';
@@ -155,8 +155,7 @@ export default function Dashboard() {
 
   const {
     visibility: widgetVisibility,
-    toggleWidget,
-    resetWidgets,
+    applyVisibility,
     visibleCount,
   } = useDashboardWidgetVisibility(user?.id);
 
@@ -461,12 +460,8 @@ export default function Dashboard() {
         description="Here's your financial overview"
         actions={(
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <DashboardWidgetSettings
-              open={widgetSettingsOpen}
-              onOpenChange={setWidgetSettingsOpen}
-              visibility={widgetVisibility}
-              onToggleWidget={toggleWidget}
-              onReset={resetWidgets}
+            <DashboardCustomizeButton
+              onClick={() => setWidgetSettingsOpen(true)}
               visibleCount={visibleCount}
             />
             {household ? (
@@ -497,9 +492,17 @@ export default function Dashboard() {
       {visibleCount === 0 && (
         <Card className="p-4 text-center sm:p-6">
           <p className="text-sm text-foreground">All dashboard widgets are hidden.</p>
-          <p className="text-caption mt-1">Use the Widgets button above to turn sections back on.</p>
+          <p className="text-caption mt-1">Use Customize Dashboard above to turn sections back on.</p>
         </Card>
       )}
+
+      <CustomizeDashboardModal
+        open={widgetSettingsOpen}
+        onClose={() => setWidgetSettingsOpen(false)}
+        visibility={widgetVisibility}
+        onApply={applyVisibility}
+        visibleCount={visibleCount}
+      />
 
       <DashboardWidget
         widgetId="overview"

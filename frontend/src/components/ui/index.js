@@ -7,4 +7,5 @@ export { default as CollapsibleCard } from './CollapsibleCard';
 export { default as FilterChips } from './FilterChips';
 export { default as ProgressRing } from './ProgressRing';
 export { default as SettingsSection } from './SettingsSection';
+export { default as Switch } from './Switch';
 export { cn } from './cn';
