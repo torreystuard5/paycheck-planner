@@ -1,8 +1,15 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, CheckCircle, Clock } from 'lucide-react';
+import { ArrowRight, CheckCircle, Clock, ShoppingCart } from 'lucide-react';
 import CurrencyDisplay from '../../CurrencyDisplay';
 import { Badge, Card, cn } from '../../ui';
 import { formatDate } from '../../../utils/formatDate';
+import {
+  getBillDisplayAmount,
+  getBillDueInfo,
+  getBillTotalAmount,
+  isSplitHouseholdBill,
+  sortBillsByDueDate,
+} from '../../../utils/billDueDate';
 
 export function WidgetViewAllLink({ href, label = 'View all' }) {
   if (!href) return null;
@@ -121,10 +128,11 @@ export function IncomeSummaryWidget({ incomeSummary, href }) {
 }
 
 export function UpcomingBillsWidget({ bills, userDateFormat, href }) {
-  const upcoming = (Array.isArray(bills) ? bills : [])
-    .filter((b) => b.is_user_responsible !== false && !b.is_paid)
-    .sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')))
-    .slice(0, 5);
+  const upcoming = sortBillsByDueDate(
+    (Array.isArray(bills) ? bills : []).filter(
+      (b) => b.is_user_responsible !== false && !b.is_paid,
+    ),
+  ).slice(0, 5);
 
   if (upcoming.length === 0) {
     return (
@@ -138,21 +146,55 @@ export function UpcomingBillsWidget({ bills, userDateFormat, href }) {
   return (
     <>
       <Card variant="inset" className="divide-y divide-border p-0">
-        {upcoming.map((bill) => (
-          <div key={bill.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">{bill.name}</p>
-              <p className="text-caption flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {bill.due_date ? formatDate(bill.due_date, userDateFormat) : '—'}
-              </p>
+        {upcoming.map((bill) => {
+          const due = getBillDueInfo(bill, userDateFormat);
+          const amount = getBillDisplayAmount(bill);
+          const isSplit = isSplitHouseholdBill(bill);
+          const totalAmount = getBillTotalAmount(bill);
+
+          return (
+            <div key={bill.id} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-medium text-foreground">{bill.name}</p>
+                    {isSplit && (
+                      <Badge variant="info" className="normal-case px-1.5 py-0 text-[10px]">
+                        Split
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-caption mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                    <Clock className="h-3 w-3 shrink-0" aria-hidden />
+                    <span>{due.dateText}</span>
+                    {due.relativeText && (
+                      <>
+                        <span className="text-muted" aria-hidden>·</span>
+                        <span className={due.badgeVariant === 'danger' ? 'text-danger-600' : undefined}>
+                          {due.relativeText}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                  {isSplit && totalAmount > amount && (
+                    <p className="text-caption mt-0.5 text-muted">
+                      Your share of{' '}
+                      <CurrencyDisplay amount={totalAmount} className="inline font-medium" />
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <CurrencyDisplay amount={amount} className="text-sm font-semibold text-foreground" />
+                  {due.statusLabel && (
+                    <Badge variant={due.badgeVariant} className="normal-case px-1.5 py-0 text-[10px]">
+                      {due.statusLabel}
+                    </Badge>
+                  )}
+                </div>
+              </div>
             </div>
-            <CurrencyDisplay
-              amount={Number(bill.user_share ?? bill.amount) || 0}
-              className="shrink-0 text-sm font-semibold"
-            />
-          </div>
-        ))}
+          );
+        })}
       </Card>
       <WidgetViewAllLink href={href} />
     </>
@@ -274,29 +316,59 @@ export function ShoppingListWidget({ items, household, href }) {
   if (!household) {
     return <EmptyWidgetMessage>Create or join a household to use the shopping list.</EmptyWidgetMessage>;
   }
-  const pending = (items || []).filter((i) => !i.is_purchased).slice(0, 6);
+
+  const pending = (items || []).filter((i) => !i.is_completed).slice(0, 6);
+
   if (pending.length === 0) {
+    const hasCompleted = (items || []).some((i) => i.is_completed);
     return (
       <>
-        <EmptyWidgetMessage>Shopping list is empty.</EmptyWidgetMessage>
-        <WidgetViewAllLink href={href} label="Open household" />
+        <div className="flex flex-col items-center rounded-xl border border-dashed border-border bg-surface-subtle/50 px-4 py-8 text-center">
+          <ShoppingCart className="h-8 w-8 text-muted" aria-hidden />
+          <p className="mt-3 text-sm font-medium text-foreground">
+            {hasCompleted ? 'All items checked off' : 'Shopping list is empty'}
+          </p>
+          <p className="text-caption mt-1 max-w-[14rem]">
+            {hasCompleted
+              ? 'Add more items from the household shopping tab.'
+              : 'Add groceries and supplies from your household page.'}
+          </p>
+        </div>
+        <WidgetViewAllLink href={href} label="Open shopping list" />
       </>
     );
   }
 
   return (
     <>
-      <ul className="space-y-2">
+      <ul className="space-y-2.5">
         {pending.map((item) => (
-          <li key={item.id} className="flex items-center gap-2 text-sm text-foreground">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-accent-500" aria-hidden />
-            <span className="truncate">{item.name}</span>
-            {item.quantity ? (
-              <span className="text-caption ml-auto shrink-0">×{item.quantity}</span>
-            ) : null}
+          <li
+            key={item.id}
+            className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-surface-subtle/40 px-3 py-2"
+          >
+            <span
+              className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent-500"
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">
+                {item.item_name}
+              </p>
+              {(item.quantity || item.category) && (
+                <p className="text-caption mt-0.5 truncate">
+                  {[item.quantity, item.category].filter(Boolean).join(' · ')}
+                </p>
+              )}
+            </div>
           </li>
         ))}
       </ul>
+      {(items || []).filter((i) => !i.is_completed).length > pending.length && (
+        <p className="text-caption mt-2 text-muted">
+          +{(items || []).filter((i) => !i.is_completed).length - pending.length} more on the full list
+        </p>
+      )}
       <WidgetViewAllLink href={href} label="Open shopping list" />
     </>
   );
