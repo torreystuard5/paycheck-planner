@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import UUID as PyUUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,6 +18,7 @@ from app.models.user import User
 from app.services.admin_audit import get_client_ip as _get_client_ip
 from app.services.admin_audit import log_admin_action
 from app.schemas.support import (
+    InternalNoteCreate,
     SupportTicketCreate,
     SupportTicketDetail,
     SupportTicketListResponse,
@@ -32,6 +33,70 @@ from app.utils.security import get_current_user, decode_token
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/support", tags=["Support"])
+
+TICKET_SORT_FIELDS = {"created_at", "status", "priority"}
+VALID_STATUSES = ("open", "in_progress", "resolved")
+VALID_PRIORITIES = ("low", "normal", "high", "urgent")
+
+
+def _user_display_name(user: User | None) -> str | None:
+    if not user:
+        return None
+    name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    return name or user.email
+
+
+def _reply_to_read(reply: SupportTicketReply) -> TicketReplyRead:
+    author = getattr(reply, "user", None)
+    return TicketReplyRead(
+        id=reply.id,
+        ticket_id=reply.ticket_id,
+        reply_message=reply.reply_message,
+        is_internal=reply.is_internal,
+        replied_by=reply.replied_by,
+        replied_by_name=_user_display_name(author),
+        created_at=reply.created_at,
+    )
+
+
+def _ticket_to_read(ticket: SupportTicket) -> SupportTicketRead:
+    assignee = getattr(ticket, "assignee", None)
+    public_replies = [r for r in (ticket.replies or []) if not r.is_internal]
+    return SupportTicketRead(
+        id=ticket.id,
+        user_id=ticket.user_id,
+        name=ticket.name,
+        email=ticket.email,
+        subject=ticket.subject,
+        message=ticket.message,
+        status=ticket.status,
+        priority=getattr(ticket, "priority", None) or "normal",
+        assigned_to=ticket.assigned_to,
+        assigned_to_name=_user_display_name(assignee),
+        admin_notes=ticket.admin_notes,
+        cant_access_email=ticket.cant_access_email,
+        created_at=ticket.created_at,
+        resolved_at=ticket.resolved_at,
+        reply_count=len(public_replies),
+    )
+
+
+def _ticket_to_detail(ticket: SupportTicket, *, admin_view: bool) -> SupportTicketDetail:
+    base = _ticket_to_read(ticket)
+    public = []
+    internal = []
+    for reply in ticket.replies or []:
+        item = _reply_to_read(reply)
+        if reply.is_internal:
+            if admin_view:
+                internal.append(item)
+        else:
+            public.append(item)
+    return SupportTicketDetail(
+        **base.model_dump(),
+        replies=public,
+        internal_notes=internal if admin_view else [],
+    )
 
 
 async def get_optional_user(
@@ -58,6 +123,51 @@ async def get_optional_user(
     except Exception:
         pass
     return None
+
+
+async def _load_ticket(
+    db: AsyncSession,
+    ticket_id: PyUUID,
+) -> SupportTicket | None:
+    result = await db.execute(
+        select(SupportTicket)
+        .options(
+            selectinload(SupportTicket.replies).selectinload(SupportTicketReply.user),
+            selectinload(SupportTicket.assignee),
+        )
+        .where(SupportTicket.id == ticket_id)
+    )
+    return result.scalar_one_or_none()
+
+
+def _apply_ticket_filters(
+    query,
+    *,
+    status_filter: str | None,
+    priority_filter: str | None,
+    user_search: str | None,
+    assigned_to: PyUUID | None,
+    assigned_to_me: bool,
+    current_user_id: PyUUID,
+):
+    if status_filter in VALID_STATUSES:
+        query = query.where(SupportTicket.status == status_filter)
+    if priority_filter in VALID_PRIORITIES:
+        query = query.where(SupportTicket.priority == priority_filter)
+    if user_search:
+        term = f"%{user_search.strip()}%"
+        query = query.where(
+            or_(
+                SupportTicket.email.ilike(term),
+                SupportTicket.name.ilike(term),
+                SupportTicket.subject.ilike(term),
+            )
+        )
+    if assigned_to_me:
+        query = query.where(SupportTicket.assigned_to == current_user_id)
+    elif assigned_to is not None:
+        query = query.where(SupportTicket.assigned_to == assigned_to)
+    return query
 
 
 # ── User-facing endpoints ──────────────────────────────────────────────
@@ -89,7 +199,7 @@ async def create_support_ticket(
     except Exception:
         logger.exception("Email send failed for support ticket %s", ticket.id)
 
-    return ticket
+    return _ticket_to_read(ticket)
 
 
 @router.get("", response_model=list[SupportTicketRead])
@@ -100,12 +210,12 @@ async def list_my_tickets(
     """List only the current user's tickets, ordered by created_at DESC."""
     result = await db.execute(
         select(SupportTicket)
-        .options(selectinload(SupportTicket.replies))
+        .options(selectinload(SupportTicket.replies), selectinload(SupportTicket.assignee))
         .where(SupportTicket.user_id == current_user.id)
         .order_by(SupportTicket.created_at.desc())
         .limit(100)
     )
-    return result.scalars().all()
+    return [_ticket_to_read(t) for t in result.scalars().all()]
 
 
 # ── Public auth-issue endpoint (NO auth required) ──────────────────────
@@ -136,53 +246,77 @@ async def create_auth_issue(
 
 # ── Admin-facing endpoints ─────────────────────────────────────────────
 
-TICKET_SORT_FIELDS = {"created_at", "status"}
-
-
 @router.get("/all", response_model=SupportTicketListResponse)
 async def list_all_tickets(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     status_filter: str | None = Query(None, alias="status"),
+    priority: str | None = Query(None),
+    user_search: str | None = Query(None, alias="user"),
+    assigned_to: PyUUID | None = Query(None),
+    assigned_to_me: bool = Query(False),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Admin: list ALL tickets from all users, with optional status filter."""
+    """Admin: list ALL tickets with filters for status, priority, user search, and assignment."""
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
         )
 
-    query = select(SupportTicket).options(selectinload(SupportTicket.replies))
-    count_query = select(func.count(SupportTicket.id))
+    base = select(SupportTicket)
+    base = _apply_ticket_filters(
+        base,
+        status_filter=status_filter,
+        priority_filter=priority,
+        user_search=user_search,
+        assigned_to=assigned_to,
+        assigned_to_me=assigned_to_me,
+        current_user_id=current_user.id,
+    )
 
-    if status_filter in ("open", "in_progress", "resolved"):
-        query = query.where(SupportTicket.status == status_filter)
-        count_query = count_query.where(SupportTicket.status == status_filter)
-
+    count_query = select(func.count()).select_from(base.subquery())
     total = (await db.execute(count_query)).scalar() or 0
-    offset = (page - 1) * per_page
 
-    # Apply sorting
+    status_counts: dict[str, int] = {}
+    for st in VALID_STATUSES:
+        st_query = select(func.count(SupportTicket.id)).where(SupportTicket.status == st)
+        st_query = _apply_ticket_filters(
+            st_query,
+            status_filter=None,
+            priority_filter=priority,
+            user_search=user_search,
+            assigned_to=assigned_to,
+            assigned_to_me=assigned_to_me,
+            current_user_id=current_user.id,
+        )
+        status_counts[st] = (await db.execute(st_query)).scalar() or 0
+
     if sort_by not in TICKET_SORT_FIELDS:
         sort_by = "created_at"
     sort_col = getattr(SupportTicket, sort_by, SupportTicket.created_at)
-    query = query.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
+    order = sort_col.desc() if sort_order == "desc" else sort_col.asc()
 
-    rows = (
-        await db.execute(
-            query.offset(offset).limit(per_page)
+    query = (
+        base.options(
+            selectinload(SupportTicket.replies),
+            selectinload(SupportTicket.assignee),
         )
-    ).scalars().all()
+        .order_by(order)
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
+    rows = (await db.execute(query)).scalars().all()
 
     return SupportTicketListResponse(
-        tickets=[SupportTicketRead.model_validate(t) for t in rows],
+        tickets=[_ticket_to_read(t) for t in rows],
         total=total,
         page=page,
         per_page=per_page,
+        status_counts=status_counts,
     )
 
 
@@ -193,17 +327,12 @@ async def get_support_ticket(
     current_user: User = Depends(get_current_user),
 ):
     """Get ticket detail. Users can only see their own tickets; admins can see all."""
-    result = await db.execute(
-        select(SupportTicket)
-        .options(selectinload(SupportTicket.replies))
-        .where(SupportTicket.id == ticket_id)
-    )
-    ticket = result.scalar_one_or_none()
+    ticket = await _load_ticket(db, ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
     if not current_user.is_admin and ticket.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this ticket")
-    return ticket
+    return _ticket_to_detail(ticket, admin_view=current_user.is_admin)
 
 
 @router.patch("/{ticket_id}", response_model=SupportTicketDetail)
@@ -214,28 +343,35 @@ async def update_support_ticket(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Admin: update ticket status and/or admin_notes."""
+    """Admin: update ticket status, priority, assignment, and/or admin_notes."""
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
         )
 
-    result = await db.execute(
-        select(SupportTicket)
-        .options(selectinload(SupportTicket.replies))
-        .where(SupportTicket.id == ticket_id)
-    )
-    ticket = result.scalar_one_or_none()
+    ticket = await _load_ticket(db, ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    if body.status is not None:
-        ticket.status = body.status
-        if body.status == "resolved":
+    changes: dict = {}
+    updates = body.model_dump(exclude_unset=True)
+    if "status" in updates:
+        ticket.status = updates["status"]
+        changes["status"] = updates["status"]
+        if updates["status"] == "resolved":
             ticket.resolved_at = datetime.now(timezone.utc)
-    if body.admin_notes is not None:
-        ticket.admin_notes = body.admin_notes
+        elif ticket.resolved_at is not None:
+            ticket.resolved_at = None
+    if "priority" in updates:
+        ticket.priority = updates["priority"]
+        changes["priority"] = updates["priority"]
+    if "assigned_to" in updates:
+        ticket.assigned_to = updates["assigned_to"]
+        changes["assigned_to"] = str(updates["assigned_to"]) if updates["assigned_to"] else None
+    if "admin_notes" in updates:
+        ticket.admin_notes = updates["admin_notes"]
+        changes["admin_notes"] = updates["admin_notes"]
 
     log_admin_action(
         db,
@@ -243,13 +379,50 @@ async def update_support_ticket(
         action="updated_ticket",
         target_type="support_ticket",
         target_id=str(ticket_id),
-        details=json.dumps({"status": body.status, "admin_notes": body.admin_notes}, default=str),
+        details=json.dumps(changes, default=str),
         ip_address=_get_client_ip(request),
     )
 
     await db.flush()
-    await db.refresh(ticket, attribute_names=["replies"])
-    return ticket
+    ticket = await _load_ticket(db, ticket_id)
+    return _ticket_to_detail(ticket, admin_view=True)
+
+
+@router.post("/{ticket_id}/assign-me", response_model=SupportTicketDetail)
+async def assign_ticket_to_me(
+    ticket_id: PyUUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Admin: assign ticket to the current admin."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    ticket = await _load_ticket(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    ticket.assigned_to = current_user.id
+    if ticket.status == "open":
+        ticket.status = "in_progress"
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="assigned_ticket",
+        target_type="support_ticket",
+        target_id=str(ticket_id),
+        details=json.dumps({"assigned_to": str(current_user.id)}),
+        ip_address=_get_client_ip(request),
+    )
+
+    await db.flush()
+    ticket = await _load_ticket(db, ticket_id)
+    return _ticket_to_detail(ticket, admin_view=True)
 
 
 @router.post("/{ticket_id}/reply", response_model=TicketReplyRead, status_code=status.HTTP_201_CREATED)
@@ -266,19 +439,23 @@ async def reply_to_ticket(
             detail="Admin access required",
         )
 
-    result = await db.execute(
-        select(SupportTicket).where(SupportTicket.id == ticket_id)
-    )
-    ticket = result.scalar_one_or_none()
+    if not data.message or not data.message.strip():
+        raise HTTPException(status_code=400, detail="Reply message is required")
+
+    ticket = await _load_ticket(db, ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
     reply = SupportTicketReply(
         ticket_id=ticket_id,
-        reply_message=data.message,
+        reply_message=data.message.strip(),
         replied_by=current_user.id,
+        is_internal=False,
     )
     db.add(reply)
+
+    if ticket.status == "open":
+        ticket.status = "in_progress"
 
     log_admin_action(
         db,
@@ -292,6 +469,7 @@ async def reply_to_ticket(
 
     await db.flush()
     await db.refresh(reply)
+    reply.user = current_user
 
     try:
         await send_ticket_reply_email(
@@ -302,4 +480,47 @@ async def reply_to_ticket(
     except Exception:
         logger.exception("Reply email failed for ticket %s", ticket_id)
 
-    return reply
+    return _reply_to_read(reply)
+
+
+@router.post("/{ticket_id}/internal-note", response_model=TicketReplyRead, status_code=status.HTTP_201_CREATED)
+async def add_internal_note(
+    ticket_id: PyUUID,
+    data: InternalNoteCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Admin: add an internal note (not visible to the user, no email sent)."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    ticket = await _load_ticket(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    note = SupportTicketReply(
+        ticket_id=ticket_id,
+        reply_message=data.message.strip(),
+        replied_by=current_user.id,
+        is_internal=True,
+    )
+    db.add(note)
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="added_ticket_note",
+        target_type="support_ticket",
+        target_id=str(ticket_id),
+        details=json.dumps({"preview": data.message[:120]}),
+        ip_address=_get_client_ip(request),
+    )
+
+    await db.flush()
+    await db.refresh(note)
+    note.user = current_user
+    return _reply_to_read(note)

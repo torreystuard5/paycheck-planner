@@ -26,6 +26,12 @@ class SupportTicket(Base):
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True, server_default=text("'No Subject'"))
     message: Mapped[str | None] = mapped_column(Text, nullable=True, server_default=text("''"))
     status: Mapped[str] = mapped_column(String(20), server_default=text("'open'"))
+    priority: Mapped[str] = mapped_column(String(20), server_default=text("'normal'"))
+    assigned_to: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     cant_access_email: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[str] = mapped_column(
@@ -36,9 +42,11 @@ class SupportTicket(Base):
     )
 
     # Relationships
-    user = relationship("User", back_populates="support_tickets")
+    user = relationship("User", back_populates="support_tickets", foreign_keys=[user_id])
+    assignee = relationship("User", foreign_keys=[assigned_to])
     replies = relationship("SupportTicketReply", back_populates="ticket", order_by="SupportTicketReply.created_at")
 
     __table_args__ = (
         Index("ix_support_tickets_user_id", "user_id"),
+        Index("ix_support_tickets_assigned_to", "assigned_to"),
     )
