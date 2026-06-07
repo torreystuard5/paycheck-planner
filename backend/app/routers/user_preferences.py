@@ -15,6 +15,7 @@ from app.services.tier_access import (
 )
 from app.constants.dashboard_widgets import sanitize_hidden_dashboard_widgets
 from app.services.dashboard_widget_preferences import ui_preferences_response
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/users", tags=["User Preferences"])
 
