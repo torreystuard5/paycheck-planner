@@ -1,8 +1,88 @@
 import { useState } from 'react';
-import { Loader2, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { CheckCircle, Loader2, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import api from '../../../services/api';
 import { Button, cn } from '../../ui';
 import { EmptyWidgetMessage, WidgetViewAllLink } from './DashboardMiniWidgets';
+
+const RECENTLY_COMPLETED_LIMIT = 3;
+const ACTIVE_VISIBLE_LIMIT = 6;
+
+function sortByUpdatedDesc(items) {
+  return [...items].sort((a, b) => {
+    const ta = new Date(a.updated_at || a.created_at || 0).getTime();
+    const tb = new Date(b.updated_at || b.created_at || 0).getTime();
+    return tb - ta;
+  });
+}
+
+function ShoppingItemRow({
+  item,
+  busy,
+  completed = false,
+  onToggle,
+  onDelete,
+}) {
+  return (
+    <li
+      className={cn(
+        'flex items-center gap-2 rounded-lg border px-2 py-1.5',
+        completed
+          ? 'border-border/50 bg-surface-subtle/30'
+          : 'border-border/60 bg-surface-subtle/40',
+        busy && 'opacity-60',
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onToggle(item)}
+        disabled={busy}
+        className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 transition-colors focus-visible:outline-none focus-visible:ring-2',
+          completed
+            ? 'border-brand-400 bg-brand-50 focus-visible:ring-brand-500/40'
+            : 'border-border hover:border-brand-500 focus-visible:ring-brand-500/40',
+        )}
+        aria-label={
+          completed
+            ? `Mark ${item.item_name} as not purchased`
+            : `Mark ${item.item_name} as purchased`
+        }
+      >
+        {busy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" aria-hidden />
+        ) : completed ? (
+          <CheckCircle className="h-3.5 w-3.5 text-brand-600" aria-hidden />
+        ) : null}
+      </button>
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            'truncate text-sm font-medium',
+            completed ? 'text-muted line-through' : 'text-foreground',
+          )}
+        >
+          {item.item_name}
+        </p>
+        {(item.quantity || item.category) && (
+          <p className="text-caption truncate">
+            {[item.quantity, item.category].filter(Boolean).join(' · ')}
+          </p>
+        )}
+      </div>
+      {!completed && (
+        <button
+          type="button"
+          onClick={() => onDelete(item)}
+          disabled={busy}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500/30"
+          aria-label={`Remove ${item.item_name}`}
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      )}
+    </li>
+  );
+}
 
 export default function ShoppingListWidget({ items, household, href, onRefresh }) {
   const [newName, setNewName] = useState('');
@@ -16,8 +96,11 @@ export default function ShoppingListWidget({ items, household, href, onRefresh }
 
   const allItems = Array.isArray(items) ? items : [];
   const pending = allItems.filter((i) => !i.is_completed);
-  const visible = pending.slice(0, 6);
-  const hasCompleted = allItems.some((i) => i.is_completed);
+  const visibleActive = pending.slice(0, ACTIVE_VISIBLE_LIMIT);
+  const recentlyCompleted = sortByUpdatedDesc(allItems.filter((i) => i.is_completed)).slice(
+    0,
+    RECENTLY_COMPLETED_LIMIT,
+  );
 
   const setBusy = (id, busy) => {
     setBusyIds((prev) => {
@@ -113,70 +196,56 @@ export default function ShoppingListWidget({ items, household, href, onRefresh }
         </p>
       )}
 
-      {visible.length === 0 ? (
+      {visibleActive.length === 0 ? (
         <div className="flex flex-col items-center rounded-xl border border-dashed border-border bg-surface-subtle/50 px-4 py-6 text-center">
           <ShoppingCart className="h-7 w-7 text-muted" aria-hidden />
           <p className="mt-2 text-sm font-medium text-foreground">
-            {hasCompleted ? 'All items checked off' : 'No items yet'}
+            {recentlyCompleted.length > 0 ? 'All caught up' : 'No items yet'}
           </p>
           <p className="text-caption mt-1 max-w-[14rem]">
-            {hasCompleted
+            {recentlyCompleted.length > 0
               ? 'Add something above to restock the list.'
               : 'Type an item above and tap + to add.'}
           </p>
         </div>
       ) : (
         <ul className="space-y-2">
-          {visible.map((item) => {
-            const busy = busyIds.has(item.id);
-            return (
-              <li
-                key={item.id}
-                className={cn(
-                  'flex items-center gap-2 rounded-lg border border-border/60 bg-surface-subtle/40 px-2 py-1.5',
-                  busy && 'opacity-60',
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => handleToggle(item)}
-                  disabled={busy}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 border-border transition-colors hover:border-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
-                  aria-label={`Mark ${item.item_name} as purchased`}
-                >
-                  {busy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" aria-hidden />
-                  ) : null}
-                </button>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {item.item_name}
-                  </p>
-                  {(item.quantity || item.category) && (
-                    <p className="text-caption truncate">
-                      {[item.quantity, item.category].filter(Boolean).join(' · ')}
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(item)}
-                  disabled={busy}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500/30"
-                  aria-label={`Remove ${item.item_name}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              </li>
-            );
-          })}
+          {visibleActive.map((item) => (
+            <ShoppingItemRow
+              key={item.id}
+              item={item}
+              busy={busyIds.has(item.id)}
+              onToggle={handleToggle}
+              onDelete={handleDelete}
+            />
+          ))}
         </ul>
       )}
 
-      {pending.length > visible.length && (
+      {pending.length > visibleActive.length && (
         <p className="text-caption mt-2 text-muted">
-          +{pending.length - visible.length} more on the full list
+          +{pending.length - visibleActive.length} more on the full list
         </p>
+      )}
+
+      {recentlyCompleted.length > 0 && (
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="text-caption mb-2 font-medium uppercase tracking-wide text-muted">
+            Recently completed
+          </p>
+          <ul className="space-y-2">
+            {recentlyCompleted.map((item) => (
+              <ShoppingItemRow
+                key={item.id}
+                item={item}
+                busy={busyIds.has(item.id)}
+                completed
+                onToggle={handleToggle}
+                onDelete={handleDelete}
+              />
+            ))}
+          </ul>
+        </div>
       )}
 
       <WidgetViewAllLink href={href} label="Open full shopping list" />
