@@ -27,13 +27,14 @@ import { WhatsNewUnseenBadge } from '../components/RecentUpdates';
 const PaycheckPlanEnvelope = lazy(() => import('../components/PaycheckPlanEnvelope'));
 const RecentUpdates = lazy(() => import('../components/RecentUpdates'));
 import usePolling from '../hooks/usePolling';
+import useDashboardWidgetVisibility from '../hooks/useDashboardWidgetVisibility';
+import { DashboardWidget, DashboardWidgetSettings } from '../components/dashboard';
 import { formatDate } from '../utils/formatDate';
 import { augmentPaycheckPlan, patchPaycheckPlanItemPaid } from '../utils/paycheckPlanItems';
 import { formatApiError } from '../utils/formatApiError';
 import {
   Badge,
   Card,
-  CollapsibleCard,
   IconStat,
   PageHeader,
   cn,
@@ -150,6 +151,14 @@ export default function Dashboard() {
 
   const [collapsedSections, setCollapsedSections] = useState([]);
   const [sectionsLoaded, setSectionsLoaded] = useState(false);
+  const [widgetSettingsOpen, setWidgetSettingsOpen] = useState(false);
+
+  const {
+    visibility: widgetVisibility,
+    toggleWidget,
+    resetWidgets,
+    visibleCount,
+  } = useDashboardWidgetVisibility(user?.id);
 
   useEffect(() => {
     const loadPrefs = async () => {
@@ -441,20 +450,33 @@ export default function Dashboard() {
   };
 
   const whatsNewExpanded = !collapsedSections.includes('whats_new');
+  const showPaycheckPlan = widgetVisibility.paycheck_plan;
+  const showQuickStats = widgetVisibility.quick_stats;
+  const showPlanRow = showPaycheckPlan || showQuickStats;
 
   return (
     <div className="page-container min-w-0 space-y-6">
       <PageHeader
         title={`Welcome back${user?.first_name ? `, ${user.first_name}` : ''}`}
         description="Here's your financial overview"
-        actions={
-          household ? (
-            <Badge variant="info" className="gap-1.5 px-3 py-1">
-              <Users className="h-3.5 w-3.5" />
-              Household Budget
-            </Badge>
-          ) : null
-        }
+        actions={(
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <DashboardWidgetSettings
+              open={widgetSettingsOpen}
+              onOpenChange={setWidgetSettingsOpen}
+              visibility={widgetVisibility}
+              onToggleWidget={toggleWidget}
+              onReset={resetWidgets}
+              visibleCount={visibleCount}
+            />
+            {household ? (
+              <Badge variant="info" className="gap-1.5 px-3 py-1">
+                <Users className="h-3.5 w-3.5" />
+                Household Budget
+              </Badge>
+            ) : null}
+          </div>
+        )}
       >
         {lastUpdated && household && (
           <p className="text-caption mt-1">
@@ -472,13 +494,21 @@ export default function Dashboard() {
 
       <WhatsNewBanner compact />
 
-      <CollapsibleCard
-        sectionKey="overview"
+      {visibleCount === 0 && (
+        <Card className="p-4 text-center sm:p-6">
+          <p className="text-sm text-foreground">All dashboard widgets are hidden.</p>
+          <p className="text-caption mt-1">Use the Widgets button above to turn sections back on.</p>
+        </Card>
+      )}
+
+      <DashboardWidget
+        widgetId="overview"
+        visible={widgetVisibility.overview}
         title="At a Glance"
         icon={DollarSign}
         iconTone="brand"
         collapsed={collapsedSections}
-        onToggle={toggleSection}
+        onToggleCollapse={toggleSection}
       >
         <div className="card-grid !gap-4">
           {summaryCards.map((card) => (
@@ -489,45 +519,53 @@ export default function Dashboard() {
             />
           ))}
         </div>
-      </CollapsibleCard>
+      </DashboardWidget>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
-        <CollapsibleCard
-          sectionKey="paycheck_plan"
-          title="Current Paycheck Plan"
-          icon={Calendar}
-          iconTone="accent"
-          collapsed={collapsedSections}
-          onToggle={toggleSection}
+      {showPlanRow && (
+        <div
+          className={cn(
+            'grid grid-cols-1 gap-5 lg:gap-6',
+            showPaycheckPlan && showQuickStats && 'lg:grid-cols-2',
+          )}
         >
-          <Suspense fallback={<LoadingSpinner label="Loading paycheck plan" />}>
-            <PaycheckPlanEnvelope
-              paycheckPlan={paycheckPlan}
-              assignItemPaid={assignItemPaid}
-              assignItemKey={assignItemKey}
-              checklistLoading={checklistLoading}
-              onToggleItem={toggleChecklistItem}
-              onPullForward={handlePullForward}
-              onRevertOverride={handleRevertOverride}
-              overrideBusyKey={overrideBusyKey}
-              overrideItemKey={overrideItemKey}
-              hidingOverdue={hidingOverdue}
-              onHideOverdue={toggleHideOverdue}
-              showHiddenOverdue={showHiddenOverdue}
-              onToggleShowHidden={() => setShowHiddenOverdue((prev) => !prev)}
-              className="border-0 shadow-none"
-            />
-          </Suspense>
-        </CollapsibleCard>
+          <DashboardWidget
+            widgetId="paycheck_plan"
+            visible={showPaycheckPlan}
+            title="Current Paycheck Plan"
+            icon={Calendar}
+            iconTone="accent"
+            collapsed={collapsedSections}
+            onToggleCollapse={toggleSection}
+          >
+            <Suspense fallback={<LoadingSpinner label="Loading paycheck plan" />}>
+              <PaycheckPlanEnvelope
+                paycheckPlan={paycheckPlan}
+                assignItemPaid={assignItemPaid}
+                assignItemKey={assignItemKey}
+                checklistLoading={checklistLoading}
+                onToggleItem={toggleChecklistItem}
+                onPullForward={handlePullForward}
+                onRevertOverride={handleRevertOverride}
+                overrideBusyKey={overrideBusyKey}
+                overrideItemKey={overrideItemKey}
+                hidingOverdue={hidingOverdue}
+                onHideOverdue={toggleHideOverdue}
+                showHiddenOverdue={showHiddenOverdue}
+                onToggleShowHidden={() => setShowHiddenOverdue((prev) => !prev)}
+                className="border-0 shadow-none"
+              />
+            </Suspense>
+          </DashboardWidget>
 
-        <CollapsibleCard
-          sectionKey="quick_stats"
-          title="Quick Stats"
-          icon={TrendingUp}
-          iconTone="brand"
-          collapsed={collapsedSections}
-          onToggle={toggleSection}
-        >
+          <DashboardWidget
+            widgetId="quick_stats"
+            visible={showQuickStats}
+            title="Quick Stats"
+            icon={TrendingUp}
+            iconTone="brand"
+            collapsed={collapsedSections}
+            onToggleCollapse={toggleSection}
+          >
           <div className="space-y-4">
             {creditScore ? (
               (() => {
@@ -595,16 +633,18 @@ export default function Dashboard() {
               )}
             </Card>
           </div>
-        </CollapsibleCard>
-      </div>
+          </DashboardWidget>
+        </div>
+      )}
 
-      <CollapsibleCard
-        sectionKey="recent_payments"
+      <DashboardWidget
+        widgetId="recent_payments"
+        visible={widgetVisibility.recent_payments}
         title="Recent Activity"
         icon={Activity}
         iconTone="brand"
         collapsed={collapsedSections}
-        onToggle={toggleSection}
+        onToggleCollapse={toggleSection}
       >
         {Array.isArray(recentPayments) && recentPayments.length > 0 ? (
           <div className="relative overflow-hidden rounded-xl border border-border bg-surface">
@@ -654,16 +694,17 @@ export default function Dashboard() {
         ) : (
           <p className="text-body">No recent payments recorded.</p>
         )}
-      </CollapsibleCard>
+      </DashboardWidget>
 
       {household && recentActivity.length > 0 && (
-        <CollapsibleCard
-          sectionKey="household_activity"
+        <DashboardWidget
+          widgetId="household_activity"
+          visible={widgetVisibility.household_activity}
           title="Recent Household Activity"
           icon={Activity}
           iconTone="accent"
           collapsed={collapsedSections}
-          onToggle={toggleSection}
+          onToggleCollapse={toggleSection}
         >
           <div className="space-y-3">
             {recentActivity.map((item) => (
@@ -691,22 +732,23 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-        </CollapsibleCard>
+        </DashboardWidget>
       )}
 
-      <CollapsibleCard
-        sectionKey="whats_new"
+      <DashboardWidget
+        widgetId="whats_new"
+        visible={widgetVisibility.whats_new}
         title="What's New"
         icon={Rocket}
         iconTone="purple"
         collapsed={collapsedSections}
-        onToggle={toggleSection}
+        onToggleCollapse={toggleSection}
         badge={<WhatsNewUnseenBadge />}
       >
         <Suspense fallback={<LoadingSpinner label="Loading updates" />}>
           <RecentUpdates embedded isExpanded={whatsNewExpanded} />
         </Suspense>
-      </CollapsibleCard>
+      </DashboardWidget>
     </div>
   );
 }
