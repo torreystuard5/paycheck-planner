@@ -188,6 +188,19 @@ def get_pay_period_window(
     return pay_date, next_pay_date - timedelta(days=1)
 
 
+def pay_period_index_containing(pay_dates: list[date], on_date: date) -> int:
+    """Index *i* where *on_date* falls in [pay_dates[i], pay_dates[i+1])."""
+    if len(pay_dates) < 2:
+        return 0
+    for i in range(len(pay_dates) - 1):
+        window_start, window_end = get_pay_period_window(pay_dates[i], pay_dates[i + 1])
+        if window_start <= on_date <= window_end:
+            return i
+    if on_date < pay_dates[0]:
+        return 0
+    return len(pay_dates) - 2
+
+
 def previous_period_bounds(
     current_period_start: date,
     pay_frequency: str,

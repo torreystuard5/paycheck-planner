@@ -13,21 +13,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.pay_period_item_override import PayPeriodItemOverride
 from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.user import User
-from app.services.bill_cycles import auto_generate_missing_cycle_rows
+from app.services.bill_cycles import (
+    auto_generate_missing_cycle_rows,
+    is_cadence_recurring_bill,
+    next_due_date_for_bill,
+    occurrence_dates_for_bill,
+)
 from app.services.paycheck_data import (
     fetch_widget_bills,
     get_paid_bill_map,
     get_paid_debt_ids_in_window,
 )
-from app.services.bill_cycles import occurrence_dates_for_bill
 from app.services.paycheck_assignment import apply_effective_lists
 from app.services.paycheck_engine import (
     _bill_due_dates_in_window,
+    _most_recent_pay_date,
     apply_planning_due_labels,
     assign_bills_to_paycheck,
+    generate_pay_dates,
+    get_pay_period_window,
     normalize_paycheck_line_item,
     normalize_planning_item,
     occurrence_key,
+    pay_period_index_containing,
     previous_period_bounds,
 )
 from app.services.debug_bill_dates import is_amanda_car, snapshot_amanda_car_bill
@@ -46,6 +54,85 @@ async def _checked_items_for_period(
         )
     )
     return {(row.item_type, row.item_id) for row in result.scalars().all()}
+
+
+def _item_due_date(item: dict) -> date | None:
+    raw = item.get("due_date")
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    if raw is None:
+        return None
+    try:
+        return date.fromisoformat(str(raw)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def consolidate_cadence_bill_assignments(
+    items: list[dict],
+    bills_by_id: dict[UUID, Any],
+    today: date,
+) -> list[dict]:
+    """Keep one dashboard row per weekly/biweekly bill — the next scheduled occurrence."""
+    passthrough: list[dict] = []
+    groups: dict[UUID, list[dict]] = {}
+
+    for item in items:
+        if item.get("item_type") != "bill":
+            passthrough.append(item)
+            continue
+        bill_id = item.get("id") or item.get("item_id")
+        bill = bills_by_id.get(bill_id)
+        if bill is None or not is_cadence_recurring_bill(bill):
+            passthrough.append(item)
+            continue
+        groups.setdefault(bill_id, []).append(item)
+
+    consolidated = list(passthrough)
+    for bill_id, group in groups.items():
+        bill = bills_by_id[bill_id]
+        target_due = next_due_date_for_bill(bill, today)
+        chosen: dict | None = None
+        if target_due is not None:
+            for item in group:
+                if _item_due_date(item) == target_due:
+                    chosen = dict(item)
+                    break
+            if chosen is None and group:
+                template = group[0]
+                chosen = dict(template)
+                chosen["due_date"] = target_due
+                chosen["is_paid"] = False
+        if chosen is None:
+            unpaid = [it for it in group if not it.get("is_paid")]
+            pool = unpaid or group
+            future = [it for it in pool if (_item_due_date(it) or today) >= today]
+            if future:
+                chosen = dict(min(future, key=lambda it: _item_due_date(it) or today))
+            elif pool:
+                chosen = dict(max(pool, key=lambda it: _item_due_date(it) or date.min))
+
+        if chosen is None:
+            continue
+
+        due = _item_due_date(chosen)
+        if due is not None:
+            chosen["days_until_due"] = (due - today).days
+            chosen["status"] = (
+                "overdue"
+                if due < today and not chosen.get("is_paid")
+                else "urgent"
+                if chosen["days_until_due"] <= 1
+                else "due_soon"
+                if chosen["days_until_due"] <= 4
+                else "upcoming"
+            )
+            chosen["is_overdue"] = due < today and not chosen.get("is_paid")
+        consolidated.append(chosen)
+
+    return consolidated
 
 
 async def build_paycheck_planning_state(
@@ -241,8 +328,12 @@ async def build_paycheck_planning_state(
             paid_bill_map=prev_paid_bill_map,
         )
         existing_planning_keys = {i.get("planning_key") for i in current_assigned}
+        bills_by_id = {b.id: b for b in bills}
         for raw in prev_natural:
             if raw.get("is_paid"):
+                continue
+            bill_obj = bills_by_id.get(raw.get("id"))
+            if bill_obj is not None and is_cadence_recurring_bill(bill_obj):
                 continue
             due = raw.get("due_date")
             if isinstance(due, datetime):
@@ -296,6 +387,8 @@ async def build_paycheck_planning_state(
         )
         existing_planning_keys = {i.get("planning_key") for i in current_assigned}
         for bill in bills:
+            if is_cadence_recurring_bill(bill):
+                continue
             for due_dt in _bill_due_dates_in_window(bill, month_start, early_end):
                 if due_dt >= current_start:
                     continue
@@ -347,6 +440,11 @@ async def build_paycheck_planning_state(
                     )
                     current_assigned.append(normalized)
                     existing_planning_keys.add(key)
+
+    bills_by_id = {b.id: b for b in bills}
+    current_assigned = consolidate_cadence_bill_assignments(
+        current_assigned, bills_by_id, today
+    )
 
     assigned_paid_count = sum(1 for i in current_assigned if i.get("is_paid"))
     assigned_total_count = len(current_assigned)

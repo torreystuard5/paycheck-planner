@@ -30,11 +30,13 @@ from app.services.paycheck_assignment import (
     parse_item_due_date,
 )
 from app.services.paycheck_engine import (
+    _most_recent_pay_date,
     assign_bills_to_paycheck,
     build_paycheck_plan,
     generate_pay_dates,
     get_pay_period_window,
     occurrence_key,
+    pay_period_index_containing,
 )
 from app.services.paycheck_planning_state import (
     build_current_paycheck_plan,
@@ -115,23 +117,44 @@ async def build_pay_calendar_context(
             detail="No pay periods available. Add an income source with a pay date for this budget.",
         )
 
-    current_pc = paychecks[0]
-    current_start = current_pc["paycheck_date"]
-    next_start = paychecks[1]["paycheck_date"] if len(paychecks) > 1 else None
+    frequency = plan["pay_frequency"]
+    anchor = today
+    if income_sources:
+        raw_anchor = getattr(income_sources[0], "next_pay_date", None)
+        if isinstance(raw_anchor, datetime):
+            anchor = raw_anchor.date()
+        elif isinstance(raw_anchor, date):
+            anchor = raw_anchor
+    elif getattr(user, "next_pay_date", None):
+        raw_anchor = user.next_pay_date
+        anchor = raw_anchor.date() if isinstance(raw_anchor, datetime) else raw_anchor
 
-    pay_dates = generate_pay_dates(current_start, plan["pay_frequency"], 3)
+    most_recent = _most_recent_pay_date(anchor, frequency, today)
+    if most_recent <= today:
+        anchor = most_recent
+
+    pay_dates = generate_pay_dates(anchor, frequency, 6)
     if len(pay_dates) < 2:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to compute pay period boundaries.",
         )
 
-    current_end = get_pay_period_window(pay_dates[0], pay_dates[1])[1]
+    period_idx = pay_period_index_containing(pay_dates, today)
+    current_start = pay_dates[period_idx]
+    current_end = get_pay_period_window(pay_dates[period_idx], pay_dates[period_idx + 1])[1]
+    next_start = pay_dates[period_idx + 1] if period_idx + 1 < len(pay_dates) else None
     next_end = (
-        get_pay_period_window(pay_dates[1], pay_dates[2])[1]
-        if len(pay_dates) > 2 and next_start
+        get_pay_period_window(pay_dates[period_idx + 1], pay_dates[period_idx + 2])[1]
+        if next_start is not None and period_idx + 2 < len(pay_dates)
         else current_end
     )
+
+    current_pc = paychecks[0]
+    for pc in paychecks:
+        if pc.get("paycheck_date") == current_start:
+            current_pc = pc
+            break
 
     overall_end = next_end if next_start else current_end
     paid_bill_map = await get_paid_bill_map(

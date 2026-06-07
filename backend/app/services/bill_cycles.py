@@ -50,6 +50,12 @@ def is_recurring_bill(bill: Bill) -> bool:
     return freq in RECURRING_FREQUENCIES
 
 
+def is_cadence_recurring_bill(bill: Bill) -> bool:
+    """Weekly/biweekly bills located by day_of_week + optional start_date anchor."""
+    freq = (bill.frequency or "monthly").lower()
+    return freq in ("weekly", "biweekly") and bill.day_of_week is not None
+
+
 def due_date_for_month(bill: Bill, year: int, month: int) -> date | None:
     if bill.due_day is None:
         return None
