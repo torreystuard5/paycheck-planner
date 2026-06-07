@@ -62,6 +62,9 @@ class User(Base):
     must_reset_password: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false")
     )
+    token_version: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), nullable=False
+    )
     reset_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     reset_token_expires: Mapped[str | None] = mapped_column(
         DateTime(timezone=True), nullable=True

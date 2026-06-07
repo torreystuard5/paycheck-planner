@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Users,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  Search,
   ShieldCheck,
   Loader2,
   Save,
   AlertTriangle,
   Crown,
   Settings2,
-  ToggleLeft,
-  ToggleRight,
   Eye,
   EyeOff,
   Copy,
@@ -25,6 +26,7 @@ import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
+import AdminUserQuickActions from '../components/admin/AdminUserQuickActions';
 import { useToast } from '../components/Toast';
 
 function generatePassword(length = 12) {
@@ -42,8 +44,43 @@ const TIER_COLORS = {
   early_access: 'bg-green-100 text-green-700',
 };
 
+const ACCOUNT_FILTERS = [
+  { key: '', label: 'All users' },
+  { key: 'pro', label: 'Pro' },
+  { key: 'free', label: 'Free' },
+  { key: 'active_30d', label: 'Active 30d' },
+  { key: 'admins', label: 'Admins' },
+  { key: 'deactivated', label: 'Deactivated' },
+  { key: 'suspended', label: 'Suspended' },
+];
+
+const BUSINESS_FILTERS = [
+  { key: 'business_paid', label: 'Business paid' },
+  { key: 'business_trial', label: 'Trial active' },
+  { key: 'business_trial_expired', label: 'Trial expired' },
+  { key: 'business_granted', label: 'Admin grant' },
+  { key: 'business_early', label: 'Early access' },
+];
+
+function SortHeader({ label, field, sortBy, sortOrder, onSort }) {
+  const active = sortBy === field;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(field)}
+      className="inline-flex items-center gap-1 font-medium text-gray-600 hover:text-gray-900"
+    >
+      {label}
+      {active && (
+        sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+      )}
+    </button>
+  );
+}
+
 export default function AdminUsers({ embedded = false }) {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, startImpersonation } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -100,27 +137,53 @@ export default function AdminUsers({ embedded = false }) {
   const [globalFeaturesLoading, setGlobalFeaturesLoading] = useState(false);
   const [togglingFeature, setTogglingFeature] = useState(null);
 
-  // User overrides map for badges
-  const [userOverrides, setUserOverrides] = useState({});
+  const [accountFilter, setAccountFilter] = useState('');
   const [businessFilter, setBusinessFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [rowBusy, setRowBusy] = useState(null);
+
+  // Quick action modals
+  const [quickPasswordUser, setQuickPasswordUser] = useState(null);
+  const [quickPassword, setQuickPassword] = useState('');
+  const [quickPasswordShow, setQuickPasswordShow] = useState(false);
+  const [quickPasswordSaving, setQuickPasswordSaving] = useState(false);
+  const [quickPasswordErr, setQuickPasswordErr] = useState('');
+  const [quickTierUser, setQuickTierUser] = useState(null);
+  const [quickTier, setQuickTier] = useState('early_access');
+  const [quickTierSaving, setQuickTierSaving] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, accountFilter, businessFilter, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchUsers();
-  }, [page, businessFilter]);
+  }, [page, accountFilter, businessFilter, debouncedSearch, sortBy, sortOrder]);
 
   const fetchUsers = async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = { page, per_page: perPage };
-      if (businessFilter) params.filter = businessFilter;
-      const { data } = await api.get('/api/v1/admin/users', {
-        params,
-      });
+      const params = {
+        page,
+        per_page: perPage,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+      };
+      const filter = businessFilter || accountFilter;
+      if (filter) params.filter = filter;
+      if (debouncedSearch) params.search = debouncedSearch;
+      const { data } = await api.get('/api/v1/admin/users', { params });
       setUsers(data.users);
       setTotal(data.total);
-      // Fetch overrides for listed users
-      fetchUserOverrides(data.users.map(u => u.id));
     } catch (err) {
       if (err.response?.status === 403) {
         setForbidden(true);
@@ -132,28 +195,6 @@ export default function AdminUsers({ embedded = false }) {
     }
   };
 
-  const fetchUserOverrides = async (userIds) => {
-    const updates = {};
-    await Promise.allSettled(
-      userIds.map(async (id) => {
-        try {
-          const { data } = await api.get(`/api/v1/admin/users/${id}/override`);
-          updates[id] = data || null;
-        } catch {
-          updates[id] = null;
-        }
-      })
-    );
-    setUserOverrides((prev) => {
-      const next = { ...prev };
-      for (const id of userIds) {
-        if (updates[id]) next[id] = updates[id];
-        else delete next[id];
-      }
-      return next;
-    });
-  };
-
   const resetDetailPasswordForm = () => {
     setDetailNewPassword('');
     setDetailPwdShow(false);
@@ -163,6 +204,115 @@ export default function AdminUsers({ embedded = false }) {
     if (detailPwdCopyTimerRef.current) {
       clearTimeout(detailPwdCopyTimerRef.current);
       detailPwdCopyTimerRef.current = null;
+    }
+  };
+
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const handleQuickSendResetEmail = async (u) => {
+    setRowBusy(u.id);
+    try {
+      const { data } = await api.post(`/api/v1/admin/users/${u.id}/reset-password`);
+      if (data?.email_sent === false) {
+        toast(data.message || 'Reset link created but email could not be sent.', 'error');
+      } else {
+        toast(data.message || `Password reset email sent to ${u.email}`, 'success');
+      }
+    } catch (err) {
+      toast(formatApiError(err), 'error');
+    } finally {
+      setRowBusy(null);
+    }
+  };
+
+  const handleQuickForceLogout = async (u) => {
+    if (!window.confirm(`Force logout all sessions for ${u.email}?`)) return;
+    setRowBusy(u.id);
+    try {
+      const { data } = await api.post(`/api/v1/admin/users/${u.id}/force-logout`);
+      toast(data.message || `Sessions revoked for ${u.email}`, 'success');
+    } catch (err) {
+      toast(formatApiError(err), 'error');
+    } finally {
+      setRowBusy(null);
+    }
+  };
+
+  const handleQuickImpersonate = async (u) => {
+    if (!window.confirm(`View the app as ${u.email}? Your admin session will be restored when you exit.`)) return;
+    setRowBusy(u.id);
+    try {
+      await startImpersonation(u.id);
+      toast(`Now viewing as ${u.email}`, 'success');
+      navigate('/dashboard');
+    } catch (err) {
+      toast(formatApiError(err), 'error');
+    } finally {
+      setRowBusy(null);
+    }
+  };
+
+  const openQuickPassword = (u) => {
+    setQuickPasswordUser(u);
+    setQuickPassword('');
+    setQuickPasswordShow(false);
+    setQuickPasswordErr('');
+  };
+
+  const openQuickTier = (u) => {
+    setQuickTierUser(u);
+    setQuickTier(u.subscription_tier || 'early_access');
+  };
+
+  const handleQuickPasswordSave = async () => {
+    if (!quickPasswordUser) return;
+    if (quickPassword.length < 8) {
+      setQuickPasswordErr('Password must be at least 8 characters.');
+      return;
+    }
+    setQuickPasswordSaving(true);
+    setQuickPasswordErr('');
+    try {
+      await api.post('/api/v1/admin/reset-password', {
+        user_id: quickPasswordUser.id,
+        new_password: quickPassword,
+      });
+      toast(`Password set for ${quickPasswordUser.email}`, 'success');
+      setQuickPasswordUser(null);
+      setQuickPassword('');
+    } catch (err) {
+      setQuickPasswordErr(formatApiError(err));
+    } finally {
+      setQuickPasswordSaving(false);
+    }
+  };
+
+  const handleQuickTierSave = async () => {
+    if (!quickTierUser || quickTier === (quickTierUser.subscription_tier || 'early_access')) {
+      setQuickTierUser(null);
+      return;
+    }
+    setQuickTierSaving(true);
+    try {
+      await api.patch(`/api/v1/admin/users/${quickTierUser.id}/subscription-tier`, {
+        subscription_tier: quickTier,
+      });
+      toast(`Tier updated for ${quickTierUser.email}`, 'success');
+      setUsers((prev) =>
+        prev.map((row) => (row.id === quickTierUser.id ? { ...row, subscription_tier: quickTier } : row)),
+      );
+      setQuickTierUser(null);
+    } catch (err) {
+      toast(formatApiError(err), 'error');
+    } finally {
+      setQuickTierSaving(false);
     }
   };
 
@@ -581,10 +731,7 @@ export default function AdminUsers({ embedded = false }) {
 
   const getPlanTierBadge = (u) => u.subscription_tier || 'early_access';
 
-  const hasFeatureOverrideBadge = (u) => {
-    const ov = userOverrides[u.id];
-    return Array.isArray(ov?.granted_features) && ov.granted_features.length > 0;
-  };
+  const hasFeatureOverrideBadge = (u) => !!u.has_feature_override;
 
   const readOnlyFields = detailUser
     ? [
@@ -633,26 +780,63 @@ export default function AdminUsers({ embedded = false }) {
         </div>
       )}
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <label className="text-sm text-gray-600 font-medium">Business filter</label>
-        <select
-          value={businessFilter}
-          onChange={(e) => {
-            setBusinessFilter(e.target.value);
-            setPage(1);
-          }}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-h-[44px] bg-white"
-        >
-          <option value="">All users</option>
-          <option value="business_paid">Business / Bundle (paid)</option>
-          <option value="business_trial">Business trial active</option>
-          <option value="business_trial_expired">Business trial expired</option>
-          <option value="business_granted">Admin business grant</option>
-          <option value="business_early">Early access (Business included)</option>
-        </select>
+      <div className="mb-4 space-y-3">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search email or name…"
+            className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {ACCOUNT_FILTERS.map(({ key, label }) => (
+            <button
+              key={key || 'all'}
+              type="button"
+              onClick={() => {
+                setAccountFilter(key);
+                setBusinessFilter('');
+              }}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                accountFilter === key && !businessFilter
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Business</span>
+          {BUSINESS_FILTERS.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                setBusinessFilter((prev) => (prev === key ? '' : key));
+                setAccountFilter('');
+              }}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                businessFilter === key
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {users.length === 0 ? (
+      {loading ? (
+        <LoadingSpinner />
+      ) : users.length === 0 ? (
         <EmptyState
           icon={Users}
           title="No users found"
@@ -665,13 +849,21 @@ export default function AdminUsers({ embedded = false }) {
               <table className="w-full text-sm text-left">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-4 py-3 font-medium text-gray-600">Email</th>
+                    <th className="px-4 py-3">
+                      <SortHeader label="Email" field="email" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                    </th>
                     <th className="px-4 py-3 font-medium text-gray-600">Name</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Tier</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Business</th>
+                    <th className="px-4 py-3">
+                      <SortHeader label="Last login" field="last_login" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                    </th>
                     <th className="px-4 py-3 font-medium text-gray-600">Active</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Admin</th>
+                    <th className="px-4 py-3">
+                      <SortHeader label="Admin" field="is_admin" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                    </th>
                     <th className="px-4 py-3 font-medium text-gray-600">Override</th>
+                    <th className="px-4 py-3 font-medium text-gray-600">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -695,7 +887,7 @@ export default function AdminUsers({ embedded = false }) {
                               {tier.toUpperCase()}
                             </span>
                             {hasOverride && (
-                              <Crown className="w-3.5 h-3.5 text-amber-500" title={`Override: ${userOverrides[u.id]?.reason || 'Admin override'}`} />
+                              <Crown className="w-3.5 h-3.5 text-amber-500" title="Feature override active" />
                             )}
                           </span>
                         </td>
@@ -708,53 +900,84 @@ export default function AdminUsers({ embedded = false }) {
                             <span className="text-gray-400 text-xs">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={(e) => toggleActive(e, u.id, u.is_active)}
-                            disabled={togglingActive === u.id || isSelf}
-                            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-40"
-                            style={{ backgroundColor: u.is_active ? '#22c55e' : '#d1d5db' }}
-                            role="switch"
-                            aria-checked={u.is_active}
-                            aria-label={`Toggle active for ${u.email}`}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                u.is_active ? 'translate-x-6' : 'translate-x-1'
-                              }`}
-                            />
-                            {togglingActive === u.id && (
-                              <Loader2 className="absolute -right-6 h-4 w-4 animate-spin text-green-600" />
-                            )}
-                          </button>
+                        <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                          {formatDateTime(u.last_login_at)}
                         </td>
                         <td className="px-4 py-3">
-                          <button
-                            onClick={(e) => toggleAdmin(e, u.id, u.is_admin)}
-                            disabled={togglingAdmin === u.id}
-                            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                            style={{ backgroundColor: u.is_admin ? '#2563eb' : '#d1d5db' }}
-                            role="switch"
-                            aria-checked={u.is_admin}
-                            aria-label={`Toggle admin for ${u.email}`}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                u.is_admin ? 'translate-x-6' : 'translate-x-1'
-                              }`}
-                            />
-                            {togglingAdmin === u.id && (
-                              <Loader2 className="absolute -right-6 h-4 w-4 animate-spin text-blue-600" />
-                            )}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => toggleActive(e, u.id, u.is_active)}
+                              disabled={togglingActive === u.id || isSelf}
+                              className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-40"
+                              style={{ backgroundColor: u.is_active ? '#22c55e' : '#d1d5db' }}
+                              role="switch"
+                              aria-checked={u.is_active}
+                              aria-label={`Toggle active for ${u.email}`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                  u.is_active ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                              {togglingActive === u.id && (
+                                <Loader2 className="absolute -right-6 h-4 w-4 animate-spin text-green-600" />
+                              )}
+                            </button>
+                            <span className={`text-xs font-medium ${u.is_active ? 'text-green-700' : 'text-gray-500'}`}>
+                              {u.is_active ? 'Active' : 'Off'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => toggleAdmin(e, u.id, u.is_admin)}
+                              disabled={togglingAdmin === u.id}
+                              className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                              style={{ backgroundColor: u.is_admin ? '#2563eb' : '#d1d5db' }}
+                              role="switch"
+                              aria-checked={u.is_admin}
+                              aria-label={`Toggle admin for ${u.email}`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                  u.is_admin ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                              {togglingAdmin === u.id && (
+                                <Loader2 className="absolute -right-6 h-4 w-4 animate-spin text-blue-600" />
+                              )}
+                            </button>
+                            <span className={`text-xs font-medium ${u.is_admin ? 'text-blue-700' : 'text-gray-500'}`}>
+                              {u.is_admin ? 'Admin' : 'User'}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <button
                             onClick={(e) => openOverride(e, u.id)}
-                            className="px-2.5 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                            className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+                              hasOverride
+                                ? 'text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200'
+                                : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                            }`}
                           >
-                            Override
+                            {hasOverride ? 'Override on' : 'Override'}
                           </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <AdminUserQuickActions
+                            user={u}
+                            isSelf={isSelf}
+                            busy={rowBusy === u.id}
+                            onViewDetails={() => openDetail(u.id)}
+                            onSendResetEmail={handleQuickSendResetEmail}
+                            onSetPassword={openQuickPassword}
+                            onForceLogout={handleQuickForceLogout}
+                            onImpersonate={handleQuickImpersonate}
+                            onChangeTier={openQuickTier}
+                            onOverride={(row) => openOverride({ stopPropagation: () => {} }, row.id)}
+                          />
                         </td>
                       </tr>
                     );
@@ -1313,6 +1536,102 @@ export default function AdminUsers({ embedded = false }) {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={!!quickPasswordUser}
+        onClose={() => setQuickPasswordUser(null)}
+        title={quickPasswordUser ? `Set password — ${quickPasswordUser.email}` : 'Set password'}
+      >
+        <div className="space-y-3">
+          {quickPasswordErr && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{quickPasswordErr}</div>
+          )}
+          <div className="flex gap-2">
+            <input
+              type={quickPasswordShow ? 'text' : 'password'}
+              value={quickPassword}
+              onChange={(e) => {
+                setQuickPassword(e.target.value);
+                setQuickPasswordErr('');
+              }}
+              className={inputClass}
+              placeholder="New password (min 8 chars)"
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setQuickPassword(generatePassword(12))}
+              className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Generate
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickPasswordShow((v) => !v)}
+              className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              aria-label={quickPasswordShow ? 'Hide password' : 'Show password'}
+            >
+              {quickPasswordShow ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setQuickPasswordUser(null)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleQuickPasswordSave}
+              disabled={quickPasswordSaving}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {quickPasswordSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save password
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!quickTierUser}
+        onClose={() => setQuickTierUser(null)}
+        title={quickTierUser ? `Change tier — ${quickTierUser.email}` : 'Change tier'}
+      >
+        <div className="space-y-4">
+          <select
+            value={quickTier}
+            onChange={(e) => setQuickTier(e.target.value)}
+            className={inputClass}
+          >
+            <option value="early_access">Home (early_access)</option>
+            <option value="free">Free</option>
+            <option value="pro">Pro</option>
+            <option value="business">Business</option>
+            <option value="bundle">Bundle</option>
+          </select>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setQuickTierUser(null)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleQuickTierSave}
+              disabled={quickTierSaving || quickTier === (quickTierUser?.subscription_tier || 'early_access')}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {quickTierSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save tier
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

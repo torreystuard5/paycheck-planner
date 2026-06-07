@@ -42,6 +42,32 @@ def create_refresh_token(data: dict) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
+def user_token_version(user: User) -> int:
+    return int(getattr(user, "token_version", None) or 0)
+
+
+def bump_user_token_version(user: User) -> int:
+    user.token_version = user_token_version(user) + 1
+    return user.token_version
+
+
+def build_user_token_data(user: User, *, impersonated_by: str | None = None) -> dict:
+    data = {"sub": str(user.id), "tv": user_token_version(user)}
+    if impersonated_by:
+        data["imp_by"] = impersonated_by
+    return data
+
+
+def validate_token_version(payload: dict, user: User) -> None:
+    token_tv = int(payload.get("tv", 0) or 0)
+    if token_tv != user_token_version(user):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired. Please sign in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 def decode_token(token: str) -> dict:
     try:
         payload = jwt.decode(
@@ -93,6 +119,8 @@ async def get_current_user(
             detail="User not found or inactive",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    validate_token_version(payload, user)
 
     if user.must_reset_password:
         path = request.url.path

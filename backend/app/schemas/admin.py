@@ -42,6 +42,7 @@ class AdminUserSummary(BaseModel):
     status: str = "Active"
     admin_locked: bool = False
     business_access_state: str | None = None
+    has_feature_override: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -15,6 +15,7 @@ import Sidebar from './Sidebar';
 // EarlyAccessBanner removed (Phase 2 cleanup)
 import AnnouncementBanner from '../AnnouncementBanner';
 import AdminMaintenanceBanner from '../AdminMaintenanceBanner';
+import ImpersonationBanner from '../ImpersonationBanner';
 import Footer from '../Footer';
 import SkipToContent from '../SkipToContent';
 import { useAuth } from '../../context/AuthContext';
@@ -142,6 +143,7 @@ export default function MainLayout() {
           className="min-w-0 px-3 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-4 md:px-6 md:py-6 lg:max-w-[1400px] lg:pb-8 lg:mx-auto focus:outline-none"
         >
           <AdminMaintenanceBanner />
+          <ImpersonationBanner />
           <AnnouncementBanner />
           <Outlet />
         </main>

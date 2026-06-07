@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.utils.email import normalize_email
-from app.utils.security import hash_password
+from app.utils.security import hash_password, bump_user_token_version
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ def apply_reset_token_to_user(
     user.reset_token_expires = _utcnow() + timedelta(hours=RESET_TOKEN_EXPIRY_HOURS)
     if require_must_reset:
         user.must_reset_password = True
+    bump_user_token_version(user)
 
 
 async def find_user_by_reset_token(db: AsyncSession, token: str) -> User | None:
@@ -77,6 +78,7 @@ def complete_password_reset(user: User, new_password: str) -> None:
     user.reset_token_expires = None
     user.must_reset_password = False
     user.failed_login_count = 0
+    bump_user_token_version(user)
 
 
 async def send_reset_email(user: User, token: str) -> bool:

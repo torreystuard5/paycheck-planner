@@ -55,6 +55,7 @@ from app.schemas.updates import (
     ComingSoonOut,
     ComingSoonUpdate,
 )
+from app.schemas.user import TokenResponse
 from app.services.admin_audit import get_client_ip as _get_client_ip
 from app.services.admin_audit import log_admin_action
 from app.services.tier_access import (
@@ -62,7 +63,14 @@ from app.services.tier_access import (
     deactivate_user_feature_overrides,
     sync_app_mode_to_subscription,
 )
-from app.utils.security import get_current_user, hash_password
+from app.utils.security import (
+    build_user_token_data,
+    bump_user_token_version,
+    create_access_token,
+    create_refresh_token,
+    get_current_user,
+    hash_password,
+)
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -154,8 +162,9 @@ async def list_admin_users(
     filter: str | None = Query(
         None,
         pattern=(
-            "^(all|pro|free|active_30d|business_paid|business_trial|"
-            "business_trial_expired|business_granted|business_early)$"
+            "^(all|pro|free|active_30d|admins|deactivated|suspended|"
+            "business_paid|business_trial|business_trial_expired|"
+            "business_granted|business_early)$"
         ),
     ),
     search: str | None = Query(None),
@@ -181,6 +190,12 @@ async def list_admin_users(
         base_where.append(
             func.coalesce(User.last_login_at, User.updated_at) >= thirty_days_ago_ts
         )
+    elif filter == "admins":
+        base_where.append(User.is_admin.is_(True))
+    elif filter == "deactivated":
+        base_where.append(User.is_active.is_(False))
+    elif filter == "suspended":
+        base_where.append(User.account_status == "suspended")
     elif filter == "business_paid":
         base_where.append(User.subscription_tier.in_(("business", "bundle")))
     elif filter == "business_trial":
@@ -229,6 +244,22 @@ async def list_admin_users(
         )
     ).scalars().all()
 
+    from app.models.user_feature_override import UserFeatureOverride
+
+    override_user_ids: set[UUID] = set()
+    if rows:
+        user_ids = [u.id for u in rows]
+        ov_result = await db.execute(
+            select(UserFeatureOverride).where(
+                UserFeatureOverride.user_id.in_(user_ids),
+                UserFeatureOverride.is_active.is_(True),
+            )
+        )
+        for ov in ov_result.scalars().all():
+            feats = ov.granted_features or []
+            if isinstance(feats, list) and len(feats) > 0:
+                override_user_ids.add(ov.user_id)
+
     now = datetime.now(timezone.utc)
     seven_days_ago = now - timedelta(days=7)
     users_out = []
@@ -254,6 +285,7 @@ async def list_admin_users(
         summary.status = computed_status
         summary.admin_locked = locked
         summary.business_access_state = business_access_state(u, now=now)
+        summary.has_feature_override = u.id in override_user_ids
         users_out.append(summary)
 
     return AdminUserListResponse(
@@ -749,6 +781,103 @@ async def admin_reset_password(
         ),
         "email_sent": False,
     }
+
+
+@router.post("/users/{user_id}/force-logout")
+async def admin_force_logout(
+    user_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Invalidate all active sessions for a user."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    bump_user_token_version(user)
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="force_logout",
+        target_type="user",
+        target_id=str(user_id),
+        details=json.dumps({"email": user.email}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+    return {"message": f"All sessions revoked for {user.email}"}
+
+
+@router.post("/users/{user_id}/impersonate", response_model=TokenResponse)
+async def admin_impersonate_user(
+    user_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Issue tokens to view the app as another user (audit logged)."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot impersonate yourself",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot impersonate an inactive user",
+        )
+
+    if user.must_reset_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User must reset their password before impersonation",
+        )
+
+    log_admin_action(
+        db,
+        admin_id=current_user.id,
+        action="impersonate_user",
+        target_type="user",
+        target_id=str(user_id),
+        details=json.dumps({"email": user.email}),
+        ip_address=_get_client_ip(request),
+    )
+    await db.flush()
+
+    token_data = build_user_token_data(
+        user, impersonated_by=str(current_user.id)
+    )
+    return TokenResponse(
+        access_token=create_access_token(token_data),
+        refresh_token=create_refresh_token(token_data),
+    )
 
 
 # ── Audit Log ──────────────────────────────────────────────────────

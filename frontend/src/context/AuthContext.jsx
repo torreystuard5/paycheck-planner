@@ -1,6 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import api, { onTosRequired, setMaintenanceModeForced, MAINTENANCE_MODE_DETAIL } from '../services/api';
 
+const IMP_ADMIN_ACCESS = 'impersonation_admin_access_token';
+const IMP_ADMIN_REFRESH = 'impersonation_admin_refresh_token';
+
 function isMaintenance503(err) {
   return (
     err?.response?.status === 503 &&
@@ -16,6 +19,9 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [tosRequired, setTosRequired] = useState(null);
   const [subscription, setSubscription] = useState(null);
+  const [isImpersonating, setIsImpersonating] = useState(
+    () => !!sessionStorage.getItem(IMP_ADMIN_ACCESS),
+  );
 
   useEffect(() => {
     onTosRequired((version) => {
@@ -71,6 +77,7 @@ export function AuthProvider({ children }) {
           const { data } = await api.get('/api/v1/auth/me');
           setUser({ ...data, app_mode: data.app_mode || 'personal' });
           setIsAuthenticated(true);
+          setIsImpersonating(!!data.impersonated_by || !!sessionStorage.getItem(IMP_ADMIN_ACCESS));
           if (data.is_admin) {
             setMaintenanceModeForced(false);
           }
@@ -142,8 +149,11 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('active_budget_id');
+    sessionStorage.removeItem(IMP_ADMIN_ACCESS);
+    sessionStorage.removeItem(IMP_ADMIN_REFRESH);
     setUser(null);
     setIsAuthenticated(false);
+    setIsImpersonating(false);
     setSubscription(null);
   };
 
@@ -172,8 +182,63 @@ export function AuthProvider({ children }) {
   const refreshUser = useCallback(async () => {
     const { data } = await api.get('/api/v1/auth/me');
     updateUser({ ...data, app_mode: data?.app_mode || 'personal' });
+    setIsImpersonating(!!data?.impersonated_by || !!sessionStorage.getItem(IMP_ADMIN_ACCESS));
     return data;
   }, [updateUser]);
+
+  const startImpersonation = useCallback(async (userId) => {
+    const adminAccess = localStorage.getItem('access_token');
+    const adminRefresh = localStorage.getItem('refresh_token');
+    if (!adminAccess || !adminRefresh) {
+      throw new Error('Admin session not found');
+    }
+
+    const { data } = await api.post(`/api/v1/admin/users/${userId}/impersonate`);
+    sessionStorage.setItem(IMP_ADMIN_ACCESS, adminAccess);
+    sessionStorage.setItem(IMP_ADMIN_REFRESH, adminRefresh);
+    localStorage.setItem('access_token', data.access_token);
+    localStorage.setItem('refresh_token', data.refresh_token);
+
+    const me = await api.get('/api/v1/auth/me');
+    setUser({ ...me.data, app_mode: me.data.app_mode || 'personal' });
+    setIsAuthenticated(true);
+    setIsImpersonating(true);
+    setSubscription(null);
+    try {
+      await fetchSubscription();
+    } catch {
+      /* ignore */
+    }
+    return me.data;
+  }, [fetchSubscription]);
+
+  const exitImpersonation = useCallback(async () => {
+    const adminAccess = sessionStorage.getItem(IMP_ADMIN_ACCESS);
+    const adminRefresh = sessionStorage.getItem(IMP_ADMIN_REFRESH);
+    if (!adminAccess || !adminRefresh) {
+      setIsImpersonating(false);
+      return null;
+    }
+
+    localStorage.setItem('access_token', adminAccess);
+    localStorage.setItem('refresh_token', adminRefresh);
+    sessionStorage.removeItem(IMP_ADMIN_ACCESS);
+    sessionStorage.removeItem(IMP_ADMIN_REFRESH);
+    setIsImpersonating(false);
+
+    const me = await api.get('/api/v1/auth/me');
+    setUser({ ...me.data, app_mode: me.data.app_mode || 'personal' });
+    setIsAuthenticated(true);
+    if (me.data.is_admin) {
+      setMaintenanceModeForced(false);
+    }
+    try {
+      await fetchSubscription();
+    } catch {
+      /* ignore */
+    }
+    return me.data;
+  }, [fetchSubscription]);
 
   return (
     <AuthContext.Provider
@@ -191,6 +256,9 @@ export function AuthProvider({ children }) {
         fetchSubscription,
         updateUser,
         refreshUser,
+        isImpersonating,
+        startImpersonation,
+        exitImpersonation,
       }}
     >
       {children}

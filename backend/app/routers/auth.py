@@ -1,8 +1,9 @@
+from uuid import UUID
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,11 +16,13 @@ from app.models.user import User
 from app.schemas.user import TokenResponse, UserCreate, UserDateFormatUpdate, UserLogin, UserResponse, UserUpdate
 from app.services.tier_access import sync_app_mode_to_subscription
 from app.utils.security import (
+    build_user_token_data,
     create_access_token,
     create_refresh_token,
     decode_token,
     get_current_user,
     hash_password,
+    validate_token_version,
     verify_password,
 )
 
@@ -98,7 +101,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         db.add(reward)
         await db.flush()
 
-    token_data = {"sub": str(user.id)}
+    token_data = build_user_token_data(user)
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
@@ -161,7 +164,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
         db.add(user)
     await db.flush()
 
-    token_data = {"sub": str(user.id)}
+    token_data = build_user_token_data(user)
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
@@ -203,11 +206,15 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
             ),
         )
 
+    validate_token_version(payload, user)
+
     if sync_app_mode_to_subscription(user):
         db.add(user)
         await db.flush()
 
-    token_data = {"sub": str(user.id)}
+    token_data = build_user_token_data(
+        user, impersonated_by=payload.get("imp_by")
+    )
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
@@ -221,6 +228,7 @@ async def logout():
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -231,7 +239,22 @@ async def get_me(
         db.add(current_user)
         await db.flush()
         await db.refresh(current_user)
-    return current_user
+
+    impersonated_by = None
+    auth = request.headers.get("Authorization") or ""
+    if auth.startswith("Bearer "):
+        try:
+            payload = decode_token(auth[7:])
+            imp = payload.get("imp_by")
+            if imp:
+                impersonated_by = UUID(str(imp))
+        except HTTPException:
+            pass
+
+    data = UserResponse.model_validate(current_user)
+    if impersonated_by:
+        return data.model_copy(update={"impersonated_by": impersonated_by})
+    return data
 
 
 @router.put("/me", response_model=UserResponse)
