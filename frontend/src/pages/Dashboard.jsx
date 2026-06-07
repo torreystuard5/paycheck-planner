@@ -418,6 +418,43 @@ export default function Dashboard() {
     }
   };
 
+  const activeDebts = useMemo(
+    () => (Array.isArray(debts) ? debts.filter((d) => Number(d.balance) > 0) : []),
+    [debts],
+  );
+
+  const categoryData = useMemo(() => {
+    if (!Array.isArray(bills)) return [];
+    return bills.reduce((acc, bill) => {
+      const cat = bill.category || 'Other';
+      const existing = acc.find((item) => item.name === cat);
+      const amount = Number(bill.amount) || 0;
+      if (existing) existing.value += amount;
+      else acc.push({ name: cat, value: amount });
+      return acc;
+    }, []).sort((a, b) => b.value - a.value);
+  }, [bills]);
+
+  const monthlyPayments = useMemo(() => {
+    const source = allPayments.length > 0 ? allPayments : recentPayments;
+    if (!Array.isArray(source)) return [];
+    return source.reduce((acc, payment) => {
+      if (!payment.paid_date) return acc;
+      const month = payment.paid_date.substring(0, 7);
+      const existing = acc.find((item) => item.month === month);
+      const amount = Number(payment.amount) || 0;
+      if (existing) existing.amount += amount;
+      else acc.push({ month, amount });
+      return acc;
+    }, []).sort((a, b) => a.month.localeCompare(b.month));
+  }, [allPayments, recentPayments]);
+
+  const paymentTypeBadge = useCallback((payment) => {
+    if (payment.bill_id) return { label: 'Bill', variant: 'info' };
+    if (payment.debt_id) return { label: 'Debt', variant: 'debt' };
+    return { label: 'Payment', variant: 'neutral' };
+  }, []);
+
   if (loading || !sectionsLoaded) return <LoadingSpinner />;
 
   const totalIncome = incomeSummary ? Number(incomeSummary.total_net) || 0 : 0;
@@ -425,7 +462,6 @@ export default function Dashboard() {
   const totalBills = Array.isArray(bills)
     ? bills.filter((b) => b.is_user_responsible !== false).reduce((sum, b) => sum + (Number(b.user_share ?? b.amount) || 0), 0)
     : 0;
-  const activeDebts = Array.isArray(debts) ? debts.filter((d) => Number(d.balance) > 0) : [];
   const totalDebt = activeDebts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
   const debtsPaidThisPeriod = activeDebts.filter((d) => d.is_paid_this_period).length;
   const totalDebtCount = activeDebts.length;
@@ -507,38 +543,6 @@ export default function Dashboard() {
       tone: 'purple',
     },
   ];
-
-  const paymentTypeBadge = (payment) => {
-    if (payment.bill_id) return { label: 'Bill', variant: 'info' };
-    if (payment.debt_id) return { label: 'Debt', variant: 'debt' };
-    return { label: 'Payment', variant: 'neutral' };
-  };
-
-  const categoryData = useMemo(() => {
-    if (!Array.isArray(bills)) return [];
-    return bills.reduce((acc, bill) => {
-      const cat = bill.category || 'Other';
-      const existing = acc.find((item) => item.name === cat);
-      const amount = Number(bill.amount) || 0;
-      if (existing) existing.value += amount;
-      else acc.push({ name: cat, value: amount });
-      return acc;
-    }, []).sort((a, b) => b.value - a.value);
-  }, [bills]);
-
-  const monthlyPayments = useMemo(() => {
-    const source = allPayments.length > 0 ? allPayments : recentPayments;
-    if (!Array.isArray(source)) return [];
-    return source.reduce((acc, payment) => {
-      if (!payment.paid_date) return acc;
-      const month = payment.paid_date.substring(0, 7);
-      const existing = acc.find((item) => item.month === month);
-      const amount = Number(payment.amount) || 0;
-      if (existing) existing.amount += amount;
-      else acc.push({ month, amount });
-      return acc;
-    }, []).sort((a, b) => a.month.localeCompare(b.month));
-  }, [allPayments, recentPayments]);
 
   const whatsNewExpanded = !collapsedSections.includes('whats_new');
 
