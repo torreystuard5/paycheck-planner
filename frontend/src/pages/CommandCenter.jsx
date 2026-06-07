@@ -61,84 +61,16 @@ import GlobalControlsPanel from '../components/admin/command-center/GlobalContro
 import DashboardQuickActions from '../components/admin/command-center/DashboardQuickActions';
 import { useCommandPalette } from '../components/admin/command-center/CommandPalette';
 import { AUDIT_ACTION_CATEGORIES } from '../components/admin/command-center/constants';
+import RecentActivityList from '../components/admin/command-center/RecentActivityList';
+import {
+  AUDIT_ACTION_LABELS,
+  formatAuditActionLabel,
+  formatAuditActivityMessage,
+  formatAuditDetailsFull,
+  getAuditLegacyBadgeClass,
+} from '../components/admin/command-center/auditLogFormat';
 
-// â”€â”€â”€ Status helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const AUDIT_ACTION_COLORS = {
-  disable: 'bg-red-100 text-red-700',
-  delete: 'bg-red-100 text-red-700',
-  enable: 'bg-green-100 text-green-700',
-  create: 'bg-blue-100 text-blue-700',
-  update: 'bg-amber-100 text-amber-700',
-  login: 'bg-purple-100 text-purple-700',
-};
-
-const AUDIT_ACTION_LABELS = {
-  enabled_user: 'Enabled user',
-  disabled_user: 'Disabled user',
-  toggled_admin: 'Toggled admin',
-  updated_user_status: 'Updated account status',
-  updated_user_email: 'Updated user email',
-  initiated_password_reset: 'Sent password reset',
-  admin_set_password: 'Set user password',
-  force_logout: 'Forced user logout',
-  impersonate_user: 'Viewed as user',
-  updated_business_access: 'Updated business access',
-  created_announcement: 'Created announcement',
-  updated_announcement: 'Updated announcement',
-  deleted_announcement: 'Deleted announcement',
-  toggled_maintenance: 'Toggled maintenance mode',
-  updated_setting: 'Updated system setting',
-  created_app_update: 'Created app update',
-  updated_app_update: 'Updated app update',
-  deleted_app_update: 'Deleted app update',
-  created_coming_soon: 'Created coming soon item',
-  updated_coming_soon: 'Updated coming soon item',
-  deleted_coming_soon: 'Deleted coming soon item',
-  sent_broadcast: 'Sent broadcast email',
-  resubscribed_user: 'Re-subscribed user to emails',
-  toggled_active: 'Toggled user active',
-  upsert_override: 'Upserted feature override',
-  remove_override: 'Removed feature override',
-  toggle_global_feature: 'Toggled global feature',
-  updated_ticket: 'Updated support ticket',
-  replied_to_ticket: 'Replied to support ticket',
-  assigned_ticket: 'Assigned support ticket',
-  added_ticket_note: 'Added ticket internal note',
-  user_unsubscribed: 'User unsubscribed (self-service)',
-  updated_subscription_tier: 'Updated user plan tier',
-};
-
-function formatAuditActionLabel(action) {
-  if (!action) return 'â€”';
-  if (AUDIT_ACTION_LABELS[action]) return AUDIT_ACTION_LABELS[action];
-  return action
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function formatAuditDetailsPreview(raw) {
-  if (!raw) return 'â€”';
-  try {
-    const o = JSON.parse(raw);
-    const parts = Object.entries(o).map(([k, v]) => {
-      const val = v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v);
-      return `${k}: ${val}`;
-    });
-    const line = parts.join(' Â· ');
-    return line.length > 100 ? `${line.slice(0, 100)}â€¦` : line;
-  } catch {
-    return raw.length > 100 ? `${raw.slice(0, 100)}â€¦` : raw;
-  }
-}
-
-function formatAuditDetailsFull(raw) {
-  if (!raw) return '';
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    return raw;
-  }
-}
+// ── Status helpers ───────────────────────────────────────────────────────────
 
 const ANNOUNCEMENT_TYPES = [
   { value: 'info', label: 'Info' },
@@ -305,7 +237,7 @@ function DashboardTab({ onNavigate, onRegisterRefresh }) {
       }
       if (activityRes.status === 'fulfilled') {
         const d = activityRes.value.data;
-        setRecentActivity(Array.isArray(d) ? d : d.entries || d.items || []);
+        setRecentActivity(Array.isArray(d) ? d : d.items || d.entries || []);
       }
       if (settingsRes.status === 'fulfilled') {
         const settings = Array.isArray(settingsRes.value.data) ? settingsRes.value.data : [];
@@ -422,26 +354,10 @@ function DashboardTab({ onNavigate, onRegisterRefresh }) {
           {recentActivity.length === 0 ? (
             <p className="text-sm text-gray-500">No recent activity.</p>
           ) : (
-            <div className="space-y-1">
-              {recentActivity.map((entry, i) => {
-                const action = (entry.action || '').toLowerCase();
-                const badgeColor = AUDIT_ACTION_COLORS[action] || 'bg-gray-100 text-gray-700';
-                return (
-                  <div key={entry.id || i} className="flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-gray-50">
-                    <span className={`inline-flex shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}>
-                      {formatAuditActionLabel(entry.action)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-gray-900">{entry.details || entry.target || 'â€”'}</p>
-                      <p className="text-xs text-gray-500">{entry.admin_email || 'â€”'}</p>
-                    </div>
-                    <span className="shrink-0 text-xs text-gray-400 whitespace-nowrap" title={formatDateTime(entry.created_at)}>
-                      {entry.created_at ? formatDistanceToNow(new Date(entry.created_at), { addSuffix: true }) : 'â€”'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+            <RecentActivityList
+              entries={recentActivity}
+              onViewAll={onNavigate ? () => onNavigate('audit') : undefined}
+            />
           )}
         </CommandCenterPanel>
       </div>
@@ -1152,32 +1068,31 @@ function AuditLogTab({ onRegisterRefresh }) {
                     <th className="px-4 py-3 font-medium text-gray-600">Admin</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Action</th>
                     <th className="px-4 py-3 font-medium text-gray-600">Target</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Details</th>
+                    <th className="px-4 py-3 font-medium text-gray-600">Summary</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map((entry, i) => {
                     const actionKey = entry.action || '';
-                    const actionLc = actionKey.toLowerCase();
-                    const badgeKey = ['delete', 'disable', 'enable', 'create', 'update', 'login'].find((k) => actionLc.includes(k));
-                    const badgeColor = (badgeKey && AUDIT_ACTION_COLORS[badgeKey]) || 'bg-gray-100 text-gray-700';
+                    const badgeColor = getAuditLegacyBadgeClass(actionKey);
+                    const summary = formatAuditActivityMessage(entry);
                     return (
                       <tr key={entry.id || i} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-gray-500 whitespace-nowrap" title={formatDateTime(entry.created_at)}>
-                          {entry.created_at ? formatDistanceToNow(new Date(entry.created_at), { addSuffix: true }) : 'â€”'}
+                          {entry.created_at ? formatDistanceToNow(new Date(entry.created_at), { addSuffix: true }) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-gray-900">{entry.admin_email || 'â€”'}</td>
+                        <td className="px-4 py-3 text-gray-900">{entry.admin_email || '—'}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}>
                             {formatAuditActionLabel(actionKey)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-700 max-w-[14rem]">
-                          <span className="line-clamp-2">{entry.target || 'â€”'}</span>
+                          <span className="line-clamp-2">{entry.target || '—'}</span>
                         </td>
-                        <td className="px-4 py-3 text-gray-500 max-w-xs">
+                        <td className="px-4 py-3 text-gray-600 max-w-md">
                           <div className="flex items-center gap-2">
-                            <span className="truncate flex-1 min-w-0">{formatAuditDetailsPreview(entry.details)}</span>
+                            <span className="line-clamp-2 flex-1 min-w-0 text-sm">{summary}</span>
                             {entry.details && (
                               <button
                                 type="button"
@@ -1216,16 +1131,38 @@ function AuditLogTab({ onRegisterRefresh }) {
       <Modal
         isOpen={!!detailEntry}
         onClose={() => setDetailEntry(null)}
-        title={detailEntry ? `Details â€” ${formatAuditActionLabel(detailEntry.action)}` : 'Details'}
+        title={detailEntry ? formatAuditActionLabel(detailEntry.action) : 'Details'}
       >
         {detailEntry && (
-          <div className="space-y-3 text-sm">
-            {detailEntry.target && (
-              <p><span className="text-gray-500">Target:</span> <span className="text-gray-900">{detailEntry.target}</span></p>
+          <div className="space-y-4 text-sm">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Summary</p>
+              <p className="mt-1 text-gray-900">{formatAuditActivityMessage(detailEntry)}</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Admin</p>
+                <p className="mt-1 text-gray-900">{detailEntry.admin_email || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">When</p>
+                <p className="mt-1 text-gray-900">{formatDateTime(detailEntry.created_at)}</p>
+              </div>
+              {detailEntry.target && (
+                <div className="sm:col-span-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Target</p>
+                  <p className="mt-1 text-gray-900">{detailEntry.target}</p>
+                </div>
+              )}
+            </div>
+            {detailEntry.details && (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Raw details</p>
+                <pre className="mt-1 max-h-[50vh] overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800 whitespace-pre-wrap break-words">
+                  {formatAuditDetailsFull(detailEntry.details)}
+                </pre>
+              </div>
             )}
-            <pre className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words max-h-[60vh]">
-              {formatAuditDetailsFull(detailEntry.details)}
-            </pre>
           </div>
         )}
       </Modal>
