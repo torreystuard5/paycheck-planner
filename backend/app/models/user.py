@@ -172,7 +172,12 @@ class User(Base):
     debts = relationship("Debt", back_populates="user", cascade="all, delete-orphan")
     savings_goals = relationship("SavingsGoal", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
-    support_tickets = relationship("SupportTicket", back_populates="user", cascade="all, delete-orphan")
+    support_tickets = relationship(
+        "SupportTicket",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="[SupportTicket.user_id]",
+    )
     referrals_given = relationship(
         "ReferralReward",
         back_populates="referrer",
