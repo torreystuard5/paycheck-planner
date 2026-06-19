@@ -264,8 +264,8 @@ class TestCase05_SoloDebtCheckboxPay(unittest.TestCase):
         debt = _fake_debt()
 
         session = _build_session([
-            _FakeResult([]),       # DebtPayment lookup
             _FakeResult([debt]),   # Debt lookup
+            _FakeResult([]),       # DebtPayment lookup
         ])
 
         _run(_sync_debt_payment(session, user, debt.id, True))
@@ -285,8 +285,8 @@ class TestCase06_SoloDebtCheckboxUndo(unittest.TestCase):
         dp = _fake_debt_payment(debt_id=debt.id, user_id=user.id, amount=Decimal("50"))
 
         session = _build_session([
-            _FakeResult([dp]),       # DebtPayment lookup
             _FakeResult([debt]),     # Debt lookup
+            _FakeResult([dp]),       # DebtPayment lookup
             _FakeResult([]),         # auto-logged Payments
             _FakeResult([]),         # checklist delete
         ])
@@ -309,8 +309,8 @@ class TestCase07_SharedDebtCheckboxPay(unittest.TestCase):
         debt = _fake_debt(household_id=household_id)
 
         session = _build_session([
-            _FakeResult([]),       # DebtPayment lookup
             _FakeResult([debt]),   # Debt lookup
+            _FakeResult([]),       # DebtPayment lookup
         ])
 
         _run(_sync_debt_payment(session, user, debt.id, True))
@@ -333,14 +333,14 @@ class TestCase08_SharedDebtCheckboxUndo(unittest.TestCase):
         dp_b = _fake_debt_payment(debt_id=debt.id, user_id=user_b.id, amount=Decimal("50"))
 
         session = _build_session([
-            _FakeResult([dp_a, dp_b]),   # DebtPayment lookup — two household rows
             _FakeResult([debt]),         # Debt lookup
+            _FakeResult([dp_a]),         # DebtPayment lookup — current user only
             _FakeResult([]),             # auto-logged Payments
             _FakeResult([]),             # checklist delete
         ])
 
         _run(_sync_debt_payment(session, user_a, debt.id, False, date(2026, 5, 1)))
-        self.assertEqual(debt.balance, Decimal("500"))
+        self.assertEqual(debt.balance, Decimal("450"))
 
 
 # ===========================================================================
@@ -957,8 +957,8 @@ class TestCase24_No500sForAnyDebtAction(unittest.TestCase):
         dp2 = _fake_debt_payment(debt_id=debt.id, user_id=user.id, amount=Decimal("50"))
 
         session = _build_session([
-            _FakeResult([dp1, dp2]),  # Two rows — self-healing kicks in
             _FakeResult([debt]),
+            _FakeResult([dp1, dp2]),  # Two rows — self-healing kicks in
         ])
 
         try:

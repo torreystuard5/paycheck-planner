@@ -225,37 +225,17 @@ async def get_paid_debt_ids_in_window(
     window_start: date,
     window_end: date,
 ) -> set[UUID]:
-    """Debts with a payment row whose (period_month, period_year) overlaps the window.
-
-    Uses the same month/year source of truth as ``_debt_to_response`` and
-    ``_paid_debt_ids_this_month`` so that the Debts-page paid pill and the
-    Dashboard paycheck-plan checkbox always agree.  When a pay-period window
-    spans two calendar months (e.g. biweekly May 20 – Jun 2) payments in
-    *either* month are included.
-    """
+    """Debts with payment rows scoped to this due-date/pay-period window."""
     if not debt_ids:
         return set()
-
-    # Collect every (month, year) pair the window touches.
-    month_year_pairs: set[tuple[int, int]] = set()
-    cursor = window_start.replace(day=1)
-    while cursor <= window_end:
-        month_year_pairs.add((cursor.month, cursor.year))
-        # Advance to the first day of the next month.
-        if cursor.month == 12:
-            cursor = cursor.replace(year=cursor.year + 1, month=1)
-        else:
-            cursor = cursor.replace(month=cursor.month + 1)
-
-    clauses = [
-        (DebtPayment.period_month == m) & (DebtPayment.period_year == y)
-        for m, y in month_year_pairs
-    ]
 
     result = await db.execute(
         select(DebtPayment.debt_id).where(
             DebtPayment.debt_id.in_(debt_ids),
-            or_(*clauses),
+            or_(
+                DebtPayment.pay_period_start == window_start,
+                (DebtPayment.due_date >= window_start) & (DebtPayment.due_date <= window_end),
+            ),
         )
     )
     return {row[0] for row in result.all()}

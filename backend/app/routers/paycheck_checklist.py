@@ -19,6 +19,7 @@ from app.services.bill_cycles import (
 from app.services.debt_payment_service import (
     create_period_debt_payment,
     dedupe_period_debt_payments,
+    debt_due_date_for_period,
     fetch_period_debt_payments,
     remove_period_debt_payments,
 )
@@ -59,7 +60,14 @@ async def toggle_checklist_item(
     # Sync shared tables first. Unchecking may delete all checklist rows for this
     # bill/debt so other household members do not keep stale is_checked=true.
     if body.item_type == "debt":
-        await _sync_debt_payment(db, current_user, body.item_id, body.is_checked, body.pay_period_start)
+        await _sync_debt_payment(
+            db,
+            current_user,
+            body.item_id,
+            body.is_checked,
+            body.pay_period_start,
+            body.occurrence_due_date,
+        )
 
     if body.item_type == "bill":
         if body.occurrence_due_date is None:
@@ -107,17 +115,26 @@ async def toggle_checklist_item(
 async def _sync_debt_payment(
     db: AsyncSession, user: User, debt_id, is_checked: bool,
     pay_period_start: date | None = None,
+    occurrence_due_date: date | None = None,
 ):
     """Create or remove a DebtPayment record to stay in sync."""
     today = date.today()
-    existing_rows = await fetch_period_debt_payments(
-        db, debt_id, month=today.month, year=today.year
-    )
-
     debt_result = await db.execute(select(Debt).where(Debt.id == debt_id))
     debt = debt_result.scalar_one_or_none()
     if not debt:
         return
+
+    target_period_start = pay_period_start or today.replace(day=1)
+    target_due_date = occurrence_due_date or debt_due_date_for_period(debt, target_period_start)
+    existing_rows = await fetch_period_debt_payments(
+        db,
+        debt_id,
+        month=target_due_date.month if target_due_date else today.month,
+        year=target_due_date.year if target_due_date else today.year,
+        due_date=target_due_date,
+        pay_period_start=target_period_start,
+        user_id=user.id,
+    )
 
     existing_rows = await dedupe_period_debt_payments(db, debt, existing_rows)
     existing = existing_rows[0] if existing_rows else None
@@ -131,6 +148,8 @@ async def _sync_debt_payment(
             amount,
             auto_log_source="dashboard",
             today=today,
+            due_date=target_due_date,
+            pay_period_start=target_period_start,
         )
     elif not is_checked and existing:
         await remove_period_debt_payments(
