@@ -254,20 +254,18 @@ def occurrence_dates_for_month(bill: Bill, year: int, month: int) -> list[date]:
 
 def next_due_date_for_bill(bill: Bill, today: date | None = None) -> date | None:
     today = today or date.today()
-    month_due = current_month_due_date(bill, today)
-    if month_due is not None:
-        if month_due >= today:
-            return month_due
-        freq = bill.frequency or "monthly"
-        if freq not in ("weekly", "biweekly"):
-            return month_due
     dates = occurrence_dates_for_bill(bill, today, _add_months(today, 18))
     for due in dates:
         if due >= today:
             result = due
             break
     else:
-        result = dates[0] if dates else None
+        historical_dates = occurrence_dates_for_bill(
+            bill,
+            _add_months(today, -18),
+            today - timedelta(days=1),
+        )
+        result = historical_dates[-1] if historical_dates else None
 
     if (getattr(bill, "name", None) or "").strip().lower() == "amanda car":
         try:

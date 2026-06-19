@@ -227,12 +227,27 @@ def _select_legacy_paid_due_date(
         return None
     if any(row.is_paid for row in cycle_payments):
         return None
-    if not cycle_payments:
-        return _compute_next_due_date(bill, today)
 
-    ordered = sorted(cycle_payments, key=lambda row: row.due_date)
     raw_paid_at = getattr(bill, "paid_date", None)
     paid_on = raw_paid_at.date() if isinstance(raw_paid_at, datetime) else raw_paid_at
+
+    if not cycle_payments:
+        period_start = today.replace(day=1)
+        period_end = date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
+        dates = occurrence_dates_for_bill(bill, period_start, period_end)
+        if not dates:
+            return None
+        if isinstance(paid_on, date):
+            on_or_before = [due for due in dates if due <= paid_on]
+            if on_or_before:
+                return on_or_before[-1]
+            on_or_after = [due for due in dates if due >= paid_on]
+            if on_or_after:
+                return on_or_after[0]
+        due_so_far = [due for due in dates if due <= today]
+        return due_so_far[-1] if due_so_far else dates[0]
+
+    ordered = sorted(cycle_payments, key=lambda row: row.due_date)
 
     if isinstance(paid_on, date):
         on_or_before = [row for row in ordered if row.due_date <= paid_on]

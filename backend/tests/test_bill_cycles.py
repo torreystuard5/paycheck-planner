@@ -107,7 +107,26 @@ def test_monthly_bill_appears_in_current_month_without_cycle_row():
     assert window_start == date(2026, 6, 1)
     assert occurrence_dates_for_bill(bill, window_start, date(2026, 6, 30)) == [date(2026, 6, 5)]
     assert current_month_due_date(bill, date(2026, 6, 10)) == date(2026, 6, 5)
-    assert next_due_date_for_bill(bill, today=date(2026, 6, 10)) == date(2026, 6, 5)
+    assert next_due_date_for_bill(bill, today=date(2026, 6, 10)) == date(2026, 7, 5)
+
+
+def test_next_due_date_advances_monthly_style_frequencies():
+    monthly = _bill(frequency="monthly", due_day=1)
+    semi_monthly = _bill(frequency="semi_monthly", due_day=1)
+    quarterly = _bill(frequency="quarterly", due_day=10, start_date=date(2026, 1, 10))
+    annual = _bill(frequency="annual", due_day=15, start_date=date(2026, 5, 15))
+
+    assert next_due_date_for_bill(monthly, today=date(2026, 6, 19)) == date(2026, 7, 1)
+    assert next_due_date_for_bill(semi_monthly, today=date(2026, 6, 2)) == date(2026, 6, 16)
+    assert next_due_date_for_bill(semi_monthly, today=date(2026, 6, 17)) == date(2026, 7, 1)
+    assert next_due_date_for_bill(quarterly, today=date(2026, 4, 11)) == date(2026, 7, 10)
+    assert next_due_date_for_bill(annual, today=date(2026, 5, 16)) == date(2027, 5, 15)
+
+
+def test_next_due_date_only_returns_past_when_no_future_occurrence_exists():
+    bill = _bill(frequency="one_time", start_date=date(2026, 6, 1), due_day=None)
+
+    assert next_due_date_for_bill(bill, today=date(2026, 6, 19)) == date(2026, 6, 1)
 
 
 def test_due_date_for_month_clamps_to_last_day_of_month():
