@@ -155,7 +155,7 @@ function getPaidNextDueDate(bill) {
   return null;
 }
 
-function getPaidStatusLabel(bill, userDateFormat) {
+function formatPaidBillListLabel(bill, userDateFormat) {
   const nextDue = getPaidNextDueDate(bill);
 
   if (nextDue) {
@@ -318,7 +318,7 @@ export function getBillDueInfo(bill, userDateFormat) {
 
 export function formatBillListDueLabel(bill, userDateFormat) {
   if (isBillPaidForCurrentCycle(bill)) {
-    return getPaidStatusLabel(bill, userDateFormat);
+    return formatPaidBillListLabel(bill, userDateFormat);
   }
 
   const due = parseBillDisplayDueDate(bill);
