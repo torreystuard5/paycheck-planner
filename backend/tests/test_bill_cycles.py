@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 from app.services.bill_cycles import (
@@ -10,6 +11,7 @@ from app.services.bill_cycles import (
     cycle_window_start,
     due_date_for_month,
     first_biweekly_on_or_after,
+    mark_bill_cycle_paid,
     next_due_date_for_bill,
     occurrence_dates_for_bill,
 )
@@ -32,6 +34,10 @@ def _bill(**overrides):
         "hidden_overdue": False,
         "user_share_amount": Decimal("1200"),
         "split_member_count": 1,
+        "budget_id": None,
+        "is_paid": False,
+        "paid_date": None,
+        "paid_amount": None,
     }
     data.update(overrides)
     return SimpleNamespace(**data)
@@ -209,3 +215,61 @@ def test_biweekly_anchor_snaps_start_date_to_day_of_week():
 def test_biweekly_occurrences_without_start_date_step_by_14():
     dates = biweekly_occurrences_in_window(4, None, date(2026, 6, 1), date(2026, 6, 30))
     assert dates == [date(2026, 6, 5), date(2026, 6, 19)]
+
+
+async def _mark_paid_with_empty_cycle_row(bill, paid_at):
+    user = SimpleNamespace(id=uuid4())
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    db = SimpleNamespace(
+        execute=AsyncMock(return_value=result),
+        flush=AsyncMock(),
+        add=MagicMock(),
+    )
+
+    row = await mark_bill_cycle_paid(
+        db=db,
+        bill=bill,
+        user=user,
+        due_date=date(2026, 6, 1),
+        amount_paid=Decimal("1200"),
+        paid_date=paid_at,
+        source="test",
+    )
+
+    return row
+
+
+def test_mark_recurring_bill_cycle_paid_does_not_write_global_paid_state():
+    paid_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    bill = _bill(
+        frequency="monthly",
+        is_paid=True,
+        paid_date=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        paid_amount=Decimal("1200"),
+    )
+
+    import asyncio
+
+    row = asyncio.run(_mark_paid_with_empty_cycle_row(bill, paid_at))
+
+    assert row.is_paid is True
+    assert row.paid_date == paid_at
+    assert bill.is_paid is False
+    assert bill.paid_date is None
+    assert bill.paid_amount is None
+
+
+def test_mark_one_time_bill_cycle_paid_writes_global_paid_state():
+    paid_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    bill = _bill(frequency="one_time", start_date=date(2026, 6, 1), due_day=None)
+
+    import asyncio
+
+    row = asyncio.run(_mark_paid_with_empty_cycle_row(bill, paid_at))
+
+    assert row.is_paid is True
+    assert row.paid_date == paid_at
+    assert bill.is_paid is True
+    assert bill.paid_date == paid_at
+    assert bill.paid_amount == Decimal("1200")

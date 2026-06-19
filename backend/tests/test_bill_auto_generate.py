@@ -396,7 +396,7 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
 
         asyncio.run(run())
 
-    def test_legacy_global_paid_state_promotes_current_month_cycle(self):
+    def test_recurring_global_paid_state_does_not_promote_current_month_cycle(self):
         from app.routers.bills import _bill_responses_for_current_cycle
 
         bill = _bill(
@@ -443,14 +443,14 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
                 responses = await _bill_responses_for_current_cycle(db, [bill], user)
 
             self.assertEqual(len(responses), 1)
-            self.assertTrue(responses[0].is_paid)
+            self.assertFalse(responses[0].is_paid)
             self.assertEqual(responses[0].occurrence_due_date, date(2026, 6, 1))
-            self.assertEqual(responses[0].next_due_date, date(2026, 7, 1))
-            self.assertEqual(responses[0].cycle_source, "legacy_bill_status")
+            self.assertEqual(responses[0].next_due_date, date(2026, 6, 1))
+            self.assertEqual(responses[0].cycle_source, "auto_generated")
 
         asyncio.run(run())
 
-    def test_cycles_legacy_paid_state_promotes_current_month_due_date(self):
+    def test_cycles_recurring_global_paid_state_is_ignored(self):
         from app.routers.bills import _legacy_paid_due_dates_for_current_month
 
         bill = _bill(
@@ -480,16 +480,17 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
             {(bill.id, unpaid_cycle.due_date): unpaid_cycle},
         )
 
-        self.assertEqual(legacy_paid_due_dates, {bill.id: date(2026, 6, 1)})
+        self.assertEqual(legacy_paid_due_dates, {})
 
-    def test_cycles_legacy_paid_state_selects_current_month_not_future_month(self):
+    def test_cycles_one_time_global_paid_state_selects_current_month_due_date(self):
         from app.routers.bills import _legacy_paid_due_dates_for_current_month
 
         bill = _bill(
-            name="Rent",
+            name="One-time bill",
             amount=Decimal("800"),
-            due_day=1,
-            frequency="monthly",
+            due_day=None,
+            frequency="one_time",
+            start_date=date(2026, 6, 1),
             is_paid=True,
             paid_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
             paid_amount=Decimal("800"),
@@ -497,9 +498,9 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
         unpaid_cycle = BillCyclePayment(
             bill_id=bill.id,
             user_id=bill.user_id,
-            due_date=date(2026, 7, 1),
+            due_date=date(2026, 6, 1),
             cycle_year=2026,
-            cycle_month=7,
+            cycle_month=6,
             amount_due=Decimal("800"),
             amount_paid=Decimal("0"),
             is_paid=False,

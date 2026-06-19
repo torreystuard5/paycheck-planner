@@ -46,6 +46,7 @@ from app.services.bill_cycles import (
     next_due_date_after_bill,
     next_due_date_for_bill,
     occurrence_dates_for_bill,
+    uses_global_paid_state,
 )
 from app.services.household_billing import batch_household_breakdown_dicts, get_bill_breakdown
 from app.services.household_service import log_activity, resolve_valid_household_id
@@ -112,7 +113,7 @@ def _bill_to_response(
         is_user_responsible = True
 
     cycle_due_date = occurrence_due_date or _compute_next_due_date(bill)
-    legacy_is_paid = bool(getattr(bill, "is_paid", False))
+    legacy_is_paid = uses_global_paid_state(bill) and bool(getattr(bill, "is_paid", False))
     cycle_is_paid = bool(cycle_payment and cycle_payment.is_paid) or (
         cycle_payment is None and legacy_is_paid
     )
@@ -137,12 +138,12 @@ def _bill_to_response(
         is_paid=cycle_is_paid,
         paid_date=(
             cycle_payment.paid_date
-            if cycle_payment
+            if cycle_payment and cycle_is_paid
             else getattr(bill, "paid_date", None) if cycle_is_paid else None
         ),
         paid_amount=(
             cycle_payment.amount_paid
-            if cycle_payment
+            if cycle_payment and cycle_is_paid
             else getattr(bill, "paid_amount", None) if cycle_is_paid else None
         ),
         is_active=bill.is_active,
@@ -165,12 +166,12 @@ def _bill_to_response(
         occurrence_due_date=cycle_due_date,
         cycle_paid_date=(
             cycle_payment.paid_date
-            if cycle_payment
+            if cycle_payment and cycle_is_paid
             else getattr(bill, "paid_date", None) if cycle_is_paid else None
         ),
         cycle_paid_amount=(
             cycle_payment.amount_paid
-            if cycle_payment
+            if cycle_payment and cycle_is_paid
             else getattr(bill, "paid_amount", None) if cycle_is_paid else None
         ),
         cycle_amount_due=cycle_payment.amount_due if cycle_payment else amount,
@@ -223,6 +224,8 @@ def _select_legacy_paid_due_date(
     cycle_payments: list[BillCyclePayment],
 ) -> date | None:
     """Map legacy global bill paid state onto the most likely current-cycle due date."""
+    if not uses_global_paid_state(bill):
+        return None
     if not bool(getattr(bill, "is_paid", False)):
         return None
     if any(row.is_paid for row in cycle_payments):

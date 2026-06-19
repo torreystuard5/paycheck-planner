@@ -56,6 +56,11 @@ def is_cadence_recurring_bill(bill: Bill) -> bool:
     return freq in ("weekly", "biweekly") and bill.day_of_week is not None
 
 
+def uses_global_paid_state(bill: Bill) -> bool:
+    """Only one-time bills mirror occurrence paid state onto the bill row."""
+    return (bill.frequency or "monthly").lower() == "one_time"
+
+
 def due_date_for_month(bill: Bill, year: int, month: int) -> date | None:
     if bill.due_day is None:
         return None
@@ -516,9 +521,14 @@ async def mark_bill_cycle_paid(
     row.paid_date = paid_at
     row.source = source or row.source or "bills_page"
 
-    bill.is_paid = True
-    bill.paid_date = paid_at
-    bill.paid_amount = paid_amount
+    if uses_global_paid_state(bill):
+        bill.is_paid = True
+        bill.paid_date = paid_at
+        bill.paid_amount = paid_amount
+    else:
+        bill.is_paid = False
+        bill.paid_date = None
+        bill.paid_amount = None
     await db.flush()
     return row
 
