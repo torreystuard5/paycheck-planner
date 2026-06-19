@@ -222,16 +222,17 @@ async def build_paycheck_planning_state(
     def _label_items(items: list[dict]) -> list[dict]:
         labeled: list[dict] = []
         for item in items:
+            normalized = normalize_planning_item(item)
+            if (normalized["item_type"], normalized["item_id"]) in checked_items:
+                normalized["is_paid"] = True
             normalized = normalize_planning_item(
                 apply_planning_due_labels(
-                    item,
+                    normalized,
                     today=today,
                     cycle_year=cycle_year,
                     cycle_month=cycle_month,
                 )
             )
-            if (normalized["item_type"], normalized["item_id"]) in checked_items:
-                normalized["is_paid"] = True
             labeled.append(normalized)
         return labeled
 
@@ -260,15 +261,18 @@ async def build_paycheck_planning_state(
                 if raw.get("due_date") != due_dt:
                     continue
                 normalized = normalize_planning_item(
+                    normalize_paycheck_line_item(raw)
+                )
+                if (normalized["item_type"], normalized["item_id"]) in checked_items:
+                    normalized["is_paid"] = True
+                normalized = normalize_planning_item(
                     apply_planning_due_labels(
-                        normalize_paycheck_line_item(raw),
+                        normalized,
                         today=today,
                         cycle_year=cycle_year,
                         cycle_month=cycle_month,
                     )
                 )
-                if (normalized["item_type"], normalized["item_id"]) in checked_items:
-                    normalized["is_paid"] = True
                 normalized.update(
                     {
                         "natural_period_start": current_start,
@@ -348,12 +352,17 @@ async def build_paycheck_planning_state(
                     cycle_month=cycle_month,
                 )
             )
-            # Preserve the overdue flag even if active_cycle_overdue returns False
-            # (e.g. a bill due in the previous calendar month).
-            normalized["is_overdue"] = True
             # Honour the current-period checklist so the user can tick it off.
             if (normalized["item_type"], normalized["item_id"]) in checked_items:
                 normalized["is_paid"] = True
+                normalized = normalize_planning_item(
+                    apply_planning_due_labels(
+                        normalized,
+                        today=today,
+                        cycle_year=cycle_year,
+                        cycle_month=cycle_month,
+                    )
+                )
             # Enrich with period metadata matching what _apply_effective_lists produces.
             normalized.update(
                 {
@@ -415,16 +424,18 @@ async def build_paycheck_planning_state(
                     if raw.get("due_date") != due_dt:
                         continue
                     normalized = normalize_planning_item(
+                        normalize_paycheck_line_item(raw)
+                    )
+                    if (normalized["item_type"], normalized["item_id"]) in checked_items:
+                        normalized["is_paid"] = True
+                    normalized = normalize_planning_item(
                         apply_planning_due_labels(
-                            normalize_paycheck_line_item(raw),
+                            normalized,
                             today=today,
                             cycle_year=cycle_year,
                             cycle_month=cycle_month,
                         )
                     )
-                    normalized["is_overdue"] = due_dt < today
-                    if (normalized["item_type"], normalized["item_id"]) in checked_items:
-                        normalized["is_paid"] = True
                     normalized.update(
                         {
                             "natural_period_start": month_start,

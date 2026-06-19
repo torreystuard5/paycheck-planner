@@ -85,6 +85,18 @@ describe('billDueDate helpers', () => {
     })).toBe('Overdue by 17 days');
   });
 
+  it('ignores stale overdue flags when the due date is not past', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-18T12:00:00Z'));
+
+    expect(formatBillListDueLabel({
+      occurrence_due_date: '2026-06-20',
+      next_due_date: '2026-06-20',
+      is_paid: false,
+      is_overdue: true,
+    })).toBe('Due in 2 days');
+  });
+
   it('does not report paid bills as overdue in shared due info', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-18T12:00:00Z'));

@@ -271,7 +271,7 @@ export function getBillDueInfo(bill, userDateFormat) {
 
   const dateText = formatBillDateText(isoDate, userDateFormat);
 
-  if (bill?.is_overdue || diff < 0) {
+  if (diff < 0) {
     const days = Math.abs(diff);
     return {
       dateText,

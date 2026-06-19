@@ -44,6 +44,22 @@ def _bill(due_day=1, freq="monthly", name="Rent", **overrides):
     return SimpleNamespace(**data)
 
 
+def _debt(due_day=15, **overrides):
+    data = {
+        "id": uuid4(),
+        "name": "Card",
+        "minimum_payment": Decimal("50"),
+        "due_day": due_day,
+        "is_active": True,
+        "auto_pay": False,
+        "postpone_until": None,
+        "apr": Decimal("19.99"),
+        "balance": Decimal("500"),
+    }
+    data.update(overrides)
+    return SimpleNamespace(**data)
+
+
 def _user(**overrides):
     data = {
         "id": uuid4(),
@@ -456,6 +472,76 @@ class TestRentCarryover(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertFalse(items[0]["is_overdue"])
         self.assertEqual(items[0]["due_date"], date(2026, 6, 15))
+
+    def test_current_window_past_due_unpaid_bill_is_overdue(self):
+        """Unified rule: unpaid items are overdue once due_date < today, even in current period."""
+        from app.services.paycheck_engine import assign_bills_to_paycheck
+
+        rent = _bill(due_day=15)
+        items = assign_bills_to_paycheck(
+            [rent], [],
+            date(2026, 6, 4), date(2026, 6, 17), date(2026, 6, 16),
+            paid_debt_ids=set(), paid_bill_map={},
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["is_overdue"])
+        self.assertEqual(items[0]["status"], "overdue")
+
+    def test_current_window_past_due_paid_bill_is_not_overdue(self):
+        """Unified rule: paid items are never overdue."""
+        from app.services.paycheck_engine import assign_bills_to_paycheck
+
+        rent = _bill(due_day=15)
+        paid_map = {
+            rent.id: [
+                {
+                    "due_date": date(2026, 6, 15),
+                    "paid_date": date(2026, 6, 15),
+                    "source": "bill_cycle_payments",
+                }
+            ]
+        }
+        items = assign_bills_to_paycheck(
+            [rent], [],
+            date(2026, 6, 4), date(2026, 6, 17), date(2026, 6, 16),
+            paid_debt_ids=set(), paid_bill_map=paid_map,
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["is_paid"])
+        self.assertFalse(items[0]["is_overdue"])
+        self.assertEqual(items[0]["status"], "paid")
+
+    def test_current_window_past_due_unpaid_debt_is_overdue(self):
+        """Debts follow the same occurrence-level overdue rule as bills."""
+        from app.services.paycheck_engine import assign_bills_to_paycheck
+
+        debt = _debt(due_day=15)
+        items = assign_bills_to_paycheck(
+            [], [debt],
+            date(2026, 6, 4), date(2026, 6, 17), date(2026, 6, 16),
+            paid_debt_ids=set(), paid_bill_map={},
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["is_overdue"])
+        self.assertEqual(items[0]["status"], "overdue")
+
+    def test_current_window_past_due_paid_debt_is_not_overdue(self):
+        """Paid debts are never overdue under the unified rule."""
+        from app.services.paycheck_engine import assign_bills_to_paycheck
+
+        debt = _debt(due_day=15)
+        items = assign_bills_to_paycheck(
+            [], [debt],
+            date(2026, 6, 4), date(2026, 6, 17), date(2026, 6, 16),
+            paid_debt_ids={debt.id}, paid_bill_map={},
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertFalse(items[0]["is_overdue"])
+        self.assertEqual(items[0]["status"], "paid")
 
     def test_paid_rent_not_overdue_in_prev_period(self):
         """Rent marked paid via paid_bill_map is not overdue in the previous period."""

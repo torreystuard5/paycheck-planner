@@ -22,7 +22,7 @@ export function formatAssignedItemDueLabel(item) {
   const dateLabel = formatFriendlyDate(
     item.due_date ?? item.occurrence_due_date,
   );
-  const isOverdue = Boolean(item.is_overdue) || diff < 0;
+  const isOverdue = !item.is_paid && diff < 0;
 
   if (isOverdue) {
     return { text: `Due ${dateLabel}`, isOverdue: true };

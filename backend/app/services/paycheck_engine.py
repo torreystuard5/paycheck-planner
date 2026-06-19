@@ -462,9 +462,6 @@ def assign_bills_to_paycheck(
     items: list[dict] = []
     seen_bill_ids: set = set()
 
-    # Is this the current (active) pay period?
-    is_current_period = window_start <= current_date <= window_end
-
     for bill in bills:
         if getattr(bill, "is_active", True) is False:
             continue
@@ -512,15 +509,8 @@ def assign_bills_to_paycheck(
                     except (ValueError, AttributeError, TypeError):
                         pass
 
-            # A bill is overdue ONLY if the ENTIRE pay period it belongs to
-            # has already ended AND it was not paid.  Bills in the current
-            # (active) period are never overdue — they're just unpaid.
-            if is_current_period:
-                is_overdue = False
-            else:
-                # This is a past period: overdue if window has ended and
-                # the bill wasn't paid.
-                is_overdue = (window_end < current_date) and (not paid_for_period)
+            is_overdue = is_item_overdue(due_dt, current_date, paid_for_period)
+            status = "paid" if paid_for_period else _due_status(days)
 
             seen_bill_ids.add(bill.id)
             items.append(
@@ -533,7 +523,7 @@ def assign_bills_to_paycheck(
                         "full_amount": full_amount if is_split else None,
                         "due_date": due_dt,
                         "days_until_due": days,
-                        "status": _due_status(days),
+                        "status": status,
                         "auto_pay": bool(bill.auto_pay),
                         "is_split": is_split,
                         "split_count": split_count if is_split else 1,
@@ -569,12 +559,8 @@ def assign_bills_to_paycheck(
         debt_is_paid = debt.id in paid_debt_ids
         for due_dt in due_dates:
             days = (due_dt - current_date).days
-            # Same logic as bills: debts in the current period are never
-            # overdue.  Only past-period unpaid debts are overdue.
-            if is_current_period:
-                is_overdue = False
-            else:
-                is_overdue = (window_end < current_date) and (not debt_is_paid)
+            is_overdue = is_item_overdue(due_dt, current_date, debt_is_paid)
+            status = "paid" if debt_is_paid else _due_status(days)
 
             items.append(
                 normalize_paycheck_line_item(
@@ -586,7 +572,7 @@ def assign_bills_to_paycheck(
                         "full_amount": None,
                         "due_date": due_dt,
                         "days_until_due": days,
-                        "status": _due_status(days),
+                        "status": status,
                         "auto_pay": bool(debt.auto_pay),
                         "is_split": False,
                         "split_count": 1,
@@ -780,16 +766,26 @@ def parse_item_due_date(item: dict) -> date:
     return date.fromisoformat(str(raw)[:10])
 
 
+def is_item_overdue(
+    due_date: date,
+    today: date,
+    is_paid: bool = False,
+) -> bool:
+    """Unified overdue rule: unpaid items are overdue after their due date."""
+    if is_paid:
+        return False
+    return due_date < today
+
+
 def active_cycle_overdue(
     due_date: date,
     today: date,
     cycle_year: int,
     cycle_month: int,
+    is_paid: bool = False,
 ) -> bool:
-    """Overdue only when due falls in the active calendar cycle and is before today."""
-    if due_date >= today:
-        return False
-    return due_date.year == cycle_year and due_date.month == cycle_month
+    """Backward-compatible wrapper for the unified overdue rule."""
+    return is_item_overdue(due_date, today, is_paid)
 
 def apply_planning_due_labels(
     item: dict,
@@ -802,7 +798,13 @@ def apply_planning_due_labels(
     out = dict(item)
     due = parse_item_due_date(item)
     days = (due - today).days
-    overdue = active_cycle_overdue(due, today, cycle_year, cycle_month)
+    overdue = active_cycle_overdue(
+        due,
+        today,
+        cycle_year,
+        cycle_month,
+        bool(item.get("is_paid")),
+    )
     out["is_overdue"] = overdue
     out["due_status"] = "overdue" if overdue else "due"
     out["days_until_due"] = days
