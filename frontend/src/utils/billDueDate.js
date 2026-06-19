@@ -3,6 +3,9 @@ import { formatDate, formatFriendlyDate } from './formatDate';
 
 function parseDueDateValue(raw) {
   if (!raw) return null;
+  if (raw instanceof Date) {
+    return Number.isNaN(raw.getTime()) ? null : raw;
+  }
   const value = String(raw);
   const parsed = new Date(value.includes('T') ? value : `${value}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
