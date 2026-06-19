@@ -396,6 +396,60 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_legacy_global_paid_state_promotes_current_month_cycle(self):
+        from app.routers.bills import _bill_responses_for_current_cycle
+
+        bill = _bill(
+            name="Rent",
+            amount=Decimal("800"),
+            due_day=1,
+            frequency="monthly",
+            is_paid=True,
+            paid_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            paid_amount=Decimal("800"),
+        )
+        user = _user(id=bill.user_id)
+        unpaid_cycle = BillCyclePayment(
+            bill_id=bill.id,
+            user_id=bill.user_id,
+            due_date=date(2026, 6, 1),
+            cycle_year=2026,
+            cycle_month=6,
+            amount_due=Decimal("800"),
+            amount_paid=Decimal("0"),
+            is_paid=False,
+            source="auto_generated",
+        )
+
+        async def run():
+            db = AsyncMock()
+
+            with patch(
+                "app.routers.bills.auto_generate_missing_cycle_rows",
+                new_callable=AsyncMock,
+                return_value=0,
+            ), patch(
+                "app.routers.bills.get_cycle_payments_for_month",
+                new_callable=AsyncMock,
+                return_value={(bill.id, unpaid_cycle.due_date): unpaid_cycle},
+            ), patch(
+                "app.routers.bills._get_household_member_count",
+                new_callable=AsyncMock,
+                return_value=1,
+            ), patch(
+                "app.routers.bills.local_today",
+                return_value=date(2026, 6, 19),
+            ):
+                responses = await _bill_responses_for_current_cycle(db, [bill], user)
+
+            self.assertEqual(len(responses), 1)
+            self.assertTrue(responses[0].is_paid)
+            self.assertEqual(responses[0].occurrence_due_date, date(2026, 6, 1))
+            self.assertEqual(responses[0].next_due_date, date(2026, 7, 1))
+            self.assertEqual(responses[0].cycle_source, "legacy_bill_status")
+
+        asyncio.run(run())
+
 
 if __name__ == "__main__":
     unittest.main()

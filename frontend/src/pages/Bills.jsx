@@ -651,10 +651,10 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     const bd = breakdownCache[bill.id];
     const bdLoading = breakdownLoading === bill.id;
     const bdError = breakdownError[bill.id];
-    const isPaid = bill.is_paid;
+    const paidStatusDate = bill.cycle_paid_date || bill.paid_date;
+    const isPaid = Boolean(bill.is_paid || paidStatusDate);
     const displayAmount = bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount;
     const catColor = getCategoryColor(bill.category);
-    const paidStatusDate = bill.cycle_paid_date || bill.paid_date;
     const dueSummary = isPaid
       ? formatBillListDueLabel(bill)
       : (bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null

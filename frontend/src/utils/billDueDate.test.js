@@ -34,6 +34,30 @@ describe('billDueDate helpers', () => {
     })).toBe('Paid for this period');
   });
 
+  it('shows the paid date instead of overdue text when a paid bill has a stale next due date', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-18T12:00:00Z'));
+
+    expect(formatBillListDueLabel({
+      occurrence_due_date: '2026-06-01',
+      next_due_date: '2026-06-01',
+      paid_date: '2026-06-01T09:00:00Z',
+      is_paid: true,
+    })).toBe('Paid Jun 1');
+  });
+
+  it('treats backend paid dates as paid even if the boolean flag is stale', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-18T12:00:00Z'));
+
+    expect(formatBillListDueLabel({
+      occurrence_due_date: '2026-06-01',
+      next_due_date: '2026-06-01',
+      paid_date: '2026-06-01T09:00:00Z',
+      is_paid: false,
+    })).toBe('Paid Jun 1');
+  });
+
   it('does not report paid bills as overdue in shared due info', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-18T12:00:00Z'));

@@ -112,7 +112,10 @@ def _bill_to_response(
         is_user_responsible = True
 
     cycle_due_date = occurrence_due_date or _compute_next_due_date(bill)
-    cycle_is_paid = bool(cycle_payment and cycle_payment.is_paid)
+    legacy_is_paid = bool(getattr(bill, "is_paid", False))
+    cycle_is_paid = bool(cycle_payment and cycle_payment.is_paid) or (
+        cycle_payment is None and legacy_is_paid
+    )
     next_due_date = cycle_due_date
     if cycle_is_paid and cycle_due_date is not None:
         # Once the current occurrence is paid, the list should advance to the
@@ -132,8 +135,16 @@ def _bill_to_response(
         auto_pay=bill.auto_pay,
         reminder_days=bill.reminder_days,
         is_paid=cycle_is_paid,
-        paid_date=cycle_payment.paid_date if cycle_payment else None,
-        paid_amount=cycle_payment.amount_paid if cycle_payment else None,
+        paid_date=(
+            cycle_payment.paid_date
+            if cycle_payment
+            else getattr(bill, "paid_date", None) if cycle_is_paid else None
+        ),
+        paid_amount=(
+            cycle_payment.amount_paid
+            if cycle_payment
+            else getattr(bill, "paid_amount", None) if cycle_is_paid else None
+        ),
         is_active=bill.is_active,
         is_tax_deductible=bill.is_tax_deductible,
         tax_category=bill.tax_category,
@@ -152,10 +163,22 @@ def _bill_to_response(
         is_user_responsible=is_user_responsible,
         member_count=member_count if is_household else None,
         occurrence_due_date=cycle_due_date,
-        cycle_paid_date=cycle_payment.paid_date if cycle_payment else None,
-        cycle_paid_amount=cycle_payment.amount_paid if cycle_payment else None,
+        cycle_paid_date=(
+            cycle_payment.paid_date
+            if cycle_payment
+            else getattr(bill, "paid_date", None) if cycle_is_paid else None
+        ),
+        cycle_paid_amount=(
+            cycle_payment.amount_paid
+            if cycle_payment
+            else getattr(bill, "paid_amount", None) if cycle_is_paid else None
+        ),
         cycle_amount_due=cycle_payment.amount_due if cycle_payment else amount,
-        cycle_source=cycle_payment.source if cycle_payment else None,
+        cycle_source=(
+            cycle_payment.source
+            if cycle_payment
+            else "legacy_bill_status" if cycle_is_paid else None
+        ),
     )
 
 
@@ -194,6 +217,38 @@ def _select_bill_cycle_payment(
     return ordered[0]
 
 
+def _select_legacy_paid_due_date(
+    today: date,
+    bill: Bill,
+    cycle_payments: list[BillCyclePayment],
+) -> date | None:
+    """Map legacy global bill paid state onto the most likely current-cycle due date."""
+    if not bool(getattr(bill, "is_paid", False)):
+        return None
+    if any(row.is_paid for row in cycle_payments):
+        return None
+    if not cycle_payments:
+        return _compute_next_due_date(bill, today)
+
+    ordered = sorted(cycle_payments, key=lambda row: row.due_date)
+    raw_paid_at = getattr(bill, "paid_date", None)
+    paid_on = raw_paid_at.date() if isinstance(raw_paid_at, datetime) else raw_paid_at
+
+    if isinstance(paid_on, date):
+        on_or_before = [row for row in ordered if row.due_date <= paid_on]
+        if on_or_before:
+            return on_or_before[-1].due_date
+        on_or_after = [row for row in ordered if row.due_date >= paid_on]
+        if on_or_after:
+            return on_or_after[0].due_date
+
+    due_so_far = [row for row in ordered if row.due_date <= today]
+    if due_so_far:
+        return due_so_far[-1].due_date
+
+    return ordered[0].due_date
+
+
 async def _bill_responses_for_current_cycle(
     db: AsyncSession,
     bills: list[Bill],
@@ -216,6 +271,15 @@ async def _bill_responses_for_current_cycle(
         month_payments_by_bill.setdefault(bill_id, []).append(payment)
 
     for bill in bills:
+        legacy_paid_due_date = _select_legacy_paid_due_date(
+            today,
+            bill,
+            month_payments_by_bill.get(bill.id, []),
+        )
+        if legacy_paid_due_date is not None:
+            due_dates_by_bill[bill.id] = legacy_paid_due_date
+            continue
+
         payment = _select_bill_cycle_payment(today, month_payments_by_bill.get(bill.id, []))
         if payment is None:
             continue
