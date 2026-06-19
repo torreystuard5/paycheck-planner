@@ -474,37 +474,39 @@ def assign_bills_to_paycheck(
         for due_dt in due_dates:
             days = (due_dt - current_date).days
 
-            # Determine if the bill is paid *for this specific pay-period window*
-            # by checking whether a payment row exists with paid_date in [window_start, window_end].
-            # This replaces the old approach of trusting the global Bill.is_paid flag.
+            # Determine if the bill is paid for this exact occurrence.  Cycle
+            # rows are authoritative; generic Payment rows are a legacy fallback
+            # and only match when their paid_date equals the occurrence due date.
             paid_for_period = False
             if paid_bill_map is not None and bill.id in paid_bill_map:
                 for paid_marker in paid_bill_map[bill.id]:
                     try:
                         if isinstance(paid_marker, dict):
-                            marker_due = paid_marker.get("due_date")
-                            marker_due_date = marker_due.date() if isinstance(marker_due, datetime) else (
-                                marker_due if isinstance(marker_due, date) else date.fromisoformat(str(marker_due)[:10])
+                            source = paid_marker.get("source")
+                            if source == "bill_cycle_payments":
+                                marker_due = paid_marker.get("due_date")
+                                marker_due_date = marker_due.date() if isinstance(marker_due, datetime) else (
+                                    marker_due if isinstance(marker_due, date) else date.fromisoformat(str(marker_due)[:10])
+                                )
+                                if marker_due_date == due_dt:
+                                    paid_for_period = True
+                                    break
+                                continue
+
+                            paid_date = paid_marker.get("paid_date")
+                            marker_paid_date = paid_date.date() if isinstance(paid_date, datetime) else (
+                                paid_date if isinstance(paid_date, date) else date.fromisoformat(str(paid_date)[:10])
                             )
-                            if marker_due_date == due_dt:
+                            if marker_paid_date == due_dt:
                                 paid_for_period = True
                                 break
                             continue
 
-                        # Legacy Payment rows (paid_date only): match the specific
-                        # occurrence month, not merely any payment in the window.
-                        # Otherwise a May payment incorrectly clears June Rent.
+                        # Legacy bare date marker: exact occurrence-date fallback only.
                         pd_date = paid_marker.date() if isinstance(paid_marker, datetime) else (
                             paid_marker if isinstance(paid_marker, date) else date.fromisoformat(str(paid_marker)[:10])
                         )
-                        if (
-                            pd_date.year == due_dt.year
-                            and pd_date.month == due_dt.month
-                            and (
-                                pd_date >= due_dt
-                                or abs((pd_date - due_dt).days) <= 7
-                            )
-                        ):
+                        if pd_date == due_dt:
                             paid_for_period = True
                             break
                     except (ValueError, AttributeError, TypeError):

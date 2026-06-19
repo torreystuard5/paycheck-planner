@@ -215,7 +215,9 @@ async def get_paid_bill_map(
         )
     )
     for row in result.all():
-        mapping.setdefault(row[0], []).append(row[1])
+        mapping.setdefault(row[0], []).append(
+            {"paid_date": row[1], "source": "payments"}
+        )
     return mapping
 
 
