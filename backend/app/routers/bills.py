@@ -114,14 +114,15 @@ def _bill_to_response(
 
     cycle_due_date = occurrence_due_date or _compute_next_due_date(bill)
     legacy_is_paid = uses_global_paid_state(bill) and bool(getattr(bill, "is_paid", False))
+    # `cycle_payment` may be the current-month row or a prior-month paid row
+    # selected for rollover, but either way it should serialize as paid.
     cycle_is_paid = bool(cycle_payment and cycle_payment.is_paid) or (
         cycle_payment is None and legacy_is_paid
     )
     next_due_date = cycle_due_date
     if cycle_is_paid and cycle_due_date is not None:
-        # Once the current occurrence is paid, the list should advance to the
-        # next scheduled occurrence instead of keeping the paid cycle's past
-        # due date as the "next" due date.
+        # Once the represented occurrence is paid (including a prior-month
+        # rollover paid row), advance to the next scheduled due date.
         next_due_date = next_due_date_after_bill(bill, cycle_due_date)
 
     return BillResponse(
@@ -197,6 +198,7 @@ async def log_bill_action(db: AsyncSession, bill_id, bill_name, user_id, action_
 def _select_bill_cycle_payment(
     today: date,
     cycle_payments: list[BillCyclePayment],
+    recent_paid_row: BillCyclePayment | None = None,
 ) -> BillCyclePayment | None:
     """Pick the single cycle row the Bills list should represent for this month."""
     if not cycle_payments:
@@ -213,17 +215,18 @@ def _select_bill_cycle_payment(
 
     overdue_unpaid = [row for row in ordered if row.due_date < today and not row.is_paid]
     if overdue_unpaid:
-        return overdue_unpaid[0]
+        selected_row = overdue_unpaid[0]
+    else:
+        upcoming_unpaid = [row for row in ordered if row.due_date >= today and not row.is_paid]
+        if upcoming_unpaid:
+            selected_row = upcoming_unpaid[0]
+        else:
+            paid_rows = [row for row in ordered if row.is_paid]
+            selected_row = paid_rows[-1] if paid_rows else ordered[0]
 
-    upcoming_unpaid = [row for row in ordered if row.due_date >= today and not row.is_paid]
-    if upcoming_unpaid:
-        return upcoming_unpaid[0]
-
-    paid_rows = [row for row in ordered if row.is_paid]
-    if paid_rows:
-        return paid_rows[-1]
-
-    return ordered[0]
+    if selected_row and not selected_row.is_paid and recent_paid_row and recent_paid_row.is_paid:
+        return recent_paid_row
+    return selected_row
 
 
 def _select_legacy_paid_due_date(
@@ -300,6 +303,7 @@ async def _bill_responses_for_current_cycle(
     month_payments_by_bill: dict[UUID, list[BillCyclePayment]] = {}
     selected_payment_by_bill: dict[UUID, BillCyclePayment] = {}
     due_dates_by_bill: dict[UUID, date] = {}
+    recent_paid_by_bill: dict[UUID, BillCyclePayment] = {}
     unpaid_selected_bill_ids: list[UUID] = []
     for (bill_id, _due_date), payment in payments_by_key.items():
         month_payments_by_bill.setdefault(bill_id, []).append(payment)
@@ -314,7 +318,11 @@ async def _bill_responses_for_current_cycle(
             due_dates_by_bill[bill.id] = legacy_paid_due_date
             continue
 
-        payment = _select_bill_cycle_payment(today, month_payments_by_bill.get(bill.id, []))
+        payment = _select_bill_cycle_payment(
+            today,
+            month_payments_by_bill.get(bill.id, []),
+            recent_paid_by_bill.get(bill.id),
+        )
         if payment is None:
             continue
         due_dates_by_bill[bill.id] = payment.due_date
@@ -336,7 +344,15 @@ async def _bill_responses_for_current_cycle(
             existing = recent_paid_by_bill.get(bill_id)
             if existing is None or payment.due_date > existing.due_date:
                 recent_paid_by_bill[bill_id] = payment
-        for bill_id, payment in recent_paid_by_bill.items():
+
+        for bill_id, recent_paid_row in recent_paid_by_bill.items():
+            payment = _select_bill_cycle_payment(
+                today,
+                month_payments_by_bill.get(bill_id, []),
+                recent_paid_row,
+            )
+            if payment is None:
+                continue
             due_dates_by_bill[bill_id] = payment.due_date
             selected_payment_by_bill[bill_id] = payment
 
