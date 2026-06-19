@@ -38,10 +38,11 @@ from app.services.debt_calculator import (
 from app.services.debt_payment_service import (
     create_period_debt_payment,
     dedupe_period_debt_payments,
+    debt_due_date_for_period,
     fetch_period_debt_payments,
+    next_debt_due_date_after,
     remove_period_debt_payments,
 )
-from app.utils.due_dates import next_monthly_due_date
 from app.services.household_service import log_activity, resolve_valid_household_id
 from app.utils.budget import apply_household_budget_filter, resolve_budget_id, validate_budget_ownership
 from app.utils.security import get_current_user
@@ -55,9 +56,9 @@ async def _debt_to_response(
     debt: Debt, db: AsyncSession, user_id: UUID
 ) -> DebtResponse:
     resp = DebtResponse.model_validate(debt)
-    resp.next_due_date = next_monthly_due_date(debt.due_day)
+    current_due = debt_due_date_for_period(debt)
+    resp.next_due_date = current_due
 
-    today = date.today()
     # Check if ANY household member has paid this debt for the current period.
     # Use scalars().first() instead of scalar_one_or_none() because
     # household members may each have a DebtPayment row for the same
@@ -66,13 +67,14 @@ async def _debt_to_response(
         select(DebtPayment)
         .where(
             DebtPayment.debt_id == debt.id,
-            DebtPayment.period_month == today.month,
-            DebtPayment.period_year == today.year,
+            DebtPayment.due_date == current_due,
         )
         .limit(1)
     )
     period_payment = result.scalars().first()
     resp.is_paid_this_period = period_payment is not None
+    if period_payment is not None and current_due is not None:
+        resp.next_due_date = next_debt_due_date_after(current_due, debt)
 
     last_result = await db.execute(
         select(DebtPayment)
@@ -211,6 +213,8 @@ async def get_interest_projection(
 async def mark_debt_paid(
     debt_id: UUID,
     amount: Optional[Decimal] = Body(None, embed=True),
+    due_date: date | None = Query(default=None),
+    pay_period_start: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -226,8 +230,15 @@ async def mark_debt_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     today = date.today()
+    target_due_date = due_date or debt_due_date_for_period(debt, today)
+    target_pay_period_start = pay_period_start or today.replace(day=1)
     existing_rows = await fetch_period_debt_payments(
-        db, debt_id, month=today.month, year=today.year
+        db,
+        debt_id,
+        month=today.month,
+        year=today.year,
+        due_date=target_due_date,
+        user_id=current_user.id,
     )
     existing_rows = await dedupe_period_debt_payments(db, debt, existing_rows)
 
@@ -254,6 +265,8 @@ async def mark_debt_paid(
         pay_amount,
         auto_log_source="debts_page",
         today=today,
+        due_date=target_due_date,
+        pay_period_start=target_pay_period_start,
     )
 
     await db.flush()
@@ -279,6 +292,8 @@ async def mark_debt_paid(
 @router.delete("/{debt_id}/unmark-paid", response_model=DebtResponse)
 async def unmark_debt_paid(
     debt_id: UUID,
+    due_date: date | None = Query(default=None),
+    pay_period_start: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -294,8 +309,16 @@ async def unmark_debt_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
 
     today = date.today()
+    target_due_date = due_date or debt_due_date_for_period(debt, today)
+    target_pay_period_start = pay_period_start or today.replace(day=1)
     all_payments = await fetch_period_debt_payments(
-        db, debt_id, month=today.month, year=today.year
+        db,
+        debt_id,
+        month=today.month,
+        year=today.year,
+        due_date=target_due_date,
+        pay_period_start=target_pay_period_start,
+        user_id=current_user.id,
     )
     if not all_payments:
         raise HTTPException(

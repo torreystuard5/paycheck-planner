@@ -46,6 +46,7 @@ from app.services.bill_cycles import (
     next_due_date_after_bill,
     next_due_date_for_bill,
     occurrence_dates_for_bill,
+    uses_global_paid_state,
 )
 from app.services.household_billing import batch_household_breakdown_dicts, get_bill_breakdown
 from app.services.household_service import log_activity, resolve_valid_household_id
@@ -112,7 +113,7 @@ def _bill_to_response(
         is_user_responsible = True
 
     cycle_due_date = occurrence_due_date or _compute_next_due_date(bill)
-    legacy_is_paid = bool(getattr(bill, "is_paid", False))
+    legacy_is_paid = uses_global_paid_state(bill) and bool(getattr(bill, "is_paid", False))
     cycle_is_paid = bool(cycle_payment and cycle_payment.is_paid) or (
         cycle_payment is None and legacy_is_paid
     )
@@ -137,12 +138,12 @@ def _bill_to_response(
         is_paid=cycle_is_paid,
         paid_date=(
             cycle_payment.paid_date
-            if cycle_payment
+            if cycle_payment and cycle_is_paid
             else getattr(bill, "paid_date", None) if cycle_is_paid else None
         ),
         paid_amount=(
             cycle_payment.amount_paid
-            if cycle_payment
+            if cycle_payment and cycle_is_paid
             else getattr(bill, "paid_amount", None) if cycle_is_paid else None
         ),
         is_active=bill.is_active,
@@ -165,12 +166,12 @@ def _bill_to_response(
         occurrence_due_date=cycle_due_date,
         cycle_paid_date=(
             cycle_payment.paid_date
-            if cycle_payment
+            if cycle_payment and cycle_is_paid
             else getattr(bill, "paid_date", None) if cycle_is_paid else None
         ),
         cycle_paid_amount=(
             cycle_payment.amount_paid
-            if cycle_payment
+            if cycle_payment and cycle_is_paid
             else getattr(bill, "paid_amount", None) if cycle_is_paid else None
         ),
         cycle_amount_due=cycle_payment.amount_due if cycle_payment else amount,
@@ -223,30 +224,30 @@ def _select_legacy_paid_due_date(
     cycle_payments: list[BillCyclePayment],
 ) -> date | None:
     """Map legacy global bill paid state onto the most likely current-cycle due date."""
+    if not uses_global_paid_state(bill):
+        return None
     if not bool(getattr(bill, "is_paid", False)):
         return None
-    if any(row.is_paid for row in cycle_payments):
+    if cycle_payments:
         return None
-    if not cycle_payments:
-        return _compute_next_due_date(bill, today)
 
-    ordered = sorted(cycle_payments, key=lambda row: row.due_date)
     raw_paid_at = getattr(bill, "paid_date", None)
     paid_on = raw_paid_at.date() if isinstance(raw_paid_at, datetime) else raw_paid_at
 
+    period_start = today.replace(day=1)
+    period_end = date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
+    dates = occurrence_dates_for_bill(bill, period_start, period_end)
+    if not dates:
+        return None
     if isinstance(paid_on, date):
-        on_or_before = [row for row in ordered if row.due_date <= paid_on]
+        on_or_before = [due for due in dates if due <= paid_on]
         if on_or_before:
-            return on_or_before[-1].due_date
-        on_or_after = [row for row in ordered if row.due_date >= paid_on]
+            return on_or_before[-1]
+        on_or_after = [due for due in dates if due >= paid_on]
         if on_or_after:
-            return on_or_after[0].due_date
-
-    due_so_far = [row for row in ordered if row.due_date <= today]
-    if due_so_far:
-        return due_so_far[-1].due_date
-
-    return ordered[0].due_date
+            return on_or_after[0]
+    due_so_far = [due for due in dates if due <= today]
+    return due_so_far[-1] if due_so_far else dates[0]
 
 
 def _legacy_paid_due_dates_for_current_month(
@@ -625,15 +626,12 @@ async def list_bill_cycles(
         if key in seen:
             continue
         seen.add(key)
-        response_cycle_payment = payment
-        if legacy_paid_due_dates.get(bill_id) == due_date and not payment.is_paid:
-            response_cycle_payment = None
         response = _bill_to_response(
             bill,
             current_user.id,
             member_count,
             occurrence_due_date=due_date,
-            cycle_payment=response_cycle_payment,
+            cycle_payment=payment,
         )
         if status == "paid" and not response.is_paid:
             continue
@@ -646,17 +644,17 @@ async def list_bill_cycles(
             key = (bill.id, due_date)
             if key in seen:
                 continue
-            payment = await ensure_pending_cycle_row(db, bill, current_user, due_date)
             seen.add(key)
-            response_cycle_payment = payment
-            if legacy_paid_due_dates.get(bill.id) == due_date and not payment.is_paid:
-                response_cycle_payment = None
+            if legacy_paid_due_dates.get(bill.id) == due_date:
+                payment = None
+            else:
+                payment = await ensure_pending_cycle_row(db, bill, current_user, due_date)
             response = _bill_to_response(
                 bill,
                 current_user.id,
                 member_count,
                 occurrence_due_date=due_date,
-                cycle_payment=response_cycle_payment,
+                cycle_payment=payment,
             )
             if status == "paid" and not response.is_paid:
                 continue
@@ -1000,11 +998,11 @@ async def pay_bill(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
-    due_date = occurrence_due_date or (data.occurrence_due_date if data else None) or _compute_next_due_date(bill)
+    due_date = occurrence_due_date or (data.occurrence_due_date if data else None)
     if not due_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unable to determine which bill cycle to mark paid.",
+            detail="occurrence_due_date is required to mark a bill cycle paid.",
         )
 
     cycle_payment = await mark_bill_cycle_paid(
@@ -1044,6 +1042,7 @@ async def pay_bill(
             bill_id=bill.id,
             amount=cycle_payment.amount_paid or bill.amount,
             paid_date=(cycle_payment.paid_date.date() if cycle_payment.paid_date else due_date),
+            pay_period_date=due_date,
             source=source or "bills_page",
             auto_logged=True,
             budget_id=bill.budget_id,
@@ -1134,7 +1133,7 @@ async def unhide_overdue_bill(
 @router.patch("/{bill_id}/unpay", response_model=BillResponse)
 async def unpay_bill(
     bill_id: UUID,
-    occurrence_due_date: date | None = Query(default=None),
+    occurrence_due_date: date = Query(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1157,12 +1156,12 @@ async def unpay_bill(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
-    due_date = occurrence_due_date or _compute_next_due_date(bill)
-    if not due_date:
+    if occurrence_due_date is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unable to determine which bill cycle to mark unpaid.",
+            detail="occurrence_due_date is required to mark a bill cycle unpaid.",
         )
+    due_date = occurrence_due_date
     await mark_bill_cycle_unpaid(db, bill, due_date, current_user.id)
 
     # Dashboard merges paycheck checklist with plan items; stale checked rows
@@ -1171,6 +1170,7 @@ async def unpay_bill(
         delete(PaycheckChecklist).where(
             PaycheckChecklist.item_type == "bill",
             PaycheckChecklist.item_id == bill_id,
+            PaycheckChecklist.occurrence_due_date == due_date,
         )
     )
 
@@ -1201,6 +1201,10 @@ async def unpay_bill(
                 Payment.bill_id == bill.id,
                 Payment.user_id == current_user.id,
                 Payment.auto_logged.is_(True),
+                or_(
+                    Payment.pay_period_date == due_date,
+                    Payment.paid_date == due_date,
+                ),
             )
         )
         for auto_pay in auto_result.scalars().all():

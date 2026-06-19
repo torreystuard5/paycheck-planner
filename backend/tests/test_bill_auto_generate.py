@@ -10,6 +10,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+from fastapi import HTTPException
+
 from app.models.bill_cycle_payment import BillCyclePayment
 from app.services.bill_cycles import auto_generate_missing_cycle_rows
 
@@ -163,7 +165,15 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
     def test_paid_monthly_bill_advances_next_due_date(self):
         from app.routers.bills import _bill_responses_for_current_cycle
 
-        bill = _bill(name="Rent", amount=Decimal("800"), due_day=1, frequency="monthly")
+        bill = _bill(
+            name="Rent",
+            amount=Decimal("800"),
+            due_day=1,
+            frequency="monthly",
+            is_paid=True,
+            paid_date=datetime(2026, 6, 9, tzinfo=timezone.utc),
+            paid_amount=Decimal("800"),
+        )
         user = _user(id=bill.user_id)
         due_date = date(2026, 6, 1)
         cycle_payment = BillCyclePayment(
@@ -204,6 +214,7 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
             self.assertTrue(responses[0].is_paid)
             self.assertEqual(responses[0].occurrence_due_date, due_date)
             self.assertEqual(responses[0].next_due_date, date(2026, 7, 1))
+            self.assertEqual(responses[0].cycle_paid_date, datetime(2026, 6, 1, tzinfo=timezone.utc))
 
         asyncio.run(run())
 
@@ -396,7 +407,7 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
 
         asyncio.run(run())
 
-    def test_legacy_global_paid_state_promotes_current_month_cycle(self):
+    def test_recurring_global_paid_state_does_not_promote_current_month_cycle(self):
         from app.routers.bills import _bill_responses_for_current_cycle
 
         bill = _bill(
@@ -443,14 +454,14 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
                 responses = await _bill_responses_for_current_cycle(db, [bill], user)
 
             self.assertEqual(len(responses), 1)
-            self.assertTrue(responses[0].is_paid)
+            self.assertFalse(responses[0].is_paid)
             self.assertEqual(responses[0].occurrence_due_date, date(2026, 6, 1))
-            self.assertEqual(responses[0].next_due_date, date(2026, 7, 1))
-            self.assertEqual(responses[0].cycle_source, "legacy_bill_status")
+            self.assertEqual(responses[0].next_due_date, date(2026, 6, 1))
+            self.assertEqual(responses[0].cycle_source, "auto_generated")
 
         asyncio.run(run())
 
-    def test_cycles_legacy_paid_state_promotes_current_month_due_date(self):
+    def test_cycles_recurring_global_paid_state_is_ignored(self):
         from app.routers.bills import _legacy_paid_due_dates_for_current_month
 
         bill = _bill(
@@ -480,16 +491,17 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
             {(bill.id, unpaid_cycle.due_date): unpaid_cycle},
         )
 
-        self.assertEqual(legacy_paid_due_dates, {bill.id: date(2026, 6, 1)})
+        self.assertEqual(legacy_paid_due_dates, {})
 
-    def test_cycles_legacy_paid_state_selects_current_month_not_future_month(self):
+    def test_cycles_one_time_global_paid_state_ignored_when_cycle_row_exists(self):
         from app.routers.bills import _legacy_paid_due_dates_for_current_month
 
         bill = _bill(
-            name="Rent",
+            name="One-time bill",
             amount=Decimal("800"),
-            due_day=1,
-            frequency="monthly",
+            due_day=None,
+            frequency="one_time",
+            start_date=date(2026, 6, 1),
             is_paid=True,
             paid_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
             paid_amount=Decimal("800"),
@@ -497,9 +509,9 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
         unpaid_cycle = BillCyclePayment(
             bill_id=bill.id,
             user_id=bill.user_id,
-            due_date=date(2026, 7, 1),
+            due_date=date(2026, 6, 1),
             cycle_year=2026,
-            cycle_month=7,
+            cycle_month=6,
             amount_due=Decimal("800"),
             amount_paid=Decimal("0"),
             is_paid=False,
@@ -512,7 +524,109 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
             {(bill.id, unpaid_cycle.due_date): unpaid_cycle},
         )
 
+        self.assertEqual(legacy_paid_due_dates, {})
+
+    def test_cycles_one_time_global_paid_state_used_when_cycle_row_missing(self):
+        from app.routers.bills import _legacy_paid_due_dates_for_current_month
+
+        bill = _bill(
+            name="One-time bill",
+            amount=Decimal("800"),
+            due_day=None,
+            frequency="one_time",
+            start_date=date(2026, 6, 1),
+            is_paid=True,
+            paid_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            paid_amount=Decimal("800"),
+        )
+
+        legacy_paid_due_dates = _legacy_paid_due_dates_for_current_month(
+            date(2026, 6, 19),
+            [bill],
+            {},
+        )
+
         self.assertEqual(legacy_paid_due_dates, {bill.id: date(2026, 6, 1)})
+
+    def test_pay_bill_requires_occurrence_due_date(self):
+        from app.routers.bills import pay_bill
+
+        bill = _bill()
+        user = _user(id=bill.user_id)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = bill
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=result)
+
+        async def run():
+            with self.assertRaises(HTTPException) as ctx:
+                await pay_bill(
+                    bill.id,
+                    data=None,
+                    occurrence_due_date=None,
+                    db=db,
+                    current_user=user,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("occurrence_due_date is required", ctx.exception.detail)
+
+        asyncio.run(run())
+
+    def test_unpay_bill_requires_occurrence_due_date(self):
+        from app.routers.bills import unpay_bill
+
+        bill = _bill()
+        user = _user(id=bill.user_id)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = bill
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=result)
+
+        async def run():
+            with self.assertRaises(HTTPException) as ctx:
+                await unpay_bill(
+                    bill.id,
+                    occurrence_due_date=None,
+                    db=db,
+                    current_user=user,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("occurrence_due_date is required", ctx.exception.detail)
+
+        asyncio.run(run())
+
+    def test_unpay_bill_cleanup_is_scoped_to_occurrence(self):
+        from app.routers.bills import unpay_bill
+
+        bill = _bill()
+        user = _user(id=bill.user_id)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = bill
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=result)
+        db.refresh = AsyncMock()
+        db.add = MagicMock()
+
+        async def run():
+            with patch(
+                "app.routers.bills.mark_bill_cycle_unpaid",
+                new_callable=AsyncMock,
+            ), patch(
+                "app.routers.bills._get_household_member_count",
+                new_callable=AsyncMock,
+                return_value=1,
+            ):
+                await unpay_bill(
+                    bill.id,
+                    occurrence_due_date=date(2026, 6, 1),
+                    db=db,
+                    current_user=user,
+                )
+            statements = [str(call.args[0]) for call in db.execute.await_args_list]
+            self.assertTrue(any("occurrence_due_date" in stmt for stmt in statements))
+            self.assertTrue(any("pay_period_date" in stmt for stmt in statements))
+
+        asyncio.run(run())
 
 
 if __name__ == "__main__":

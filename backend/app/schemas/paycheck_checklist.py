@@ -18,6 +18,7 @@ class ChecklistItemOut(BaseModel):
     item_type: str
     item_id: UUID
     pay_period_start: date
+    occurrence_due_date: Optional[date] = None
     is_checked: bool
     checked_at: Optional[datetime] = None
 

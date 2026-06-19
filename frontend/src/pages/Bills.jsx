@@ -60,6 +60,8 @@ const freqLabel = (freq) => {
   return f ? f.label : (freq || 'Monthly');
 };
 
+const getBillOccurrenceDueDate = (bill) => bill?.occurrence_due_date || bill?.next_due_date || null;
+
 export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }) {
   const { user } = useAuth();
   const { activeBudget, budgetVersion } = useBudget();
@@ -263,13 +265,18 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
 
   const handleQuickPay = async (bill) => {
     try {
+      const occurrenceDueDate = getBillOccurrenceDueDate(bill);
+      if (!occurrenceDueDate) {
+        setError('Unable to mark this bill paid because its occurrence due date is missing.');
+        return;
+      }
       const displayAmount = bill.payment_mode === 'split' && bill.is_household_bill
         ? Number(bill.user_share ?? bill.amount)
         : Number(bill.amount);
       await api.patch(`/api/v1/bills/${bill.id}/pay`, {
         paid_amount: displayAmount,
         paid_date: new Date().toISOString(),
-        occurrence_due_date: bill.occurrence_due_date || bill.next_due_date,
+        occurrence_due_date: occurrenceDueDate,
       });
       fetchBills();
       toast(`${bill.name} marked as paid`);
@@ -284,10 +291,15 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     if (!payTarget) return;
     setPaying(true);
     try {
+      const occurrenceDueDate = getBillOccurrenceDueDate(payTarget);
+      if (!occurrenceDueDate) {
+        setError('Unable to mark this bill paid because its occurrence due date is missing.');
+        return;
+      }
       const payload = {};
       if (payForm.paid_amount) payload.paid_amount = parseFloat(payForm.paid_amount);
       if (payForm.paid_date) payload.paid_date = new Date(payForm.paid_date).toISOString();
-      payload.occurrence_due_date = payTarget.occurrence_due_date || payTarget.next_due_date;
+      payload.occurrence_due_date = occurrenceDueDate;
       await api.patch(`/api/v1/bills/${payTarget.id}/pay`, payload);
       setShowPayModal(false);
       setPayTarget(null);
@@ -303,9 +315,12 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
 
   const handleUnpay = async (bill) => {
     try {
-      const dueDate = bill.occurrence_due_date || bill.next_due_date;
-      const suffix = dueDate ? `?occurrence_due_date=${encodeURIComponent(dueDate)}` : '';
-      await api.patch(`/api/v1/bills/${bill.id}/unpay${suffix}`);
+      const dueDate = getBillOccurrenceDueDate(bill);
+      if (!dueDate) {
+        setError('Unable to mark this bill unpaid because its occurrence due date is missing.');
+        return;
+      }
+      await api.patch(`/api/v1/bills/${bill.id}/unpay?occurrence_due_date=${encodeURIComponent(dueDate)}`);
       fetchBills();
       toast(`${bill.name} marked as unpaid`);
     } catch (err) {

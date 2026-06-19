@@ -601,10 +601,10 @@ class TestBillsUnchanged(unittest.TestCase):
         ])
 
         async def fake_mark_bill_cycle_paid(*args, **kwargs):
-            bill.is_paid = True
-            bill.paid_amount = Decimal("120")
-            bill.paid_date = datetime(2026, 5, 15, tzinfo=timezone.utc)
-            return SimpleNamespace(amount_paid=Decimal("120"), paid_date=bill.paid_date)
+            return SimpleNamespace(
+                amount_paid=Decimal("120"),
+                paid_date=datetime(2026, 5, 15, tzinfo=timezone.utc),
+            )
 
         with patch(
             "app.routers.paycheck_checklist.mark_bill_cycle_paid",
@@ -614,8 +614,9 @@ class TestBillsUnchanged(unittest.TestCase):
                 _sync_bill_payment(session, user, bill.id, True, date(2026, 5, 15))
             )
 
-        self.assertTrue(bill.is_paid)
-        self.assertEqual(bill.paid_amount, Decimal("120"))
+        self.assertFalse(bill.is_paid)
+        self.assertIsNone(bill.paid_amount)
+        self.assertIsNone(bill.paid_date)
         self.assertEqual(mock_mark_paid.await_args.kwargs["due_date"], date(2026, 5, 15))
 
 

@@ -58,8 +58,16 @@ class TestHouseholdBillPaidSync(unittest.TestCase):
             day_of_week=1,
             start_date=date(2026, 1, 1),
         )
-        # Payment falls on Jan 5 — only the window containing Jan 5 should show paid.
-        paid_bill_map = {bill.id: [date(2026, 1, 5)]}
+        # The Jan 6 occurrence is paid early on Jan 5; cycle due date is exact.
+        paid_bill_map = {
+            bill.id: [
+                {
+                    "due_date": date(2026, 1, 6),
+                    "paid_date": paid_at,
+                    "source": "bill_cycle_payments",
+                }
+            ]
+        }
 
         # Window containing the payment date
         window_with_payment = (date(2026, 1, 1), date(2026, 1, 7))

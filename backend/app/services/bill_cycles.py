@@ -56,6 +56,11 @@ def is_cadence_recurring_bill(bill: Bill) -> bool:
     return freq in ("weekly", "biweekly") and bill.day_of_week is not None
 
 
+def uses_global_paid_state(bill: Bill) -> bool:
+    """Only one-time bills mirror occurrence paid state onto the bill row."""
+    return (bill.frequency or "monthly").lower() == "one_time"
+
+
 def due_date_for_month(bill: Bill, year: int, month: int) -> date | None:
     if bill.due_day is None:
         return None
@@ -254,20 +259,18 @@ def occurrence_dates_for_month(bill: Bill, year: int, month: int) -> list[date]:
 
 def next_due_date_for_bill(bill: Bill, today: date | None = None) -> date | None:
     today = today or date.today()
-    month_due = current_month_due_date(bill, today)
-    if month_due is not None:
-        if month_due >= today:
-            return month_due
-        freq = bill.frequency or "monthly"
-        if freq not in ("weekly", "biweekly"):
-            return month_due
     dates = occurrence_dates_for_bill(bill, today, _add_months(today, 18))
     for due in dates:
         if due >= today:
             result = due
             break
     else:
-        result = dates[0] if dates else None
+        historical_dates = occurrence_dates_for_bill(
+            bill,
+            _add_months(today, -18),
+            today - timedelta(days=1),
+        )
+        result = historical_dates[-1] if historical_dates else None
 
     if (getattr(bill, "name", None) or "").strip().lower() == "amanda car":
         try:
@@ -518,9 +521,14 @@ async def mark_bill_cycle_paid(
     row.paid_date = paid_at
     row.source = source or row.source or "bills_page"
 
-    bill.is_paid = True
-    bill.paid_date = paid_at
-    bill.paid_amount = paid_amount
+    if uses_global_paid_state(bill):
+        bill.is_paid = True
+        bill.paid_date = paid_at
+        bill.paid_amount = paid_amount
+    else:
+        bill.is_paid = False
+        bill.paid_date = None
+        bill.paid_amount = None
     await db.flush()
     return row
 
@@ -540,8 +548,8 @@ async def mark_bill_cycle_unpaid(
     legacy_filter = [
         Payment.bill_id == bill.id,
         Payment.auto_logged.is_(True),
-        Payment.paid_date == due_date,
     ]
+    legacy_filter.append((Payment.pay_period_date == due_date) | (Payment.paid_date == due_date))
     if user_id:
         legacy_filter.append(Payment.user_id == user_id)
     await db.execute(delete(Payment).where(*legacy_filter))

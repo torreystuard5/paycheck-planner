@@ -29,6 +29,7 @@ class PaycheckChecklist(Base):
     item_type: Mapped[str] = mapped_column(String(20), nullable=False)
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     pay_period_start: Mapped[str] = mapped_column(Date, nullable=False)
+    occurrence_due_date: Mapped[str | None] = mapped_column(Date, nullable=True)
     is_checked: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     checked_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -38,4 +39,5 @@ class PaycheckChecklist(Base):
 
     __table_args__ = (
         Index("ix_paycheck_checklist_user_period", "user_id", "pay_period_start"),
+        Index("ix_paycheck_checklist_item_occurrence", "item_type", "item_id", "occurrence_due_date"),
     )

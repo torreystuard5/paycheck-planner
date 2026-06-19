@@ -67,8 +67,8 @@ class TestBillPaidInPeriodAUnpaidInPeriodB(unittest.TestCase):
         bid = uuid4()
         bill = _bill(bill_id=bid, due_day=10)
 
-        # Payment exists with paid_date in period A (May 1-14)
-        paid_bill_map = {bid: [date(2026, 5, 8)]}
+        # Legacy payment fallback now only matches the exact occurrence date.
+        paid_bill_map = {bid: [date(2026, 5, 10)]}
 
         # Period A: May 1 – May 14
         items_a = assign_bills_to_paycheck(
@@ -121,7 +121,7 @@ class TestHouseholdBillPaidByMemberAVisibleToMemberB(unittest.TestCase):
         # Member A paid the bill on May 8 — the paid_bill_map is built from
         # the payments table scoped to ALL household member user_ids, so both
         # members get the same map.
-        paid_bill_map = {bid: [date(2026, 5, 8)]}
+        paid_bill_map = {bid: [date(2026, 5, 10)]}
 
         # Period 1: May 1 – May 14 (contains the payment)
         items_p1 = assign_bills_to_paycheck(
@@ -232,6 +232,27 @@ class TestEngineIgnoresGlobalBillIsPaidWhenNoPaymentRowExists(unittest.TestCase)
                 "Engine must report bill as UNPAID when no payment row exists, "
                 "even though Bill.is_paid=True globally",
             )
+
+
+class TestLegacyPaymentFallbackIsExactOccurrenceOnly(unittest.TestCase):
+    def test_early_payment_does_not_mark_semimonthly_later_occurrence_paid(self):
+        bid = uuid4()
+        bill = _bill(bill_id=bid, frequency="semi_monthly", due_day=1)
+        paid_bill_map = {bid: [{"paid_date": date(2026, 6, 2), "source": "payments"}]}
+
+        items = assign_bills_to_paycheck(
+            [bill],
+            [],
+            date(2026, 6, 15),
+            date(2026, 6, 20),
+            date(2026, 6, 15),
+            paid_debt_ids=set(),
+            paid_bill_map=paid_bill_map,
+        )
+
+        bill_rows = [i for i in items if i["item_type"] == "bill"]
+        self.assertEqual([row["due_date"] for row in bill_rows], [date(2026, 6, 16)])
+        self.assertFalse(bill_rows[0]["is_paid"])
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import inspect
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, and_, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,14 +13,13 @@ from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.transaction import Payment
 from app.models.user import User
 from app.services.bill_cycles import (
-    local_today,
     mark_bill_cycle_paid,
     mark_bill_cycle_unpaid,
-    next_due_date_for_bill,
 )
 from app.services.debt_payment_service import (
     create_period_debt_payment,
     dedupe_period_debt_payments,
+    debt_due_date_for_period,
     fetch_period_debt_payments,
     remove_period_debt_payments,
 )
@@ -56,14 +55,26 @@ async def toggle_checklist_item(
 
     Also syncs the underlying source-of-truth tables:
     - debt items → DebtPayment (mark-paid / unmark-paid)
-    - bill items → Bill.is_paid / paid_date / paid_amount
+    - bill items → BillCyclePayment for the explicit occurrence_due_date
     """
     # Sync shared tables first. Unchecking may delete all checklist rows for this
     # bill/debt so other household members do not keep stale is_checked=true.
     if body.item_type == "debt":
-        await _sync_debt_payment(db, current_user, body.item_id, body.is_checked, body.pay_period_start)
+        await _sync_debt_payment(
+            db,
+            current_user,
+            body.item_id,
+            body.is_checked,
+            body.pay_period_start,
+            body.occurrence_due_date,
+        )
 
     if body.item_type == "bill":
+        if body.occurrence_due_date is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="occurrence_due_date is required for bill checklist items.",
+            )
         await _sync_bill_payment(
             db,
             current_user,
@@ -78,6 +89,7 @@ async def toggle_checklist_item(
             PaycheckChecklist.item_type == body.item_type,
             PaycheckChecklist.item_id == body.item_id,
             PaycheckChecklist.pay_period_start == body.pay_period_start,
+            PaycheckChecklist.occurrence_due_date == body.occurrence_due_date,
         )
     )
     item = result.scalar_one_or_none()
@@ -88,12 +100,14 @@ async def toggle_checklist_item(
             item_type=body.item_type,
             item_id=body.item_id,
             pay_period_start=body.pay_period_start,
+            occurrence_due_date=body.occurrence_due_date,
             is_checked=body.is_checked,
             checked_at=datetime.now(timezone.utc) if body.is_checked else None,
         )
         db.add(item)
     else:
         item.is_checked = body.is_checked
+        item.occurrence_due_date = body.occurrence_due_date
         item.checked_at = datetime.now(timezone.utc) if body.is_checked else None
 
     await db.flush()
@@ -104,17 +118,26 @@ async def toggle_checklist_item(
 async def _sync_debt_payment(
     db: AsyncSession, user: User, debt_id, is_checked: bool,
     pay_period_start: date | None = None,
+    occurrence_due_date: date | None = None,
 ):
     """Create or remove a DebtPayment record to stay in sync."""
     today = date.today()
-    existing_rows = await fetch_period_debt_payments(
-        db, debt_id, month=today.month, year=today.year
-    )
-
     debt_result = await db.execute(select(Debt).where(Debt.id == debt_id))
     debt = debt_result.scalar_one_or_none()
     if not debt:
         return
+
+    target_period_start = pay_period_start or today.replace(day=1)
+    target_due_date = occurrence_due_date or debt_due_date_for_period(debt, target_period_start)
+    existing_rows = await fetch_period_debt_payments(
+        db,
+        debt_id,
+        month=target_due_date.month if target_due_date else today.month,
+        year=target_due_date.year if target_due_date else today.year,
+        due_date=target_due_date,
+        pay_period_start=target_period_start,
+        user_id=user.id,
+    )
 
     existing_rows = await dedupe_period_debt_payments(db, debt, existing_rows)
     existing = existing_rows[0] if existing_rows else None
@@ -128,6 +151,8 @@ async def _sync_debt_payment(
             amount,
             auto_log_source="dashboard",
             today=today,
+            due_date=target_due_date,
+            pay_period_start=target_period_start,
         )
     elif not is_checked and existing:
         await remove_period_debt_payments(
@@ -159,6 +184,12 @@ async def _sync_bill_payment(
     occurrence_due_date: date | None = None,
 ):
     """Sync bill checklist state to the correct bill cycle row."""
+    if occurrence_due_date is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="occurrence_due_date is required for bill checklist items.",
+        )
+
     # Find the bill (own or household)
     if user.household_id:
         bill_result = await db.execute(
@@ -178,17 +209,7 @@ async def _sync_bill_payment(
     if not bill:
         return
 
-    if occurrence_due_date is not None:
-        due_date = occurrence_due_date
-    elif any(
-        getattr(bill, attr, None) is not None
-        for attr in ("frequency", "due_day", "day_of_week", "start_date")
-    ):
-        due_date = next_due_date_for_bill(bill, local_today(user))
-    else:
-        due_date = local_today(user)
-    if due_date is None:
-        return
+    due_date = occurrence_due_date
 
     if is_checked:
         cycle_payment = await mark_bill_cycle_paid(
@@ -207,6 +228,7 @@ async def _sync_bill_payment(
                 bill_id=bill.id,
                 amount=cycle_payment.amount_paid or bill.amount,
                 paid_date=(cycle_payment.paid_date.date() if cycle_payment.paid_date else due_date),
+                pay_period_date=due_date,
                 source="dashboard",
                 auto_logged=True,
             )
@@ -224,6 +246,10 @@ async def _sync_bill_payment(
                     Payment.bill_id == bill.id,
                     Payment.user_id == user.id,
                     Payment.auto_logged.is_(True),
+                    or_(
+                        Payment.pay_period_date == due_date,
+                        Payment.paid_date == due_date,
+                    ),
                 )
             )
             for auto_pay in auto_result.scalars().all():
@@ -234,6 +260,7 @@ async def _sync_bill_payment(
             delete(PaycheckChecklist).where(
                 PaycheckChecklist.item_type == "bill",
                 PaycheckChecklist.item_id == bill_id,
+                PaycheckChecklist.occurrence_due_date == due_date,
             )
         )
 

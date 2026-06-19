@@ -47,15 +47,22 @@ function recomputePaycheckAssignedStats(paycheck) {
   };
 }
 
+function itemOccurrenceDate(item) {
+  return item?.occurrence_due_date || item?.due_date || null;
+}
+
 /** Update is_paid on a current-period assigned item without refetching the full plan. */
-export function patchPaycheckPlanItemPaid(plan, itemType, itemId, isPaid) {
+export function patchPaycheckPlanItemPaid(plan, itemType, itemId, isPaid, occurrenceDueDate = null) {
   if (!plan) return plan;
   const matchId = String(itemId);
+  const matchOccurrence = occurrenceDueDate ? String(occurrenceDueDate).slice(0, 10) : null;
 
   const patchItems = (items) =>
     (items || []).map((it) => {
       const id = String(it.id ?? it.item_id);
-      if (it.item_type === itemType && id === matchId) {
+      const occurrence = itemOccurrenceDate(it);
+      const sameOccurrence = !matchOccurrence || (occurrence && String(occurrence).slice(0, 10) === matchOccurrence);
+      if (it.item_type === itemType && id === matchId && sameOccurrence) {
         return { ...it, is_paid: isPaid };
       }
       return it;
