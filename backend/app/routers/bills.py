@@ -325,21 +325,20 @@ async def _bill_responses_for_current_cycle(
     if unpaid_selected_bill_ids:
         current_month_start = today.replace(day=1)
         prior_month_end = current_month_start - timedelta(days=1)
-        prior_paid_window_start = current_month_start - timedelta(days=62)
-        if prior_month_end >= prior_paid_window_start:
-            prior_payments = await get_cycle_payments(
-                db, unpaid_selected_bill_ids, prior_paid_window_start, prior_month_end
-            )
-            recent_paid_by_bill: dict[UUID, BillCyclePayment] = {}
-            for (bill_id, _due_date), payment in prior_payments.items():
-                if not payment.is_paid:
-                    continue
-                existing = recent_paid_by_bill.get(bill_id)
-                if existing is None or payment.due_date > existing.due_date:
-                    recent_paid_by_bill[bill_id] = payment
-            for bill_id, payment in recent_paid_by_bill.items():
-                due_dates_by_bill[bill_id] = payment.due_date
-                selected_payment_by_bill[bill_id] = payment
+        prior_month_start = prior_month_end.replace(day=1)
+        prior_payments = await get_cycle_payments(
+            db, unpaid_selected_bill_ids, prior_month_start, prior_month_end
+        )
+        recent_paid_by_bill: dict[UUID, BillCyclePayment] = {}
+        for (bill_id, _due_date), payment in prior_payments.items():
+            if not payment.is_paid:
+                continue
+            existing = recent_paid_by_bill.get(bill_id)
+            if existing is None or payment.due_date > existing.due_date:
+                recent_paid_by_bill[bill_id] = payment
+        for bill_id, payment in recent_paid_by_bill.items():
+            due_dates_by_bill[bill_id] = payment.due_date
+            selected_payment_by_bill[bill_id] = payment
 
     for bill in bills:
         if bill.id in due_dates_by_bill:
