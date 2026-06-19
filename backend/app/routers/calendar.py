@@ -1,7 +1,7 @@
 """Calendar endpoint — returns bills + debts + paychecks for a given month."""
 
-import calendar
 import json
+from calendar import monthrange
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -12,11 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.bill import Bill
+from app.models.bill_cycle_payment import BillCyclePayment
 from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
 from app.models.paycheck_entry import PaycheckEntry
 from app.models.user import User
-from app.services.bill_cycles import occurrence_dates_for_bill
+from app.services.bill_cycles import occurrence_dates_for_bill, uses_global_paid_state
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/calendar", tags=["Calendar"])
@@ -32,46 +33,9 @@ class CalendarEvent(BaseModel):
     is_paid: bool | None = None
 
 
-def _bill_due_date_in_month(bill: Bill, year: int, month: int) -> date | None:
-    """Compute the due date for a bill within a specific month, if applicable."""
-    freq = bill.frequency or "monthly"
-
-    if freq == "one_time":
-        if bill.start_date and bill.start_date.year == year and bill.start_date.month == month:
-            return bill.start_date
-        return None
-
-    if freq == "monthly":
-        due_day = bill.due_day or 1
-        last_day = calendar.monthrange(year, month)[1]
-        return date(year, month, min(due_day, last_day))
-
-    if freq in ("weekly", "biweekly"):
-        dow = bill.day_of_week
-        if dow is None:
-            return None  # can't compute without day_of_week
-        # Return all matching dates in the month (handled below)
-        return None  # signal to use the multi-date path
-
-    # quarterly, semi_annual, annual — use start_date as anchor
-    if bill.start_date:
-        anchor = bill.start_date
-        period_months = {"quarterly": 3, "semi_annual": 6, "annual": 12}.get(freq)
-        if period_months:
-            # Check if this month is on the cadence
-            month_diff = (year - anchor.year) * 12 + (month - anchor.month)
-            if month_diff >= 0 and month_diff % period_months == 0:
-                last_day = calendar.monthrange(year, month)[1]
-                return date(year, month, min(anchor.day, last_day))
-    return None
-
-
-def _bill_weekly_dates_in_month(bill: Bill, year: int, month: int) -> list[date]:
-    """Return all weekly/biweekly occurrence dates for a bill in a given month."""
+def _month_bounds(year: int, month: int) -> tuple[date, date]:
     first_day = date(year, month, 1)
-    last_day_num = calendar.monthrange(year, month)[1]
-    last_day = date(year, month, last_day_num)
-    return occurrence_dates_for_bill(bill, first_day, last_day)
+    return first_day, date(year, month, monthrange(year, month)[1])
 
 
 @router.get("", response_model=list[CalendarEvent])
@@ -111,7 +75,26 @@ async def get_calendar_events(
             Bill.is_active.is_(True),
         )
     bill_result = await db.execute(bill_query)
-    bills = bill_result.scalars().all()
+    bills = list(bill_result.scalars().all())
+    month_start, month_end = _month_bounds(year, month)
+    bill_ids = [b.id for b in bills]
+    paid_bill_cycles: dict[tuple, bool] = {}
+    if bill_ids:
+        cycle_result = await db.execute(
+            select(
+                BillCyclePayment.bill_id,
+                BillCyclePayment.due_date,
+                BillCyclePayment.is_paid,
+            ).where(
+                BillCyclePayment.bill_id.in_(bill_ids),
+                BillCyclePayment.due_date >= month_start,
+                BillCyclePayment.due_date <= month_end,
+            )
+        )
+        paid_bill_cycles = {
+            (bill_id, due_date): bool(is_paid)
+            for bill_id, due_date, is_paid in cycle_result.all()
+        }
 
     for bill in bills:
         full_amount = float(bill.amount or 0)
@@ -138,30 +121,20 @@ async def get_calendar_events(
         else:
             amount = full_amount
 
-        freq = bill.frequency or "monthly"
-        if freq in ("weekly", "biweekly"):
-            for d in _bill_weekly_dates_in_month(bill, year, month):
-                events.append(CalendarEvent(
-                    id=f"bill_{bill.id}",
-                    type="bill",
-                    date=d,
-                    title=bill.name or "Untitled Bill",
-                    amount=amount,
-                    category=bill.category,
-                    is_paid=bill.is_paid,
-                ))
-        else:
-            d = _bill_due_date_in_month(bill, year, month)
-            if d:
-                events.append(CalendarEvent(
-                    id=f"bill_{bill.id}",
-                    type="bill",
-                    date=d,
-                    title=bill.name or "Untitled Bill",
-                    amount=amount,
-                    category=bill.category,
-                    is_paid=bill.is_paid,
-                ))
+        for due_date in occurrence_dates_for_bill(bill, month_start, month_end):
+            cycle_key = (bill.id, due_date)
+            is_paid = paid_bill_cycles.get(cycle_key)
+            if is_paid is None:
+                is_paid = uses_global_paid_state(bill) and bool(bill.is_paid)
+            events.append(CalendarEvent(
+                id=f"bill_{bill.id}",
+                type="bill",
+                date=due_date,
+                title=bill.name or "Untitled Bill",
+                amount=amount,
+                category=bill.category,
+                is_paid=is_paid,
+            ))
 
     # ── Debts ──────────────────────────────────────────────────
     if has_household:
@@ -223,7 +196,7 @@ async def get_calendar_events(
 
         due_day = debt.due_day
         if due_day:
-            last_day = calendar.monthrange(year, month)[1]
+            last_day = monthrange(year, month)[1]
             d = date(year, month, min(due_day, last_day))
             events.append(CalendarEvent(
                 id=f"debt_{debt.id}",

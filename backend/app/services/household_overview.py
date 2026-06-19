@@ -13,10 +13,12 @@ from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bill import Bill
+from app.models.bill_cycle_payment import BillCyclePayment
 from app.models.debt import Debt
 from app.models.debt_payment import DebtPayment
 from app.models.income import IncomeSource
 from app.models.user import User
+from app.services.bill_cycles import next_due_date_for_bill, uses_global_paid_state
 from app.services.household_service import get_household_members
 
 
@@ -188,6 +190,31 @@ async def build_household_financial_overview(
         _overview_obligation_filter(Bill, hh_id, budget_id, member_ids),
     )
     bills = list((await db.execute(bill_q)).scalars().all())
+    bill_due_by_id = {b.id: next_due_date_for_bill(b) for b in bills}
+    bill_cycle_paid_by_id: dict[UUID, bool] = {}
+    due_dates = [due for due in bill_due_by_id.values() if due is not None]
+    if bills and due_dates:
+        result = await db.execute(
+            select(
+                BillCyclePayment.bill_id,
+                BillCyclePayment.due_date,
+                BillCyclePayment.is_paid,
+            ).where(
+                BillCyclePayment.bill_id.in_([b.id for b in bills]),
+                BillCyclePayment.due_date >= min(due_dates),
+                BillCyclePayment.due_date <= max(due_dates),
+            )
+        )
+        due_by_bill = {
+            bill_id: due_date
+            for bill_id, due_date in bill_due_by_id.items()
+            if due_date is not None
+        }
+        bill_cycle_paid_by_id = {
+            bill_id: bool(is_paid)
+            for bill_id, due_date, is_paid in result.all()
+            if due_by_bill.get(bill_id) == due_date
+        }
 
     debt_q = select(Debt).where(
         Debt.is_active.is_(True),
@@ -203,7 +230,11 @@ async def build_household_financial_overview(
     def bill_line(b: Bill) -> dict:
         share, _ = _bill_user_share(b, member_count, current_user.id)
         aid = b.assigned_member_id or b.user_id
-        due = b.postpone_until or b.start_date
+        due = bill_due_by_id.get(b.id)
+        if b.id in bill_cycle_paid_by_id:
+            is_paid = bill_cycle_paid_by_id[b.id]
+        else:
+            is_paid = uses_global_paid_state(b) and bool(b.is_paid)
         return {
             "id": b.id,
             "name": b.name or "Untitled bill",
@@ -211,7 +242,7 @@ async def build_household_financial_overview(
             "amount": Decimal(str(b.amount or 0)),
             "user_share": share,
             "due_date": due,
-            "is_paid": bool(b.is_paid),
+            "is_paid": is_paid,
             "assigned_member_id": aid,
             "assigned_member_name": name_by_id.get(aid),
             "is_household_bill": bool(b.household_id),
