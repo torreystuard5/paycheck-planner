@@ -220,27 +220,12 @@ export function isSplitHouseholdBill(bill) {
  */
 export function getBillDueInfo(bill, userDateFormat) {
   if (isBillPaidForCurrentCycle(bill)) {
-    const nextDue = parseBillDisplayDueDate(bill);
-    const isoDate = nextDue ? nextDue.toISOString().slice(0, 10) : null;
-    const today = getToday();
-    const diff = nextDue ? differenceInCalendarDays(startOfDay(nextDue), today) : null;
-    const paidAt = bill?.cycle_paid_date || bill?.paid_date;
+    const statusText = formatPaidBillListLabel(bill, userDateFormat);
 
     return {
-      dateText: nextDue && isoDate
-        ? formatBillDateText(isoDate, userDateFormat)
-        : paidAt
-          ? formatFriendlyDate(paidAt)
-          : 'Paid',
-      relativeText:
-        nextDue && diff !== null
-          ? diff > 0
-            ? `Next due in ${diff} days`
-            : diff === 0
-              ? 'Next due today'
-              : null
-          : null,
-      statusLabel: 'Paid',
+      dateText: statusText,
+      relativeText: null,
+      statusLabel: null,
       badgeVariant: 'success',
     };
   }

@@ -35,13 +35,6 @@ const fmtCurrency = (val) => {
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
-const safePaidBillDueLabel = (bill) => {
-  const label = formatBillListDueLabel(bill);
-  if (!/^overdue\b/i.test(label)) return label;
-  const paidAt = bill?.cycle_paid_date || bill?.paid_date;
-  return paidAt ? `Paid ${formatFriendlyDate(paidAt)}` : 'Paid';
-};
-
 export default function BillsAndDebts() {
   const { activeBudget, budgetVersion } = useBudget();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -287,7 +280,7 @@ const CombinedCard = memo(function CombinedCard({ item }) {
   const TypeIcon = isBill ? FileText : TrendingDown;
   const iconTone = isBill ? 'accent' : 'debt';
   const dueLabel = isBill
-    ? (isPaid ? safePaidBillDueLabel(item) : formatBillListDueLabel(item))
+    ? formatBillListDueLabel(item)
     : item.next_due_date
       ? `Due ${formatFriendlyDate(item.next_due_date)}`
       : item.due_day

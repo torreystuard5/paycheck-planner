@@ -7,6 +7,7 @@ import {
   getBillDisplayAmount,
   getBillDueInfo,
   getBillTotalAmount,
+  isBillPaidForCurrentCycle,
   isSplitHouseholdBill,
   sortBillsByDueDate,
 } from '../../../utils/billDueDate';
@@ -130,7 +131,7 @@ export function IncomeSummaryWidget({ incomeSummary, href }) {
 export function UpcomingBillsWidget({ bills, userDateFormat, href }) {
   const upcoming = sortBillsByDueDate(
     (Array.isArray(bills) ? bills : []).filter(
-      (b) => b.is_user_responsible !== false && !b.is_paid,
+      (b) => b.is_user_responsible !== false && !isBillPaidForCurrentCycle(b),
     ),
   ).slice(0, 5);
 

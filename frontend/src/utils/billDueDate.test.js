@@ -106,9 +106,9 @@ describe('billDueDate helpers', () => {
       next_due_date: '2026-07-01',
       is_paid: true,
     })).toEqual({
-      dateText: 'Jul 1',
-      relativeText: 'Next due in 13 days',
-      statusLabel: 'Paid',
+      dateText: 'Next due Jul 1',
+      relativeText: null,
+      statusLabel: null,
       badgeVariant: 'success',
     });
   });
@@ -126,9 +126,26 @@ describe('billDueDate helpers', () => {
       is_paid: true,
       is_overdue: true,
     })).toEqual({
-      dateText: 'Jul 1',
-      relativeText: 'Next due in 13 days',
-      statusLabel: 'Paid',
+      dateText: 'Next due Jul 1',
+      relativeText: null,
+      statusLabel: null,
+      badgeVariant: 'success',
+    });
+  });
+
+  it('shows a paid date without any overdue or extra paid badge text when no future due date exists', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-19T12:00:00Z'));
+
+    expect(getBillDueInfo({
+      occurrence_due_date: '2026-06-01',
+      cycle_paid_date: '2026-06-18T09:00:00Z',
+      is_paid: true,
+      is_overdue: true,
+    })).toEqual({
+      dateText: 'Paid Jun 18',
+      relativeText: null,
+      statusLabel: null,
       badgeVariant: 'success',
     });
   });

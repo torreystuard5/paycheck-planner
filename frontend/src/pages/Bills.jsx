@@ -669,11 +669,10 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     const isPaid = isBillPaidForCurrentCycle(bill);
     const displayAmount = bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount;
     const catColor = getCategoryColor(bill.category);
-    const dueSummary = isPaid
-      ? formatBillListDueLabel(bill)
-      : (bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
+    const paidSafeDueSummary = formatBillListDueLabel(bill);
+    const dueSummary = !isPaid && (bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
         ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
-        : formatBillListDueLabel(bill);
+        : paidSafeDueSummary;
 
     return (
       <Card key={`${bill.id}-${bill.occurrence_due_date || bill.next_due_date || bill.due_day || 'bill'}`} className={cn(isPaid && 'opacity-75')}>
