@@ -5,7 +5,7 @@ import ImportExportButton from '../components/ImportExportButton';
 import { useToast } from '../components/Toast';
 import { format, formatDistanceToNow } from 'date-fns';
 import { formatFriendlyDate } from '../utils/formatDate';
-import { formatBillListDueLabel } from '../utils/billDueDate';
+import { formatBillListDueLabel, isBillPaidForCurrentCycle } from '../utils/billDueDate';
 import { getCategoryColor } from '../utils/categoryColors';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -651,8 +651,8 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     const bd = breakdownCache[bill.id];
     const bdLoading = breakdownLoading === bill.id;
     const bdError = breakdownError[bill.id];
-    const paidStatusDate = bill.cycle_paid_date || bill.paid_date;
-    const isPaid = Boolean(bill.is_paid || paidStatusDate);
+    const isPaid = isBillPaidForCurrentCycle(bill);
+    const paidStatusDate = isPaid ? (bill.cycle_paid_date || bill.paid_date) : null;
     const displayAmount = bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount;
     const catColor = getCategoryColor(bill.category);
     const dueSummary = isPaid
