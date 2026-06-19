@@ -2,7 +2,7 @@ import inspect
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, and_, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,10 +13,8 @@ from app.models.paycheck_checklist import PaycheckChecklist
 from app.models.transaction import Payment
 from app.models.user import User
 from app.services.bill_cycles import (
-    local_today,
     mark_bill_cycle_paid,
     mark_bill_cycle_unpaid,
-    next_due_date_for_bill,
 )
 from app.services.debt_payment_service import (
     create_period_debt_payment,
@@ -56,7 +54,7 @@ async def toggle_checklist_item(
 
     Also syncs the underlying source-of-truth tables:
     - debt items → DebtPayment (mark-paid / unmark-paid)
-    - bill items → Bill.is_paid / paid_date / paid_amount
+    - bill items → BillCyclePayment for the explicit occurrence_due_date
     """
     # Sync shared tables first. Unchecking may delete all checklist rows for this
     # bill/debt so other household members do not keep stale is_checked=true.
@@ -64,6 +62,11 @@ async def toggle_checklist_item(
         await _sync_debt_payment(db, current_user, body.item_id, body.is_checked, body.pay_period_start)
 
     if body.item_type == "bill":
+        if body.occurrence_due_date is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="occurrence_due_date is required for bill checklist items.",
+            )
         await _sync_bill_payment(
             db,
             current_user,
@@ -159,6 +162,12 @@ async def _sync_bill_payment(
     occurrence_due_date: date | None = None,
 ):
     """Sync bill checklist state to the correct bill cycle row."""
+    if occurrence_due_date is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="occurrence_due_date is required for bill checklist items.",
+        )
+
     # Find the bill (own or household)
     if user.household_id:
         bill_result = await db.execute(
@@ -178,17 +187,7 @@ async def _sync_bill_payment(
     if not bill:
         return
 
-    if occurrence_due_date is not None:
-        due_date = occurrence_due_date
-    elif any(
-        getattr(bill, attr, None) is not None
-        for attr in ("frequency", "due_day", "day_of_week", "start_date")
-    ):
-        due_date = next_due_date_for_bill(bill, local_today(user))
-    else:
-        due_date = local_today(user)
-    if due_date is None:
-        return
+    due_date = occurrence_due_date
 
     if is_checked:
         cycle_payment = await mark_bill_cycle_paid(

@@ -10,6 +10,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+from fastapi import HTTPException
+
 from app.models.bill_cycle_payment import BillCyclePayment
 from app.services.bill_cycles import auto_generate_missing_cycle_rows
 
@@ -545,6 +547,53 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
         )
 
         self.assertEqual(legacy_paid_due_dates, {bill.id: date(2026, 6, 1)})
+
+    def test_pay_bill_requires_occurrence_due_date(self):
+        from app.routers.bills import pay_bill
+
+        bill = _bill()
+        user = _user(id=bill.user_id)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = bill
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=result)
+
+        async def run():
+            with self.assertRaises(HTTPException) as ctx:
+                await pay_bill(
+                    bill.id,
+                    data=None,
+                    occurrence_due_date=None,
+                    db=db,
+                    current_user=user,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("occurrence_due_date is required", ctx.exception.detail)
+
+        asyncio.run(run())
+
+    def test_unpay_bill_requires_occurrence_due_date(self):
+        from app.routers.bills import unpay_bill
+
+        bill = _bill()
+        user = _user(id=bill.user_id)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = bill
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=result)
+
+        async def run():
+            with self.assertRaises(HTTPException) as ctx:
+                await unpay_bill(
+                    bill.id,
+                    occurrence_due_date=None,
+                    db=db,
+                    current_user=user,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("occurrence_due_date is required", ctx.exception.detail)
+
+        asyncio.run(run())
 
 
 if __name__ == "__main__":

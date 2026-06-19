@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
+from fastapi import HTTPException
+
 
 class _FakeResult:
     def __init__(self, value):
@@ -42,6 +44,25 @@ def _bill(user_id, **overrides):
 
 
 class TestPaycheckChecklistBillCycleSync(unittest.TestCase):
+    def test_checklist_bill_sync_requires_occurrence_due_date(self):
+        from app.routers.paycheck_checklist import _sync_bill_payment
+
+        user = _user()
+
+        async def run():
+            with self.assertRaises(HTTPException) as ctx:
+                await _sync_bill_payment(
+                    AsyncMock(),
+                    user,
+                    uuid4(),
+                    True,
+                    None,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("occurrence_due_date is required", ctx.exception.detail)
+
+        asyncio.run(run())
+
     def test_checklist_bill_sync_uses_occurrence_due_date_when_marking_paid(self):
         from app.routers.paycheck_checklist import _sync_bill_payment
 
@@ -59,9 +80,7 @@ class TestPaycheckChecklistBillCycleSync(unittest.TestCase):
                 "app.routers.paycheck_checklist.mark_bill_cycle_paid",
                 new_callable=AsyncMock,
                 return_value=cycle_payment,
-            ) as mock_mark_paid, patch(
-                "app.routers.paycheck_checklist.next_due_date_for_bill",
-            ) as mock_next_due:
+            ) as mock_mark_paid:
                 await _sync_bill_payment(
                     session,
                     user,
@@ -70,7 +89,6 @@ class TestPaycheckChecklistBillCycleSync(unittest.TestCase):
                     date(2026, 6, 5),
                 )
 
-            mock_next_due.assert_not_called()
             self.assertEqual(mock_mark_paid.await_args.kwargs["due_date"], date(2026, 6, 5))
             self.assertEqual(mock_mark_paid.await_args.kwargs["source"], "dashboard")
 

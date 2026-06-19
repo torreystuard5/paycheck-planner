@@ -998,11 +998,11 @@ async def pay_bill(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
-    due_date = occurrence_due_date or (data.occurrence_due_date if data else None) or _compute_next_due_date(bill)
+    due_date = occurrence_due_date or (data.occurrence_due_date if data else None)
     if not due_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unable to determine which bill cycle to mark paid.",
+            detail="occurrence_due_date is required to mark a bill cycle paid.",
         )
 
     cycle_payment = await mark_bill_cycle_paid(
@@ -1132,7 +1132,7 @@ async def unhide_overdue_bill(
 @router.patch("/{bill_id}/unpay", response_model=BillResponse)
 async def unpay_bill(
     bill_id: UUID,
-    occurrence_due_date: date | None = Query(default=None),
+    occurrence_due_date: date = Query(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1155,12 +1155,12 @@ async def unpay_bill(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
-    due_date = occurrence_due_date or _compute_next_due_date(bill)
-    if not due_date:
+    if occurrence_due_date is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unable to determine which bill cycle to mark unpaid.",
+            detail="occurrence_due_date is required to mark a bill cycle unpaid.",
         )
+    due_date = occurrence_due_date
     await mark_bill_cycle_unpaid(db, bill, due_date, current_user.id)
 
     # Dashboard merges paycheck checklist with plan items; stale checked rows

@@ -225,11 +225,15 @@ export default function Calendar() {
   const handleTogglePaid = async (evt) => {
     if (evt.type !== 'bill') return;
     const billId = evt.id.replace('bill_', '');
+    const occurrenceDueDate = evt.date;
+    if (!occurrenceDueDate) return;
     try {
       if (evt.is_paid) {
-        await api.patch(`/api/v1/bills/${billId}/unpay`);
+        await api.patch(`/api/v1/bills/${billId}/unpay?occurrence_due_date=${encodeURIComponent(occurrenceDueDate)}`);
       } else {
-        await api.patch(`/api/v1/bills/${billId}/pay?source=calendar`);
+        await api.patch(`/api/v1/bills/${billId}/pay?source=calendar`, {
+          occurrence_due_date: occurrenceDueDate,
+        });
       }
       fetchEvents();
       setSelectedEvt(null);
