@@ -288,6 +288,13 @@ def next_due_date_for_bill(bill: Bill, today: date | None = None) -> date | None
     return result
 
 
+def next_due_date_after_bill(bill: Bill, after_date: date) -> date | None:
+    """Return the first scheduled occurrence strictly after the provided date."""
+    window_start = after_date + timedelta(days=1)
+    dates = occurrence_dates_for_bill(bill, window_start, _add_months(window_start, 18))
+    return dates[0] if dates else None
+
+
 def cycle_window_start(today: date | None = None) -> date:
     today = today or date.today()
     return today.replace(day=1)

@@ -3,8 +3,9 @@ import { Plus, Edit, Trash2, Search, FileText, Upload, ChevronDown, ChevronUp, X
 import SortDropdown from '../components/SortDropdown';
 import ImportExportButton from '../components/ImportExportButton';
 import { useToast } from '../components/Toast';
-import { differenceInCalendarDays, format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { formatFriendlyDate } from '../utils/formatDate';
+import { formatBillListDueLabel } from '../utils/billDueDate';
 import { getCategoryColor } from '../utils/categoryColors';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -52,35 +53,6 @@ const fmtCurrency = (val) => {
   const n = Number(val);
   const v = isNaN(n) ? 0 : n;
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-};
-
-const parseBillDueDate = (bill) => {
-  const dueDate = bill.occurrence_due_date || bill.next_due_date;
-  if (!dueDate) return null;
-  const parsed = new Date(dueDate.includes('T') ? dueDate : `${dueDate}T00:00:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const formatBillDueLabel = (bill) => {
-  const due = parseBillDueDate(bill);
-  if (due) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diff = differenceInCalendarDays(due, today);
-    const dateLabel = format(due, 'MMM d');
-    if (diff < 0) {
-      const days = Math.abs(diff);
-      return days === 1 ? 'Overdue by 1 day' : `Overdue by ${days} days`;
-    }
-    if (diff === 0) return `Due ${dateLabel}`;
-    if (diff <= 7) return diff === 1 ? 'Due tomorrow' : `Due in ${diff} days`;
-    return `Due ${dateLabel}`;
-  }
-  if (bill.due_day) {
-    const month = new Date().toLocaleDateString('en-US', { month: 'short' });
-    return `Due ${month} ${bill.due_day}`;
-  }
-  return 'Due date unknown';
 };
 
 const freqLabel = (freq) => {
@@ -682,6 +654,11 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     const isPaid = bill.is_paid;
     const displayAmount = bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount;
     const catColor = getCategoryColor(bill.category);
+    const dueSummary = isPaid
+      ? formatBillListDueLabel(bill)
+      : (bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
+        ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
+        : formatBillListDueLabel(bill);
 
     return (
       <Card key={`${bill.id}-${bill.occurrence_due_date || bill.next_due_date || bill.due_day || 'bill'}`} className={cn(isPaid && 'opacity-75')}>
@@ -791,12 +768,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
 
           {/* Line 4: Due info */}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-caption">
-            <span>
-              {(bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
-                ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
-                : formatBillDueLabel(bill)
-              }
-            </span>
+            <span>{dueSummary}</span>
             <span className="text-gray-300">·</span>
             <span className="capitalize">{freqLabel(bill.frequency)}</span>
           </div>

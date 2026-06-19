@@ -43,6 +43,7 @@ from app.services.bill_cycles import (
     local_today,
     mark_bill_cycle_paid,
     mark_bill_cycle_unpaid,
+    next_due_date_after_bill,
     next_due_date_for_bill,
     occurrence_dates_for_bill,
 )
@@ -110,8 +111,14 @@ def _bill_to_response(
         user_share = amount
         is_user_responsible = True
 
-    next_due_date = occurrence_due_date or _compute_next_due_date(bill)
+    cycle_due_date = occurrence_due_date or _compute_next_due_date(bill)
     cycle_is_paid = bool(cycle_payment and cycle_payment.is_paid)
+    next_due_date = cycle_due_date
+    if cycle_is_paid and cycle_due_date is not None:
+        # Once the current occurrence is paid, the list should advance to the
+        # next scheduled occurrence instead of keeping the paid cycle's past
+        # due date as the "next" due date.
+        next_due_date = next_due_date_after_bill(bill, cycle_due_date)
 
     return BillResponse(
         id=bill.id,
@@ -144,7 +151,7 @@ def _bill_to_response(
         user_share=user_share,
         is_user_responsible=is_user_responsible,
         member_count=member_count if is_household else None,
-        occurrence_due_date=next_due_date,
+        occurrence_due_date=cycle_due_date,
         cycle_paid_date=cycle_payment.paid_date if cycle_payment else None,
         cycle_paid_amount=cycle_payment.amount_paid if cycle_payment else None,
         cycle_amount_due=cycle_payment.amount_due if cycle_payment else amount,
