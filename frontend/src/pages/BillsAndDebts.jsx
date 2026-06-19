@@ -10,6 +10,7 @@ import DebtInterestPanel from '../components/DebtInterestPanel';
 import { formatLabel } from '../utils/formatLabel';
 import { formatFriendlyDate } from '../utils/formatDate';
 import { getCategoryColor } from '../utils/categoryColors';
+import { formatBillListDueLabel, isBillPaidForCurrentCycle } from '../utils/billDueDate';
 const Bills = lazy(() => import('./Bills'));
 const Debts = lazy(() => import('./Debts'));
 import {
@@ -32,6 +33,13 @@ const fmtCurrency = (val) => {
   const n = Number(val);
   const v = isNaN(n) ? 0 : n;
   return `$${v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+};
+
+const safePaidBillDueLabel = (bill) => {
+  const label = formatBillListDueLabel(bill);
+  if (!/^overdue\b/i.test(label)) return label;
+  const paidAt = bill?.cycle_paid_date || bill?.paid_date;
+  return paidAt ? `Paid ${formatFriendlyDate(paidAt)}` : 'Paid';
 };
 
 export default function BillsAndDebts() {
@@ -265,7 +273,7 @@ function AllTabContent({ bills, debts, combinedItems, totalBillsAmount, totalDeb
 
 const CombinedCard = memo(function CombinedCard({ item }) {
   const isBill = item._type === 'bill';
-  const isPaid = isBill ? item.is_paid : item.is_paid_this_period;
+  const isPaid = isBill ? isBillPaidForCurrentCycle(item) : item.is_paid_this_period;
 
   const displayAmount = isBill
     ? (item.payment_mode === 'split' && item.is_household_bill ? (item.user_share ?? item.amount) : item.amount)
@@ -278,6 +286,13 @@ const CombinedCard = memo(function CombinedCard({ item }) {
   const typeLabel = isBill ? item.category : formatLabel(item.type || 'debt');
   const TypeIcon = isBill ? FileText : TrendingDown;
   const iconTone = isBill ? 'accent' : 'debt';
+  const dueLabel = isBill
+    ? (isPaid ? safePaidBillDueLabel(item) : formatBillListDueLabel(item))
+    : item.next_due_date
+      ? `Due ${formatFriendlyDate(item.next_due_date)}`
+      : item.due_day
+        ? `Due day ${item.due_day}`
+        : 'Due --';
 
   return (
     <Card className={cn('overflow-hidden transition-shadow hover:shadow-[var(--shadow-card-hover)]', isPaid && 'opacity-80')}>
@@ -360,14 +375,7 @@ const CombinedCard = memo(function CombinedCard({ item }) {
             )}
 
             <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-surface-subtle/80 px-2.5 py-2 text-caption">
-              <span>
-                Due{' '}
-                {item.next_due_date
-                  ? formatFriendlyDate(item.next_due_date)
-                  : item.due_day
-                    ? `day ${item.due_day}`
-                    : '--'}
-              </span>
+              <span>{dueLabel}</span>
               {isBill && item.frequency && (
                 <>
                   <span className="text-muted">·</span>

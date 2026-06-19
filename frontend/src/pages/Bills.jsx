@@ -62,6 +62,13 @@ const freqLabel = (freq) => {
 
 const getBillOccurrenceDueDate = (bill) => bill?.occurrence_due_date || bill?.next_due_date || null;
 
+const safePaidBillDueLabel = (bill) => {
+  const label = formatBillListDueLabel(bill);
+  if (!/^overdue\b/i.test(label)) return label;
+  const paidAt = bill?.cycle_paid_date || bill?.paid_date;
+  return paidAt ? `Paid ${formatFriendlyDate(paidAt)}` : 'Paid';
+};
+
 export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }) {
   const { user } = useAuth();
   const { activeBudget, budgetVersion } = useBudget();
@@ -671,7 +678,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     const displayAmount = bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount;
     const catColor = getCategoryColor(bill.category);
     const dueSummary = isPaid
-      ? formatBillListDueLabel(bill)
+      ? safePaidBillDueLabel(bill)
       : (bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
         ? `Every ${bill.frequency === 'biweekly' ? 'other ' : ''}${DAY_NAMES[bill.day_of_week]}`
         : formatBillListDueLabel(bill);

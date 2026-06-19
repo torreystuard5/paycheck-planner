@@ -133,6 +133,24 @@ describe('billDueDate helpers', () => {
     });
   });
 
+  it('never returns overdue text for a paid bill list label', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-19T12:00:00Z'));
+
+    const label = formatBillListDueLabel({
+      occurrence_due_date: '2026-06-01',
+      next_due_date: '2026-07-05',
+      cycle_paid_date: '2026-06-18T09:00:00Z',
+      frequency: 'monthly',
+      due_day: 5,
+      is_paid: true,
+      is_overdue: true,
+    });
+
+    expect(label).not.toMatch(/overdue/i);
+    expect(label).toBe('Next due Jul 5');
+  });
+
   it('sorts paid bills by the paid-aware display date instead of the stale occurrence date', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-18T12:00:00Z'));
