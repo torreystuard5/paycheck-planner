@@ -261,6 +261,141 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_biweekly_bill_prefers_next_unpaid_occurrence_in_current_month(self):
+        from app.routers.bills import _bill_responses_for_current_cycle
+
+        bill = _bill(
+            name="Amanda Car",
+            amount=Decimal("120"),
+            frequency="biweekly",
+            due_day=None,
+            day_of_week=4,
+            start_date=date(2026, 5, 22),
+        )
+        user = _user(id=bill.user_id)
+        paid_row = BillCyclePayment(
+            bill_id=bill.id,
+            user_id=bill.user_id,
+            due_date=date(2026, 6, 5),
+            cycle_year=2026,
+            cycle_month=6,
+            amount_due=Decimal("120"),
+            amount_paid=Decimal("120"),
+            is_paid=True,
+            paid_date=datetime(2026, 6, 5, tzinfo=timezone.utc),
+            source="dashboard",
+        )
+        upcoming_row = BillCyclePayment(
+            bill_id=bill.id,
+            user_id=bill.user_id,
+            due_date=date(2026, 6, 19),
+            cycle_year=2026,
+            cycle_month=6,
+            amount_due=Decimal("120"),
+            amount_paid=Decimal("0"),
+            is_paid=False,
+            source="auto_generated",
+        )
+
+        async def run():
+            db = AsyncMock()
+
+            with patch(
+                "app.routers.bills.auto_generate_missing_cycle_rows",
+                new_callable=AsyncMock,
+                return_value=0,
+            ), patch(
+                "app.routers.bills.get_cycle_payments_for_month",
+                new_callable=AsyncMock,
+                return_value={
+                    (bill.id, paid_row.due_date): paid_row,
+                    (bill.id, upcoming_row.due_date): upcoming_row,
+                },
+            ), patch(
+                "app.routers.bills._get_household_member_count",
+                new_callable=AsyncMock,
+                return_value=1,
+            ), patch(
+                "app.routers.bills.local_today",
+                return_value=date(2026, 6, 18),
+            ):
+                responses = await _bill_responses_for_current_cycle(db, [bill], user)
+
+            self.assertEqual(len(responses), 1)
+            self.assertFalse(responses[0].is_paid)
+            self.assertEqual(responses[0].occurrence_due_date, date(2026, 6, 19))
+            self.assertEqual(responses[0].next_due_date, date(2026, 6, 19))
+
+        asyncio.run(run())
+
+    def test_biweekly_bill_uses_latest_paid_occurrence_when_month_is_fully_paid(self):
+        from app.routers.bills import _bill_responses_for_current_cycle
+
+        bill = _bill(
+            name="Amanda Car",
+            amount=Decimal("120"),
+            frequency="biweekly",
+            due_day=None,
+            day_of_week=4,
+            start_date=date(2026, 5, 22),
+        )
+        user = _user(id=bill.user_id)
+        early_paid_row = BillCyclePayment(
+            bill_id=bill.id,
+            user_id=bill.user_id,
+            due_date=date(2026, 6, 5),
+            cycle_year=2026,
+            cycle_month=6,
+            amount_due=Decimal("120"),
+            amount_paid=Decimal("120"),
+            is_paid=True,
+            paid_date=datetime(2026, 6, 5, tzinfo=timezone.utc),
+            source="dashboard",
+        )
+        late_paid_row = BillCyclePayment(
+            bill_id=bill.id,
+            user_id=bill.user_id,
+            due_date=date(2026, 6, 19),
+            cycle_year=2026,
+            cycle_month=6,
+            amount_due=Decimal("120"),
+            amount_paid=Decimal("120"),
+            is_paid=True,
+            paid_date=datetime(2026, 6, 19, tzinfo=timezone.utc),
+            source="dashboard",
+        )
+
+        async def run():
+            db = AsyncMock()
+
+            with patch(
+                "app.routers.bills.auto_generate_missing_cycle_rows",
+                new_callable=AsyncMock,
+                return_value=0,
+            ), patch(
+                "app.routers.bills.get_cycle_payments_for_month",
+                new_callable=AsyncMock,
+                return_value={
+                    (bill.id, early_paid_row.due_date): early_paid_row,
+                    (bill.id, late_paid_row.due_date): late_paid_row,
+                },
+            ), patch(
+                "app.routers.bills._get_household_member_count",
+                new_callable=AsyncMock,
+                return_value=1,
+            ), patch(
+                "app.routers.bills.local_today",
+                return_value=date(2026, 6, 20),
+            ):
+                responses = await _bill_responses_for_current_cycle(db, [bill], user)
+
+            self.assertEqual(len(responses), 1)
+            self.assertTrue(responses[0].is_paid)
+            self.assertEqual(responses[0].occurrence_due_date, date(2026, 6, 19))
+            self.assertEqual(responses[0].next_due_date, date(2026, 7, 3))
+
+        asyncio.run(run())
+
 
 if __name__ == "__main__":
     unittest.main()

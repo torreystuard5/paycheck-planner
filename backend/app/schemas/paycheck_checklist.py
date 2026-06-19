@@ -10,6 +10,7 @@ class ChecklistToggle(BaseModel):
     item_id: UUID
     pay_period_start: date
     is_checked: bool
+    occurrence_due_date: Optional[date] = None
 
 
 class ChecklistItemOut(BaseModel):

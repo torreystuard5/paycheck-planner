@@ -654,6 +654,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     const isPaid = bill.is_paid;
     const displayAmount = bill.payment_mode === 'split' && bill.is_household_bill ? (bill.user_share ?? bill.amount) : bill.amount;
     const catColor = getCategoryColor(bill.category);
+    const paidStatusDate = bill.cycle_paid_date || bill.paid_date;
     const dueSummary = isPaid
       ? formatBillListDueLabel(bill)
       : (bill.frequency === 'weekly' || bill.frequency === 'biweekly') && bill.day_of_week != null
@@ -773,8 +774,8 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
             <span className="capitalize">{freqLabel(bill.frequency)}</span>
           </div>
 
-          {isPaid && bill.paid_date && (
-            <p className="text-xs text-green-600 mt-1">Paid {formatFriendlyDate(bill.paid_date)}</p>
+          {isPaid && paidStatusDate && (
+            <p className="text-xs text-green-600 mt-1">Paid {formatFriendlyDate(paidStatusDate)}</p>
           )}
             </div>
           </div>

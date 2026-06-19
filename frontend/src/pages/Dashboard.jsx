@@ -340,6 +340,7 @@ export default function Dashboard() {
         item_id: itemId,
         pay_period_start: payPeriodStart,
         is_checked: newState,
+        occurrence_due_date: item.occurrence_due_date || item.due_date || null,
       });
 
       setPaycheckPlan((prev) => patchPaycheckPlanItemPaid(prev, item.item_type, itemId, newState));

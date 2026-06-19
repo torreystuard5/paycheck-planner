@@ -1,3 +1,4 @@
+import inspect
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -9,7 +10,14 @@ from app.database import get_db
 from app.models.bill import Bill
 from app.models.debt import Debt
 from app.models.paycheck_checklist import PaycheckChecklist
+from app.models.transaction import Payment
 from app.models.user import User
+from app.services.bill_cycles import (
+    local_today,
+    mark_bill_cycle_paid,
+    mark_bill_cycle_unpaid,
+    next_due_date_for_bill,
+)
 from app.services.debt_payment_service import (
     create_period_debt_payment,
     dedupe_period_debt_payments,
@@ -56,7 +64,13 @@ async def toggle_checklist_item(
         await _sync_debt_payment(db, current_user, body.item_id, body.is_checked, body.pay_period_start)
 
     if body.item_type == "bill":
-        await _sync_bill_payment(db, current_user, body.item_id, body.is_checked)
+        await _sync_bill_payment(
+            db,
+            current_user,
+            body.item_id,
+            body.is_checked,
+            body.occurrence_due_date,
+        )
 
     result = await db.execute(
         select(PaycheckChecklist).where(
@@ -138,9 +152,13 @@ async def _sync_debt_payment(
 
 
 async def _sync_bill_payment(
-    db: AsyncSession, user: User, bill_id, is_checked: bool
+    db: AsyncSession,
+    user: User,
+    bill_id,
+    is_checked: bool,
+    occurrence_due_date: date | None = None,
 ):
-    """Set or clear Bill.is_paid to stay in sync."""
+    """Sync bill checklist state to the correct bill cycle row."""
     # Find the bill (own or household)
     if user.household_id:
         bill_result = await db.execute(
@@ -160,27 +178,45 @@ async def _sync_bill_payment(
     if not bill:
         return
 
+    if occurrence_due_date is not None:
+        due_date = occurrence_due_date
+    elif any(
+        getattr(bill, attr, None) is not None
+        for attr in ("frequency", "due_day", "day_of_week", "start_date")
+    ):
+        due_date = next_due_date_for_bill(bill, local_today(user))
+    else:
+        due_date = local_today(user)
+    if due_date is None:
+        return
+
     if is_checked:
-        bill.is_paid = True
-        bill.paid_date = datetime.now(timezone.utc)
-        bill.paid_amount = bill.amount
+        cycle_payment = await mark_bill_cycle_paid(
+            db=db,
+            bill=bill,
+            user=user,
+            due_date=due_date,
+            amount_paid=Decimal(str(bill.amount or 0)),
+            paid_date=datetime.now(timezone.utc),
+            source="dashboard",
+        )
         # Auto-log payment record
         try:
             auto_payment = Payment(
                 user_id=user.id,
                 bill_id=bill.id,
-                amount=bill.amount,
-                paid_date=datetime.now(timezone.utc),
+                amount=cycle_payment.amount_paid or bill.amount,
+                paid_date=(cycle_payment.paid_date.date() if cycle_payment.paid_date else due_date),
                 source="dashboard",
                 auto_logged=True,
             )
-            db.add(auto_payment)
+            maybe_awaitable = db.add(auto_payment)
+            if inspect.isawaitable(maybe_awaitable):
+                await maybe_awaitable
         except Exception:
             pass
     else:
-        bill.is_paid = False
-        bill.paid_date = None
-        bill.paid_amount = None
+        await mark_bill_cycle_unpaid(db, bill, due_date, user.id)
         # Remove auto-logged payment record
         try:
             auto_result = await db.execute(

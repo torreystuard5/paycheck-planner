@@ -580,12 +580,9 @@ class TestBillsUnchanged(unittest.TestCase):
     by our changes (we didn't touch it, but confirm it still functions).
     """
 
-    @patch("app.routers.paycheck_checklist.date")
-    def test_bill_pay_still_works(self, mock_date):
-        """Bill payment sync sets is_paid=True on the bill."""
+    def test_bill_pay_still_works(self):
+        """Bill payment sync routes through the bill-cycle paid path."""
         from app.routers.paycheck_checklist import _sync_bill_payment
-
-        mock_date.today.return_value = date(2026, 5, 15)
 
         user = _fake_user()
         bill = SimpleNamespace(
@@ -603,12 +600,23 @@ class TestBillsUnchanged(unittest.TestCase):
             _FakeResult([bill]),    # Bill lookup
         ])
 
-        asyncio.run(
-            _sync_bill_payment(session, user, bill.id, True)
-        )
+        async def fake_mark_bill_cycle_paid(*args, **kwargs):
+            bill.is_paid = True
+            bill.paid_amount = Decimal("120")
+            bill.paid_date = datetime(2026, 5, 15, tzinfo=timezone.utc)
+            return SimpleNamespace(amount_paid=Decimal("120"), paid_date=bill.paid_date)
+
+        with patch(
+            "app.routers.paycheck_checklist.mark_bill_cycle_paid",
+            new=AsyncMock(side_effect=fake_mark_bill_cycle_paid),
+        ) as mock_mark_paid:
+            asyncio.run(
+                _sync_bill_payment(session, user, bill.id, True, date(2026, 5, 15))
+            )
 
         self.assertTrue(bill.is_paid)
         self.assertEqual(bill.paid_amount, Decimal("120"))
+        self.assertEqual(mock_mark_paid.await_args.kwargs["due_date"], date(2026, 5, 15))
 
 
 # ===========================================================================

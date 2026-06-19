@@ -170,6 +170,30 @@ async def log_bill_action(db: AsyncSession, bill_id, bill_name, user_id, action_
     db.add(entry)
 
 
+def _select_bill_cycle_payment(
+    today: date,
+    cycle_payments: list[BillCyclePayment],
+) -> BillCyclePayment | None:
+    """Pick the single cycle row the Bills list should represent for this month."""
+    if not cycle_payments:
+        return None
+
+    ordered = sorted(cycle_payments, key=lambda row: row.due_date)
+    overdue_unpaid = [row for row in ordered if row.due_date < today and not row.is_paid]
+    if overdue_unpaid:
+        return overdue_unpaid[0]
+
+    upcoming_unpaid = [row for row in ordered if row.due_date >= today and not row.is_paid]
+    if upcoming_unpaid:
+        return upcoming_unpaid[0]
+
+    paid_rows = [row for row in ordered if row.is_paid]
+    if paid_rows:
+        return paid_rows[-1]
+
+    return ordered[0]
+
+
 async def _bill_responses_for_current_cycle(
     db: AsyncSession,
     bills: list[Bill],
@@ -185,11 +209,18 @@ async def _bill_responses_for_current_cycle(
     payments_by_key = await get_cycle_payments_for_month(
         db, bill_ids, cycle_year, cycle_month
     )
-    payments_by_bill: dict[UUID, BillCyclePayment] = {}
+    month_payments_by_bill: dict[UUID, list[BillCyclePayment]] = {}
+    selected_payment_by_bill: dict[UUID, BillCyclePayment] = {}
     due_dates_by_bill: dict[UUID, date] = {}
-    for (bill_id, due_date), payment in payments_by_key.items():
-        due_dates_by_bill[bill_id] = due_date
-        payments_by_bill[bill_id] = payment
+    for (bill_id, _due_date), payment in payments_by_key.items():
+        month_payments_by_bill.setdefault(bill_id, []).append(payment)
+
+    for bill in bills:
+        payment = _select_bill_cycle_payment(today, month_payments_by_bill.get(bill.id, []))
+        if payment is None:
+            continue
+        due_dates_by_bill[bill.id] = payment.due_date
+        selected_payment_by_bill[bill.id] = payment
 
     for bill in bills:
         if bill.id in due_dates_by_bill:
@@ -204,7 +235,7 @@ async def _bill_responses_for_current_cycle(
             current_user.id,
             member_count,
             occurrence_due_date=due_dates_by_bill.get(bill.id),
-            cycle_payment=payments_by_bill.get(bill.id),
+            cycle_payment=selected_payment_by_bill.get(bill.id),
         )
         for bill in bills
     ]

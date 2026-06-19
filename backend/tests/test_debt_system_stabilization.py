@@ -756,11 +756,9 @@ class TestCase20_CurrentPaycheckShowsCorrectPaidState(unittest.TestCase):
 class TestCase21_BillsStillPayUnpayCorrectly(unittest.TestCase):
     """Case 21: Bills still pay/unpay correctly."""
 
-    @patch("app.routers.paycheck_checklist.date")
-    def test_bill_pay_still_works(self, mock_date):
+    def test_bill_pay_still_works(self):
         from app.routers.paycheck_checklist import _sync_bill_payment
 
-        mock_date.today.return_value = date(2026, 5, 15)
         user = _fake_user()
         bill = SimpleNamespace(
             id=uuid4(),
@@ -775,15 +773,25 @@ class TestCase21_BillsStillPayUnpayCorrectly(unittest.TestCase):
 
         session = _build_session([_FakeResult([bill])])
 
-        _run(_sync_bill_payment(session, user, bill.id, True))
+        async def fake_mark_bill_cycle_paid(*args, **kwargs):
+            bill.is_paid = True
+            bill.paid_amount = Decimal("120")
+            bill.paid_date = datetime(2026, 5, 15, tzinfo=timezone.utc)
+            return SimpleNamespace(amount_paid=Decimal("120"), paid_date=bill.paid_date)
+
+        with patch(
+            "app.routers.paycheck_checklist.mark_bill_cycle_paid",
+            new=AsyncMock(side_effect=fake_mark_bill_cycle_paid),
+        ) as mock_mark_paid:
+            _run(_sync_bill_payment(session, user, bill.id, True, date(2026, 5, 15)))
+
         self.assertTrue(bill.is_paid)
         self.assertEqual(bill.paid_amount, Decimal("120"))
+        self.assertEqual(mock_mark_paid.await_args.kwargs["due_date"], date(2026, 5, 15))
 
-    @patch("app.routers.paycheck_checklist.date")
-    def test_bill_unpay_still_works(self, mock_date):
+    def test_bill_unpay_still_works(self):
         from app.routers.paycheck_checklist import _sync_bill_payment
 
-        mock_date.today.return_value = date(2026, 5, 15)
         user = _fake_user()
         bill = SimpleNamespace(
             id=uuid4(),
@@ -802,10 +810,22 @@ class TestCase21_BillsStillPayUnpayCorrectly(unittest.TestCase):
             _FakeResult([]),      # checklist delete
         ])
 
-        _run(_sync_bill_payment(session, user, bill.id, False))
+        async def fake_mark_bill_cycle_unpaid(*args, **kwargs):
+            bill.is_paid = False
+            bill.paid_date = None
+            bill.paid_amount = None
+
+        with patch(
+            "app.routers.paycheck_checklist.mark_bill_cycle_unpaid",
+            new=AsyncMock(side_effect=fake_mark_bill_cycle_unpaid),
+        ) as mock_mark_unpaid:
+            _run(_sync_bill_payment(session, user, bill.id, False, date(2026, 5, 15)))
+
         self.assertFalse(bill.is_paid)
         self.assertIsNone(bill.paid_date)
         self.assertIsNone(bill.paid_amount)
+        args = mock_mark_unpaid.await_args.args
+        self.assertEqual(args[2], date(2026, 5, 15))
 
 
 class TestCase22_SplitBillsStillBehaveCorrectly(unittest.TestCase):

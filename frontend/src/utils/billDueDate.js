@@ -7,13 +7,46 @@ function parseDueDateValue(raw) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function startOfDay(value) {
+  const out = new Date(value);
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
+function getToday() {
+  return startOfDay(new Date());
+}
+
+function getPaidStatusLabel(bill, userDateFormat) {
+  const nextDue = parseDueDateValue(bill?.next_due_date);
+  const today = getToday();
+
+  if (nextDue) {
+    const normalizedNextDue = startOfDay(nextDue);
+    if (differenceInCalendarDays(normalizedNextDue, today) >= 0) {
+      return `Next due ${formatBillDateText(normalizedNextDue.toISOString().slice(0, 10), userDateFormat)}`;
+    }
+  }
+
+  const paidAt = bill?.cycle_paid_date || bill?.paid_date;
+  if (paidAt) {
+    return `Paid ${formatFriendlyDate(paidAt)}`;
+  }
+
+  return 'Paid for this period';
+}
+
 /** Resolve the effective due date from bill API fields. */
 export function parseBillDueDate(bill) {
   return parseDueDateValue(bill?.occurrence_due_date || bill?.next_due_date || bill?.due_date);
 }
 
 function parseBillDisplayDueDate(bill) {
-  if (bill?.is_paid) return parseDueDateValue(bill?.next_due_date);
+  if (bill?.is_paid) {
+    const nextDue = parseDueDateValue(bill?.next_due_date);
+    if (!nextDue) return null;
+    return differenceInCalendarDays(startOfDay(nextDue), getToday()) >= 0 ? nextDue : null;
+  }
   return parseBillDueDate(bill);
 }
 
@@ -43,6 +76,28 @@ export function isSplitHouseholdBill(bill) {
  * Due date label, relative text, and status badge for list rows.
  */
 export function getBillDueInfo(bill, userDateFormat) {
+  if (bill?.is_paid) {
+    const label = getPaidStatusLabel(bill, userDateFormat);
+    const nextDue = parseBillDisplayDueDate(bill);
+    const isoDate = nextDue ? nextDue.toISOString().slice(0, 10) : null;
+    const today = getToday();
+    const diff = nextDue ? differenceInCalendarDays(startOfDay(nextDue), today) : null;
+
+    return {
+      dateText: nextDue && isoDate ? formatBillDateText(isoDate, userDateFormat) : label.replace(/^Paid /, ''),
+      relativeText:
+        nextDue && diff !== null
+          ? diff > 0
+            ? `Next due in ${diff} days`
+            : diff === 0
+              ? 'Next due today'
+              : null
+          : null,
+      statusLabel: 'Paid',
+      badgeVariant: 'success',
+    };
+  }
+
   const due = parseBillDisplayDueDate(bill);
   const isoDate = due ? due.toISOString().slice(0, 10) : null;
 
@@ -63,22 +118,11 @@ export function getBillDueInfo(bill, userDateFormat) {
     };
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dueDay = new Date(due);
-  dueDay.setHours(0, 0, 0, 0);
+  const today = getToday();
+  const dueDay = startOfDay(due);
   const diff = differenceInCalendarDays(dueDay, today);
 
   const dateText = formatBillDateText(isoDate, userDateFormat);
-
-  if (bill?.is_paid) {
-    return {
-      dateText,
-      relativeText: diff > 0 ? `Next due in ${diff} days` : diff === 0 ? 'Next due today' : null,
-      statusLabel: 'Paid',
-      badgeVariant: 'success',
-    };
-  }
 
   if (bill?.is_overdue || diff < 0) {
     const days = Math.abs(diff);
@@ -126,19 +170,14 @@ export function getBillDueInfo(bill, userDateFormat) {
 }
 
 export function formatBillListDueLabel(bill, userDateFormat) {
-  const due = parseBillDisplayDueDate(bill);
-
   if (bill?.is_paid) {
-    if (!due) return 'Paid for this period';
-    const isoDate = due.toISOString().slice(0, 10);
-    return `Next due ${formatBillDateText(isoDate, userDateFormat)}`;
+    return getPaidStatusLabel(bill, userDateFormat);
   }
 
+  const due = parseBillDisplayDueDate(bill);
   if (due) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dueDay = new Date(due);
-    dueDay.setHours(0, 0, 0, 0);
+    const today = getToday();
+    const dueDay = startOfDay(due);
     const diff = differenceInCalendarDays(dueDay, today);
     const dateLabel = formatBillDateText(due.toISOString().slice(0, 10), userDateFormat);
 
