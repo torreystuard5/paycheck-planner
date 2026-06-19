@@ -12,6 +12,7 @@ from app.services.bill_cycles import (
     due_date_for_month,
     first_biweekly_on_or_after,
     mark_bill_cycle_paid,
+    next_due_date_after_bill,
     next_due_date_for_bill,
     occurrence_dates_for_bill,
 )
@@ -127,6 +128,14 @@ def test_next_due_date_advances_monthly_style_frequencies():
     assert next_due_date_for_bill(semi_monthly, today=date(2026, 6, 17)) == date(2026, 7, 1)
     assert next_due_date_for_bill(quarterly, today=date(2026, 4, 11)) == date(2026, 7, 10)
     assert next_due_date_for_bill(annual, today=date(2026, 5, 16)) == date(2027, 5, 15)
+
+
+def test_next_due_date_after_bill_respects_monthly_due_day_rollover():
+    monthly = _bill(frequency="monthly", due_day=5)
+    semi_monthly = _bill(frequency="semi_monthly", due_day=5)
+
+    assert next_due_date_after_bill(monthly, date(2026, 6, 1)) == date(2026, 7, 5)
+    assert next_due_date_after_bill(semi_monthly, date(2026, 6, 1)) == date(2026, 6, 20)
 
 
 def test_next_due_date_only_returns_past_when_no_future_occurrence_exists():

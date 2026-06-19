@@ -293,7 +293,18 @@ def next_due_date_for_bill(bill: Bill, today: date | None = None) -> date | None
 
 def next_due_date_after_bill(bill: Bill, after_date: date) -> date | None:
     """Return the first scheduled occurrence strictly after the provided date."""
-    window_start = after_date + timedelta(days=1)
+    freq = (bill.frequency or "monthly").lower()
+    normalized_after = after_date
+    if freq in ("monthly", "semi_monthly") and bill.due_day is not None:
+        month_start, month_end = month_bounds(after_date.year, after_date.month)
+        cycle_dates = occurrence_dates_for_bill(bill, month_start, month_end)
+        if cycle_dates:
+            normalized_after = next(
+                (candidate for candidate in cycle_dates if candidate >= after_date),
+                cycle_dates[-1],
+            )
+
+    window_start = normalized_after + timedelta(days=1)
     dates = occurrence_dates_for_bill(bill, window_start, _add_months(window_start, 18))
     return dates[0] if dates else None
 
