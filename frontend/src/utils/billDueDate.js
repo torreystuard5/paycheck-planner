@@ -3,7 +3,8 @@ import { formatDate, formatFriendlyDate } from './formatDate';
 
 function parseDueDateValue(raw) {
   if (!raw) return null;
-  const parsed = new Date(raw.includes('T') ? raw : `${raw}T00:00:00`);
+  const value = String(raw);
+  const parsed = new Date(value.includes('T') ? value : `${value}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
@@ -17,19 +18,145 @@ function getToday() {
   return startOfDay(new Date());
 }
 
-function isBillPaid(bill) {
-  return Boolean(bill?.is_paid || bill?.cycle_paid_date || bill?.paid_date);
+export function isBillPaidForCurrentCycle(bill) {
+  return bill?.is_paid === true;
+}
+
+function addDays(value, days) {
+  const out = startOfDay(value);
+  out.setDate(out.getDate() + days);
+  return out;
+}
+
+function actualDueDate(year, monthIndex, dueDay) {
+  return new Date(year, monthIndex + 1, 0).getDate() < dueDay
+    ? new Date(year, monthIndex + 1, 0)
+    : new Date(year, monthIndex, dueDay);
+}
+
+function addMonths(value, months) {
+  const source = startOfDay(value);
+  const targetMonth = source.getMonth() + months;
+  return actualDueDate(source.getFullYear(), targetMonth, source.getDate());
+}
+
+function firstWeekdayOnOrAfter(value, dayOfWeek) {
+  const start = startOfDay(value);
+  const apiWeekday = (start.getDay() + 6) % 7;
+  const daysAhead = (dayOfWeek - apiWeekday + 7) % 7;
+  return addDays(start, daysAhead);
+}
+
+function getNextMonthlyDueDateAfter(bill, afterDate, monthStep = 1) {
+  const dueDay = Number(bill?.due_day);
+  if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+    return addMonths(afterDate, monthStep);
+  }
+
+  let candidate = actualDueDate(afterDate.getFullYear(), afterDate.getMonth(), dueDay);
+  while (differenceInCalendarDays(candidate, afterDate) <= 0) {
+    candidate = actualDueDate(candidate.getFullYear(), candidate.getMonth() + monthStep, dueDay);
+  }
+  return candidate;
+}
+
+function getNextSemiMonthlyDueDateAfter(bill, afterDate) {
+  const dueDay = Number(bill?.due_day) || 1;
+  const secondaryDay = dueDay <= 15 ? Math.min(dueDay + 15, 31) : Math.max(dueDay - 15, 1);
+  const dueDays = [...new Set([dueDay, secondaryDay])].sort((a, b) => a - b);
+
+  let year = afterDate.getFullYear();
+  let month = afterDate.getMonth();
+  for (let i = 0; i < 24; i += 1) {
+    for (const day of dueDays) {
+      const candidate = actualDueDate(year, month, day);
+      if (differenceInCalendarDays(candidate, afterDate) > 0) {
+        return candidate;
+      }
+    }
+    month += 1;
+    if (month > 11) {
+      month = 0;
+      year += 1;
+    }
+  }
+  return null;
+}
+
+function getNextWeeklyDueDateAfter(bill, afterDate, intervalDays) {
+  const dayOfWeek = Number(bill?.day_of_week);
+  if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
+    return addDays(afterDate, intervalDays);
+  }
+
+  if (intervalDays === 14 && bill?.start_date) {
+    const startDate = parseDueDateValue(bill.start_date);
+    if (startDate) {
+      let candidate = firstWeekdayOnOrAfter(startDate, dayOfWeek);
+      while (differenceInCalendarDays(candidate, afterDate) <= 0) {
+        candidate = addDays(candidate, 14);
+      }
+      return candidate;
+    }
+  }
+
+  const nextWeekday = firstWeekdayOnOrAfter(addDays(afterDate, 1), dayOfWeek);
+  if (intervalDays === 7) return nextWeekday;
+  return differenceInCalendarDays(nextWeekday, afterDate) <= 7
+    ? addDays(startOfDay(afterDate), 14)
+    : nextWeekday;
+}
+
+function getNextScheduledDateAfter(bill, afterDate) {
+  if (!afterDate) return null;
+  const normalizedAfterDate = startOfDay(afterDate);
+  const frequency = bill?.frequency;
+  if (!frequency) return null;
+
+  if (frequency === 'weekly') return getNextWeeklyDueDateAfter(bill, normalizedAfterDate, 7);
+  if (frequency === 'biweekly') return getNextWeeklyDueDateAfter(bill, normalizedAfterDate, 14);
+  if (frequency === 'semi_monthly') return getNextSemiMonthlyDueDateAfter(bill, normalizedAfterDate);
+  if (frequency === 'quarterly') return getNextMonthlyDueDateAfter(bill, normalizedAfterDate, 3);
+  if (frequency === 'annual' || frequency === 'yearly') return getNextMonthlyDueDateAfter(bill, normalizedAfterDate, 12);
+  if (frequency === 'one_time') return null;
+  return getNextMonthlyDueDateAfter(bill, normalizedAfterDate, 1);
+}
+
+function getPaidCycleDueDate(bill) {
+  return parseDueDateValue(bill?.occurrence_due_date || bill?.due_date || bill?.next_due_date);
+}
+
+function getPaidNextDueDate(bill) {
+  const today = getToday();
+  const paidCycleDueDate = getPaidCycleDueDate(bill);
+  const rawNextDueDate = parseDueDateValue(bill?.next_due_date);
+
+  if (rawNextDueDate) {
+    const nextDueDate = startOfDay(rawNextDueDate);
+    const isUpcoming = differenceInCalendarDays(nextDueDate, today) >= 0;
+    const advancesPastPaidCycle = !paidCycleDueDate
+      || differenceInCalendarDays(nextDueDate, startOfDay(paidCycleDueDate)) > 0;
+    if (isUpcoming && advancesPastPaidCycle) {
+      return nextDueDate;
+    }
+  }
+
+  const fallbackAnchor = paidCycleDueDate || rawNextDueDate;
+  const computedNextDueDate = fallbackAnchor
+    ? getNextScheduledDateAfter(bill, fallbackAnchor)
+    : null;
+  if (computedNextDueDate && differenceInCalendarDays(computedNextDueDate, today) >= 0) {
+    return startOfDay(computedNextDueDate);
+  }
+
+  return null;
 }
 
 function getPaidStatusLabel(bill, userDateFormat) {
-  const nextDue = parseDueDateValue(bill?.next_due_date);
-  const today = getToday();
+  const nextDue = getPaidNextDueDate(bill);
 
   if (nextDue) {
-    const normalizedNextDue = startOfDay(nextDue);
-    if (differenceInCalendarDays(normalizedNextDue, today) >= 0) {
-      return `Next due ${formatBillDateText(normalizedNextDue.toISOString().slice(0, 10), userDateFormat)}`;
-    }
+    return `Next due ${formatBillDateText(nextDue.toISOString().slice(0, 10), userDateFormat)}`;
   }
 
   const paidAt = bill?.cycle_paid_date || bill?.paid_date;
@@ -37,7 +164,7 @@ function getPaidStatusLabel(bill, userDateFormat) {
     return `Paid ${formatFriendlyDate(paidAt)}`;
   }
 
-  return 'Paid for this period';
+  return 'Paid';
 }
 
 /** Resolve the effective due date from bill API fields. */
@@ -46,10 +173,8 @@ export function parseBillDueDate(bill) {
 }
 
 function parseBillDisplayDueDate(bill) {
-  if (isBillPaid(bill)) {
-    const nextDue = parseDueDateValue(bill?.next_due_date);
-    if (!nextDue) return null;
-    return differenceInCalendarDays(startOfDay(nextDue), getToday()) >= 0 ? nextDue : null;
+  if (isBillPaidForCurrentCycle(bill)) {
+    return getPaidNextDueDate(bill);
   }
   return parseBillDueDate(bill);
 }
@@ -80,7 +205,7 @@ export function isSplitHouseholdBill(bill) {
  * Due date label, relative text, and status badge for list rows.
  */
 export function getBillDueInfo(bill, userDateFormat) {
-  if (isBillPaid(bill)) {
+  if (isBillPaidForCurrentCycle(bill)) {
     const nextDue = parseBillDisplayDueDate(bill);
     const isoDate = nextDue ? nextDue.toISOString().slice(0, 10) : null;
     const today = getToday();
@@ -178,7 +303,7 @@ export function getBillDueInfo(bill, userDateFormat) {
 }
 
 export function formatBillListDueLabel(bill, userDateFormat) {
-  if (isBillPaid(bill)) {
+  if (isBillPaidForCurrentCycle(bill)) {
     return getPaidStatusLabel(bill, userDateFormat);
   }
 

@@ -450,6 +450,70 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_cycles_legacy_paid_state_promotes_current_month_due_date(self):
+        from app.routers.bills import _legacy_paid_due_dates_for_current_month
+
+        bill = _bill(
+            name="Rent",
+            amount=Decimal("800"),
+            due_day=1,
+            frequency="monthly",
+            is_paid=True,
+            paid_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            paid_amount=Decimal("800"),
+        )
+        unpaid_cycle = BillCyclePayment(
+            bill_id=bill.id,
+            user_id=bill.user_id,
+            due_date=date(2026, 6, 1),
+            cycle_year=2026,
+            cycle_month=6,
+            amount_due=Decimal("800"),
+            amount_paid=Decimal("0"),
+            is_paid=False,
+            source="auto_generated",
+        )
+
+        legacy_paid_due_dates = _legacy_paid_due_dates_for_current_month(
+            date(2026, 6, 19),
+            [bill],
+            {(bill.id, unpaid_cycle.due_date): unpaid_cycle},
+        )
+
+        self.assertEqual(legacy_paid_due_dates, {bill.id: date(2026, 6, 1)})
+
+    def test_cycles_legacy_paid_state_selects_current_month_not_future_month(self):
+        from app.routers.bills import _legacy_paid_due_dates_for_current_month
+
+        bill = _bill(
+            name="Rent",
+            amount=Decimal("800"),
+            due_day=1,
+            frequency="monthly",
+            is_paid=True,
+            paid_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            paid_amount=Decimal("800"),
+        )
+        unpaid_cycle = BillCyclePayment(
+            bill_id=bill.id,
+            user_id=bill.user_id,
+            due_date=date(2026, 7, 1),
+            cycle_year=2026,
+            cycle_month=7,
+            amount_due=Decimal("800"),
+            amount_paid=Decimal("0"),
+            is_paid=False,
+            source="auto_generated",
+        )
+
+        legacy_paid_due_dates = _legacy_paid_due_dates_for_current_month(
+            date(2026, 6, 19),
+            [bill],
+            {(bill.id, unpaid_cycle.due_date): unpaid_cycle},
+        )
+
+        self.assertEqual(legacy_paid_due_dates, {bill.id: date(2026, 6, 1)})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -249,6 +249,29 @@ def _select_legacy_paid_due_date(
     return ordered[0].due_date
 
 
+def _legacy_paid_due_dates_for_current_month(
+    today: date,
+    bills: list[Bill],
+    cycle_payments: dict[tuple[UUID, date], BillCyclePayment],
+) -> dict[UUID, date]:
+    """Map legacy Bill.is_paid state onto one current-month occurrence per bill."""
+    current_month_payments_by_bill: dict[UUID, list[BillCyclePayment]] = {}
+    for (bill_id, due_date), payment in cycle_payments.items():
+        if due_date.year == today.year and due_date.month == today.month:
+            current_month_payments_by_bill.setdefault(bill_id, []).append(payment)
+
+    out: dict[UUID, date] = {}
+    for bill in bills:
+        legacy_paid_due_date = _select_legacy_paid_due_date(
+            today,
+            bill,
+            current_month_payments_by_bill.get(bill.id, []),
+        )
+        if legacy_paid_due_date is not None:
+            out[bill.id] = legacy_paid_due_date
+    return out
+
+
 async def _bill_responses_for_current_cycle(
     db: AsyncSession,
     bills: list[Bill],
@@ -584,6 +607,11 @@ async def list_bill_cycles(
     bill_ids = [b.id for b in bills]
     bill_by_id = {b.id: b for b in bills}
     payments = await get_cycle_payments(db, bill_ids, window_start, end_date)
+    legacy_paid_due_dates = _legacy_paid_due_dates_for_current_month(
+        today,
+        bills,
+        payments,
+    )
 
     grouped: dict[tuple[int, int], list[BillResponse]] = {}
     seen: set[tuple[UUID, date]] = set()
@@ -597,12 +625,15 @@ async def list_bill_cycles(
         if key in seen:
             continue
         seen.add(key)
+        response_cycle_payment = payment
+        if legacy_paid_due_dates.get(bill_id) == due_date and not payment.is_paid:
+            response_cycle_payment = None
         response = _bill_to_response(
             bill,
             current_user.id,
             member_count,
             occurrence_due_date=due_date,
-            cycle_payment=payment,
+            cycle_payment=response_cycle_payment,
         )
         if status == "paid" and not response.is_paid:
             continue
@@ -617,12 +648,15 @@ async def list_bill_cycles(
                 continue
             payment = await ensure_pending_cycle_row(db, bill, current_user, due_date)
             seen.add(key)
+            response_cycle_payment = payment
+            if legacy_paid_due_dates.get(bill.id) == due_date and not payment.is_paid:
+                response_cycle_payment = None
             response = _bill_to_response(
                 bill,
                 current_user.id,
                 member_count,
                 occurrence_due_date=due_date,
-                cycle_payment=payment,
+                cycle_payment=response_cycle_payment,
             )
             if status == "paid" and not response.is_paid:
                 continue
