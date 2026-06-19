@@ -1,20 +1,19 @@
 import { differenceInCalendarDays } from 'date-fns';
 import { formatDate, formatFriendlyDate } from './formatDate';
 
-/** Resolve the effective due date from bill API fields. */
-export function parseBillDueDate(bill) {
-  const raw = bill?.occurrence_due_date || bill?.next_due_date || bill?.due_date;
+function parseDueDateValue(raw) {
   if (!raw) return null;
   const parsed = new Date(raw.includes('T') ? raw : `${raw}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/** Resolve the effective due date from bill API fields. */
+export function parseBillDueDate(bill) {
+  return parseDueDateValue(bill?.occurrence_due_date || bill?.next_due_date || bill?.due_date);
+}
+
 function parseBillDisplayDueDate(bill) {
-  if (bill?.is_paid && bill?.next_due_date) {
-    const raw = bill.next_due_date;
-    const parsed = new Date(raw.includes('T') ? raw : `${raw}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
+  if (bill?.is_paid) return parseDueDateValue(bill?.next_due_date);
   return parseBillDueDate(bill);
 }
 
