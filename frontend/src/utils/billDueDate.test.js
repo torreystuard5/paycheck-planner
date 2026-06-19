@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatBillListDueLabel, getBillDueInfo } from './billDueDate';
+import { formatBillListDueLabel, getBillDueInfo, sortBillsByDueDate } from './billDueDate';
 
 describe('billDueDate helpers', () => {
   afterEach(() => {
@@ -99,5 +99,49 @@ describe('billDueDate helpers', () => {
       statusLabel: 'Paid',
       badgeVariant: 'success',
     });
+  });
+
+  it('ignores overdue flags when the API marks the occurrence paid', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-18T12:00:00Z'));
+
+    expect(getBillDueInfo({
+      occurrence_due_date: '2026-06-01',
+      next_due_date: '2026-06-01',
+      cycle_paid_date: '2026-06-01T09:00:00Z',
+      frequency: 'monthly',
+      due_day: 1,
+      is_paid: true,
+      is_overdue: true,
+    })).toEqual({
+      dateText: 'Jul 1',
+      relativeText: 'Next due in 13 days',
+      statusLabel: 'Paid',
+      badgeVariant: 'success',
+    });
+  });
+
+  it('sorts paid bills by the paid-aware display date instead of the stale occurrence date', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-18T12:00:00Z'));
+
+    const sorted = sortBillsByDueDate([
+      {
+        id: 'paid-rent',
+        occurrence_due_date: '2026-06-01',
+        next_due_date: '2026-06-01',
+        frequency: 'monthly',
+        due_day: 1,
+        is_paid: true,
+      },
+      {
+        id: 'unpaid-utility',
+        occurrence_due_date: '2026-06-20',
+        next_due_date: '2026-06-20',
+        is_paid: false,
+      },
+    ]);
+
+    expect(sorted.map((bill) => bill.id)).toEqual(['unpaid-utility', 'paid-rent']);
   });
 });

@@ -175,11 +175,22 @@ export function parseBillDueDate(bill) {
   return parseDueDateValue(bill?.occurrence_due_date || bill?.next_due_date || bill?.due_date);
 }
 
-function parseBillDisplayDueDate(bill) {
+export function parseBillDisplayDueDate(bill) {
   if (isBillPaidForCurrentCycle(bill)) {
     return getPaidNextDueDate(bill);
   }
   return parseBillDueDate(bill);
+}
+
+function parseBillSortDate(bill) {
+  const displayDueDate = parseBillDisplayDueDate(bill);
+  if (displayDueDate) return displayDueDate;
+
+  if (isBillPaidForCurrentCycle(bill)) {
+    return parseDueDateValue(bill?.cycle_paid_date || bill?.paid_date);
+  }
+
+  return null;
 }
 
 function formatBillDateText(isoDate, userDateFormat) {
@@ -336,8 +347,8 @@ export function formatBillListDueLabel(bill, userDateFormat) {
 
 export function sortBillsByDueDate(bills) {
   return [...bills].sort((a, b) => {
-    const da = parseBillDueDate(a);
-    const db = parseBillDueDate(b);
+    const da = parseBillSortDate(a);
+    const db = parseBillSortDate(b);
     if (!da && !db) return 0;
     if (!da) return 1;
     if (!db) return -1;
