@@ -548,8 +548,8 @@ async def mark_bill_cycle_unpaid(
     legacy_filter = [
         Payment.bill_id == bill.id,
         Payment.auto_logged.is_(True),
-        Payment.paid_date == due_date,
     ]
+    legacy_filter.append((Payment.pay_period_date == due_date) | (Payment.paid_date == due_date))
     if user_id:
         legacy_filter.append(Payment.user_id == user_id)
     await db.execute(delete(Payment).where(*legacy_filter))

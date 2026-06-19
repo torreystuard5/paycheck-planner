@@ -595,6 +595,39 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_unpay_bill_cleanup_is_scoped_to_occurrence(self):
+        from app.routers.bills import unpay_bill
+
+        bill = _bill()
+        user = _user(id=bill.user_id)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = bill
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=result)
+        db.refresh = AsyncMock()
+        db.add = MagicMock()
+
+        async def run():
+            with patch(
+                "app.routers.bills.mark_bill_cycle_unpaid",
+                new_callable=AsyncMock,
+            ), patch(
+                "app.routers.bills._get_household_member_count",
+                new_callable=AsyncMock,
+                return_value=1,
+            ):
+                await unpay_bill(
+                    bill.id,
+                    occurrence_due_date=date(2026, 6, 1),
+                    db=db,
+                    current_user=user,
+                )
+            statements = [str(call.args[0]) for call in db.execute.await_args_list]
+            self.assertTrue(any("occurrence_due_date" in stmt for stmt in statements))
+            self.assertTrue(any("pay_period_date" in stmt for stmt in statements))
+
+        asyncio.run(run())
+
 
 if __name__ == "__main__":
     unittest.main()

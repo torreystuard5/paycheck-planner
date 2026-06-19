@@ -89,6 +89,7 @@ async def toggle_checklist_item(
             PaycheckChecklist.item_type == body.item_type,
             PaycheckChecklist.item_id == body.item_id,
             PaycheckChecklist.pay_period_start == body.pay_period_start,
+            PaycheckChecklist.occurrence_due_date == body.occurrence_due_date,
         )
     )
     item = result.scalar_one_or_none()
@@ -99,12 +100,14 @@ async def toggle_checklist_item(
             item_type=body.item_type,
             item_id=body.item_id,
             pay_period_start=body.pay_period_start,
+            occurrence_due_date=body.occurrence_due_date,
             is_checked=body.is_checked,
             checked_at=datetime.now(timezone.utc) if body.is_checked else None,
         )
         db.add(item)
     else:
         item.is_checked = body.is_checked
+        item.occurrence_due_date = body.occurrence_due_date
         item.checked_at = datetime.now(timezone.utc) if body.is_checked else None
 
     await db.flush()
@@ -225,6 +228,7 @@ async def _sync_bill_payment(
                 bill_id=bill.id,
                 amount=cycle_payment.amount_paid or bill.amount,
                 paid_date=(cycle_payment.paid_date.date() if cycle_payment.paid_date else due_date),
+                pay_period_date=due_date,
                 source="dashboard",
                 auto_logged=True,
             )
@@ -242,6 +246,10 @@ async def _sync_bill_payment(
                     Payment.bill_id == bill.id,
                     Payment.user_id == user.id,
                     Payment.auto_logged.is_(True),
+                    or_(
+                        Payment.pay_period_date == due_date,
+                        Payment.paid_date == due_date,
+                    ),
                 )
             )
             for auto_pay in auto_result.scalars().all():
@@ -252,6 +260,7 @@ async def _sync_bill_payment(
             delete(PaycheckChecklist).where(
                 PaycheckChecklist.item_type == "bill",
                 PaycheckChecklist.item_id == bill_id,
+                PaycheckChecklist.occurrence_due_date == due_date,
             )
         )
 

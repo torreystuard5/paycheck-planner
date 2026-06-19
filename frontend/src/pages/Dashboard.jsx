@@ -335,15 +335,16 @@ export default function Dashboard() {
     setChecklistLoading((prev) => ({ ...prev, [key]: true }));
 
     try {
+      const occurrenceDueDate = item.occurrence_due_date || item.due_date || null;
       await api.put('/api/v1/paycheck-checklist', {
         item_type: item.item_type,
         item_id: itemId,
         pay_period_start: payPeriodStart,
         is_checked: newState,
-        occurrence_due_date: item.occurrence_due_date || item.due_date || null,
+        occurrence_due_date: occurrenceDueDate,
       });
 
-      setPaycheckPlan((prev) => patchPaycheckPlanItemPaid(prev, item.item_type, itemId, newState));
+      setPaycheckPlan((prev) => patchPaycheckPlanItemPaid(prev, item.item_type, itemId, newState, occurrenceDueDate));
 
       if (item.item_type === 'bill') {
         setBills((prev) =>

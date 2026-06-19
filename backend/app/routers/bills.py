@@ -1042,6 +1042,7 @@ async def pay_bill(
             bill_id=bill.id,
             amount=cycle_payment.amount_paid or bill.amount,
             paid_date=(cycle_payment.paid_date.date() if cycle_payment.paid_date else due_date),
+            pay_period_date=due_date,
             source=source or "bills_page",
             auto_logged=True,
             budget_id=bill.budget_id,
@@ -1169,6 +1170,7 @@ async def unpay_bill(
         delete(PaycheckChecklist).where(
             PaycheckChecklist.item_type == "bill",
             PaycheckChecklist.item_id == bill_id,
+            PaycheckChecklist.occurrence_due_date == due_date,
         )
     )
 
@@ -1199,6 +1201,10 @@ async def unpay_bill(
                 Payment.bill_id == bill.id,
                 Payment.user_id == current_user.id,
                 Payment.auto_logged.is_(True),
+                or_(
+                    Payment.pay_period_date == due_date,
+                    Payment.paid_date == due_date,
+                ),
             )
         )
         for auto_pay in auto_result.scalars().all():

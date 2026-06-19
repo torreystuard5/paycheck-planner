@@ -122,6 +122,8 @@ class TestPaycheckChecklistBillCycleSync(unittest.TestCase):
             args = mock_mark_unpaid.await_args.args
             self.assertEqual(args[2], date(2026, 6, 5))
             self.assertEqual(args[3], user.id)
+            delete_stmt = session.execute.await_args_list[-1].args[0]
+            self.assertIn("occurrence_due_date", str(delete_stmt))
 
         asyncio.run(run())
 
