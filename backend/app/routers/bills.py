@@ -228,43 +228,26 @@ def _select_legacy_paid_due_date(
         return None
     if not bool(getattr(bill, "is_paid", False)):
         return None
-    if any(row.is_paid for row in cycle_payments):
+    if cycle_payments:
         return None
 
     raw_paid_at = getattr(bill, "paid_date", None)
     paid_on = raw_paid_at.date() if isinstance(raw_paid_at, datetime) else raw_paid_at
 
-    if not cycle_payments:
-        period_start = today.replace(day=1)
-        period_end = date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
-        dates = occurrence_dates_for_bill(bill, period_start, period_end)
-        if not dates:
-            return None
-        if isinstance(paid_on, date):
-            on_or_before = [due for due in dates if due <= paid_on]
-            if on_or_before:
-                return on_or_before[-1]
-            on_or_after = [due for due in dates if due >= paid_on]
-            if on_or_after:
-                return on_or_after[0]
-        due_so_far = [due for due in dates if due <= today]
-        return due_so_far[-1] if due_so_far else dates[0]
-
-    ordered = sorted(cycle_payments, key=lambda row: row.due_date)
-
+    period_start = today.replace(day=1)
+    period_end = date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
+    dates = occurrence_dates_for_bill(bill, period_start, period_end)
+    if not dates:
+        return None
     if isinstance(paid_on, date):
-        on_or_before = [row for row in ordered if row.due_date <= paid_on]
+        on_or_before = [due for due in dates if due <= paid_on]
         if on_or_before:
-            return on_or_before[-1].due_date
-        on_or_after = [row for row in ordered if row.due_date >= paid_on]
+            return on_or_before[-1]
+        on_or_after = [due for due in dates if due >= paid_on]
         if on_or_after:
-            return on_or_after[0].due_date
-
-    due_so_far = [row for row in ordered if row.due_date <= today]
-    if due_so_far:
-        return due_so_far[-1].due_date
-
-    return ordered[0].due_date
+            return on_or_after[0]
+    due_so_far = [due for due in dates if due <= today]
+    return due_so_far[-1] if due_so_far else dates[0]
 
 
 def _legacy_paid_due_dates_for_current_month(
@@ -643,15 +626,12 @@ async def list_bill_cycles(
         if key in seen:
             continue
         seen.add(key)
-        response_cycle_payment = payment
-        if legacy_paid_due_dates.get(bill_id) == due_date and not payment.is_paid:
-            response_cycle_payment = None
         response = _bill_to_response(
             bill,
             current_user.id,
             member_count,
             occurrence_due_date=due_date,
-            cycle_payment=response_cycle_payment,
+            cycle_payment=payment,
         )
         if status == "paid" and not response.is_paid:
             continue
@@ -664,17 +644,17 @@ async def list_bill_cycles(
             key = (bill.id, due_date)
             if key in seen:
                 continue
-            payment = await ensure_pending_cycle_row(db, bill, current_user, due_date)
             seen.add(key)
-            response_cycle_payment = payment
-            if legacy_paid_due_dates.get(bill.id) == due_date and not payment.is_paid:
-                response_cycle_payment = None
+            if legacy_paid_due_dates.get(bill.id) == due_date:
+                payment = None
+            else:
+                payment = await ensure_pending_cycle_row(db, bill, current_user, due_date)
             response = _bill_to_response(
                 bill,
                 current_user.id,
                 member_count,
                 occurrence_due_date=due_date,
-                cycle_payment=response_cycle_payment,
+                cycle_payment=payment,
             )
             if status == "paid" and not response.is_paid:
                 continue

@@ -163,7 +163,15 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
     def test_paid_monthly_bill_advances_next_due_date(self):
         from app.routers.bills import _bill_responses_for_current_cycle
 
-        bill = _bill(name="Rent", amount=Decimal("800"), due_day=1, frequency="monthly")
+        bill = _bill(
+            name="Rent",
+            amount=Decimal("800"),
+            due_day=1,
+            frequency="monthly",
+            is_paid=True,
+            paid_date=datetime(2026, 6, 9, tzinfo=timezone.utc),
+            paid_amount=Decimal("800"),
+        )
         user = _user(id=bill.user_id)
         due_date = date(2026, 6, 1)
         cycle_payment = BillCyclePayment(
@@ -204,6 +212,7 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
             self.assertTrue(responses[0].is_paid)
             self.assertEqual(responses[0].occurrence_due_date, due_date)
             self.assertEqual(responses[0].next_due_date, date(2026, 7, 1))
+            self.assertEqual(responses[0].cycle_paid_date, datetime(2026, 6, 1, tzinfo=timezone.utc))
 
         asyncio.run(run())
 
@@ -482,7 +491,7 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
 
         self.assertEqual(legacy_paid_due_dates, {})
 
-    def test_cycles_one_time_global_paid_state_selects_current_month_due_date(self):
+    def test_cycles_one_time_global_paid_state_ignored_when_cycle_row_exists(self):
         from app.routers.bills import _legacy_paid_due_dates_for_current_month
 
         bill = _bill(
@@ -511,6 +520,28 @@ class TestAutoGenerateMissingCycleRows(unittest.TestCase):
             date(2026, 6, 19),
             [bill],
             {(bill.id, unpaid_cycle.due_date): unpaid_cycle},
+        )
+
+        self.assertEqual(legacy_paid_due_dates, {})
+
+    def test_cycles_one_time_global_paid_state_used_when_cycle_row_missing(self):
+        from app.routers.bills import _legacy_paid_due_dates_for_current_month
+
+        bill = _bill(
+            name="One-time bill",
+            amount=Decimal("800"),
+            due_day=None,
+            frequency="one_time",
+            start_date=date(2026, 6, 1),
+            is_paid=True,
+            paid_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            paid_amount=Decimal("800"),
+        )
+
+        legacy_paid_due_dates = _legacy_paid_due_dates_for_current_month(
+            date(2026, 6, 19),
+            [bill],
+            {},
         )
 
         self.assertEqual(legacy_paid_due_dates, {bill.id: date(2026, 6, 1)})
