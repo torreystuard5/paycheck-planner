@@ -203,6 +203,14 @@ def _select_bill_cycle_payment(
         return None
 
     ordered = sorted(cycle_payments, key=lambda row: row.due_date)
+    latest_row = ordered[-1]
+    if latest_row.is_paid:
+        # If the most recent occurrence in the current month is already paid,
+        # represent the bill by that paid row so the response can advance to
+        # the next scheduled occurrence instead of surfacing an older overdue
+        # unpaid row from earlier in the month.
+        return latest_row
+
     overdue_unpaid = [row for row in ordered if row.due_date < today and not row.is_paid]
     if overdue_unpaid:
         return overdue_unpaid[0]
