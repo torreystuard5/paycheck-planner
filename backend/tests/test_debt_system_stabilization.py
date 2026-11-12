@@ -771,7 +771,7 @@ class TestCase21_BillsStillPayUnpayCorrectly(unittest.TestCase):
             paid_amount=None,
         )
 
-        session = _build_session([_FakeResult([bill])])
+        session = _build_session([_FakeResult([bill]), _FakeResult([])])
 
         async def fake_mark_bill_cycle_paid(*args, **kwargs):
             return SimpleNamespace(

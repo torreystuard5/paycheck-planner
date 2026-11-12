@@ -124,7 +124,8 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
         # Increment failed login count if user exists but password is wrong
         if user:
             user.failed_login_count = (user.failed_login_count or 0) + 1
-            await db.flush()
+            # This audit event must survive the failed request's rollback.
+            await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -148,6 +149,8 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="Account closed. Contact support.",
         )
 
+    if getattr(user, "account_status", "active") in ("suspended", "closed"):
+        raise HTTPException(status_code=403, detail="Account is suspended or closed. Contact support.")
     if user.must_reset_password:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -197,6 +200,8 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
             detail="User not found or inactive",
         )
 
+    if getattr(user, "account_status", "active") in ("suspended", "closed"):
+        raise HTTPException(status_code=403, detail="Account is suspended or closed. Contact support.")
     if user.must_reset_password:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -222,7 +227,16 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/logout")
-async def logout():
+async def logout(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import update
+    # Invalidate all access and refresh tokens, including concurrently issued ones.
+    await db.execute(update(User).where(User.id == current_user.id).values(
+        token_version=User.token_version + 1
+    ))
+    await db.flush()
     return {"message": "Successfully logged out"}
 
 

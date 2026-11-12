@@ -1,27 +1,19 @@
-import logging
-import os
-
 from cryptography.fernet import Fernet
 
-logger = logging.getLogger(__name__)
+from app.config import settings
 
-_key = os.environ.get("NOTES_ENCRYPTION_KEY")
-if not _key:
-    logger.warning(
-        "NOTES_ENCRYPTION_KEY not set — using insecure default key. "
-        "Set this env var in production!"
-    )
-    _key = Fernet.generate_key().decode()
 
-try:
-    _fernet = Fernet(_key if isinstance(_key, bytes) else _key.encode())
-except Exception:
-    logger.exception(
-        "Invalid NOTES_ENCRYPTION_KEY — falling back to generated key. "
-        "Existing encrypted data will be unreadable until the correct key is restored!"
-    )
-    _key = Fernet.generate_key().decode()
-    _fernet = Fernet(_key.encode())
+def _load_cipher() -> Fernet:
+    key = settings.NOTES_ENCRYPTION_KEY
+    if not key:
+        raise RuntimeError("NOTES_ENCRYPTION_KEY must be configured with a persistent Fernet key")
+    try:
+        return Fernet(key.encode())
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError("NOTES_ENCRYPTION_KEY is invalid; restore the existing encryption key") from exc
+
+
+_fernet = _load_cipher()
 
 
 def encrypt(plaintext: str | None) -> str | None:

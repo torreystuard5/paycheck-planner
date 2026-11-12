@@ -120,6 +120,8 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if getattr(user, "account_status", "active") in ("suspended", "closed"):
+        raise HTTPException(status_code=403, detail="Account is suspended or closed. Contact support.")
     validate_token_version(payload, user)
 
     if user.must_reset_password:

@@ -122,10 +122,16 @@ async def _sync_debt_payment(
 ):
     """Create or remove a DebtPayment record to stay in sync."""
     today = date.today()
-    debt_result = await db.execute(select(Debt).where(Debt.id == debt_id))
+    conditions = [Debt.id == debt_id]
+    if user.household_id:
+        conditions.append(or_(Debt.user_id == user.id, Debt.household_id == user.household_id))
+    else:
+        conditions.append(Debt.user_id == user.id)
+    # Serialize repeated payments for this debt within the request transaction.
+    debt_result = await db.execute(select(Debt).where(*conditions).with_for_update())
     debt = debt_result.scalar_one_or_none()
     if not debt:
-        return
+        raise HTTPException(status_code=404, detail="Debt not found")
 
     target_period_start = pay_period_start or today.replace(day=1)
     target_due_date = occurrence_due_date or debt_due_date_for_period(debt, target_period_start)
@@ -199,15 +205,15 @@ async def _sync_bill_payment(
                     Bill.user_id == user.id,
                     Bill.household_id == user.household_id,
                 ),
-            )
+            ).with_for_update()
         )
     else:
         bill_result = await db.execute(
-            select(Bill).where(Bill.id == bill_id, Bill.user_id == user.id)
+            select(Bill).where(Bill.id == bill_id, Bill.user_id == user.id).with_for_update()
         )
     bill = bill_result.scalar_one_or_none()
     if not bill:
-        return
+        raise HTTPException(status_code=404, detail="Bill not found")
 
     due_date = occurrence_due_date
 
@@ -221,7 +227,15 @@ async def _sync_bill_payment(
             paid_date=datetime.now(timezone.utc),
             source="dashboard",
         )
-        # Auto-log payment record
+        # Keep retries idempotent for the payer and bill occurrence.
+        existing_payment = await db.execute(select(Payment.id).where(
+            Payment.bill_id == bill.id,
+            Payment.user_id == user.id,
+            Payment.pay_period_date == due_date,
+            Payment.auto_logged.is_(True),
+        ).limit(1))
+        if existing_payment.scalar_one_or_none() is not None:
+            return
         try:
             auto_payment = Payment(
                 user_id=user.id,

@@ -598,6 +598,7 @@ class TestBillsUnchanged(unittest.TestCase):
 
         session = _build_session([
             _FakeResult([bill]),    # Bill lookup
+            _FakeResult([]),        # No auto-logged payment yet
         ])
 
         async def fake_mark_bill_cycle_paid(*args, **kwargs):

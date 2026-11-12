@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import {
   Wallet,
   CheckSquare,
@@ -79,7 +78,7 @@ export default function PaycheckPlanEnvelope({
   const payPeriodStart = current.pay_period_start || current.paycheck_date;
   const assignedItems = Array.isArray(current.assigned_items) ? current.assigned_items : [];
 
-  const { visibleItems, hiddenOverdueItems, sortedItems, stats } = useMemo(() => {
+  const { hiddenOverdueItems, sortedItems, stats } = (() => {
     const visible = assignedItems.filter(
       (item) => !(item.is_overdue && item.hidden_overdue && !assignItemPaid(item)),
     );
@@ -127,7 +126,7 @@ export default function PaycheckPlanEnvelope({
         debtAssigned,
       },
     };
-  }, [assignedItems, assignItemPaid, current]);
+  })();
 
   const paycheckAmt = Number(current.paycheck_amount) || 0;
   const totalDue = Number(current.total_due) || 0;

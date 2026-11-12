@@ -137,6 +137,8 @@ api.interceptors.response.use(
       if (!refreshToken) {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
+        isRefreshing = false;
+        processQueue(error);
         window.location.href = '/login';
         return Promise.reject(error);
       }
@@ -145,7 +147,7 @@ api.interceptors.response.use(
         const { data } = await axios.post(
           `${api.defaults.baseURL}/api/v1/auth/refresh`,
           null,
-          { params: { refresh_token: refreshToken } }
+          { params: { refresh_token: refreshToken }, timeout: 30_000 }
         );
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('refresh_token', data.refresh_token);

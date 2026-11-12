@@ -602,6 +602,8 @@ async def update_user_status(
             detail="User not found",
         )
 
+    if body.account_status in ("suspended", "closed") and user.account_status != body.account_status:
+        bump_user_token_version(user)
     user.account_status = body.account_status
     user.account_status_reason = body.reason
     log_admin_action(

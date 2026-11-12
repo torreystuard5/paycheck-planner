@@ -69,7 +69,7 @@ class TestPaycheckChecklistBillCycleSync(unittest.TestCase):
         user = _user()
         bill = _bill(user.id)
         session = AsyncMock()
-        session.execute = AsyncMock(return_value=_FakeResult(bill))
+        session.execute = AsyncMock(side_effect=[_FakeResult(bill), _FakeResult(None)])
         cycle_payment = SimpleNamespace(
             amount_paid=Decimal("120"),
             paid_date=datetime(2026, 6, 5, tzinfo=timezone.utc),

@@ -647,7 +647,7 @@ export default function AdminUsers({ embedded = false, initialUserId = null, onI
       setUsers((prev) =>
         prev.map((u) => (u.id === detailUser.id ? { ...u, subscription_tier: editTier } : u))
       );
-      await fetchUserOverrides([detailUser.id]);
+      setOverrideData(null);
     } catch (err) {
       setDetailError(err.response?.data?.detail || 'Failed to update plan tier.');
     } finally {

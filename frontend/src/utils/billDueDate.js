@@ -1,4 +1,4 @@
-import { differenceInCalendarDays } from 'date-fns';
+import { differenceInCalendarDays, format } from 'date-fns';
 import { formatDate, formatFriendlyDate } from './formatDate';
 
 function parseDueDateValue(raw) {
@@ -159,7 +159,7 @@ function formatPaidBillListLabel(bill, userDateFormat) {
   const nextDue = getPaidNextDueDate(bill);
 
   if (nextDue) {
-    return `Next due ${formatBillDateText(nextDue.toISOString().slice(0, 10), userDateFormat)}`;
+    return `Next due ${formatBillDateText(format(nextDue, 'yyyy-MM-dd'), userDateFormat)}`;
   }
 
   const paidAt = bill?.cycle_paid_date || bill?.paid_date;
@@ -231,7 +231,7 @@ export function getBillDueInfo(bill, userDateFormat) {
   }
 
   const due = parseBillDisplayDueDate(bill);
-  const isoDate = due ? due.toISOString().slice(0, 10) : null;
+  const isoDate = due ? format(due, 'yyyy-MM-dd') : null;
 
   if (!due) {
     if (bill?.due_day) {
@@ -311,7 +311,7 @@ export function formatBillListDueLabel(bill, userDateFormat) {
     const today = getToday();
     const dueDay = startOfDay(due);
     const diff = differenceInCalendarDays(dueDay, today);
-    const dateLabel = formatBillDateText(due.toISOString().slice(0, 10), userDateFormat);
+    const dateLabel = formatBillDateText(format(due, 'yyyy-MM-dd'), userDateFormat);
 
     if (diff < 0) {
       const days = Math.abs(diff);

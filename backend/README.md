@@ -38,3 +38,11 @@ PayDrift includes a referral program that rewards both the referrer and the refe
 | `REFERRAL_PROMO_END` | End date for the referral promo (ISO format, e.g. `2026-06-21`) | Not set (promo inactive) |
 
 If neither variable is set, the referral promo is inactive and no rewards are applied on plan activation. Referral codes and tracking still work — rewards simply stay in "pending" status until the promo is activated.
+
+### Persistent vault encryption
+
+Set `NOTES_ENCRYPTION_KEY` to a valid Fernet key in `backend/.env` or the process environment before startup. The API now refuses missing or invalid keys rather than generating temporary keys that lose access to vault data on restart. Preserve the existing key when upgrading; do not replace it if encrypted data already exists. Back up the key securely alongside database backups.
+
+### Session and billing behavior
+
+Logout revokes all sessions for the account. Suspended and closed accounts cannot use or refresh existing tokens. The legacy `/billing/activate-plan` endpoint returns 403; use `/billing/checkout` and signed Stripe webhooks for paid activation. Payment recovery resolves the plan from configured Stripe price IDs, so those mappings must remain available for existing subscriptions.

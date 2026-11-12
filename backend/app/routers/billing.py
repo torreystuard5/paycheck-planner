@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -19,7 +18,6 @@ from app.schemas.billing_stripe import (
 )
 from app.schemas.referral import BillingActivateRequest, BillingActivateResponse
 from app.services.billing_plans import build_plans_payload
-from app.services.referral_service import apply_referral_reward
 from app.services import stripe_webhook as stripe_wh
 from app.utils.security import get_current_user
 
@@ -233,20 +231,7 @@ async def activate_plan(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    current_user.subscription_tier = body.plan
-
-    now = datetime.now(timezone.utc)
-    if not current_user.next_billing_date:
-        current_user.next_billing_date = now + timedelta(days=30)
-
-    await apply_referral_reward(current_user, db)
-
-    await db.flush()
-    await db.refresh(current_user)
-
-    return BillingActivateResponse(
-        message="Plan activated successfully",
-        subscription_tier=current_user.subscription_tier,
-        next_billing_date=current_user.next_billing_date,
-        free_month_credits=current_user.free_month_credits,
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Plan activation requires verified checkout. Use /billing/checkout.",
     )

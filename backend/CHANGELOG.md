@@ -13,6 +13,11 @@ Commit policy: [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 ### Bug Fixes
 
+- 2026-11-12 — **security**: Enforce debt ownership and account restrictions, revoke sessions on logout, and require verified checkout for paid plans.
+- 2026-11-12 — **billing**: Restore paid access after payment recovery and prevent duplicate checklist payment history.
+- 2026-11-12 — **vault**: Require a persistent encryption key instead of generating unreadable replacements on restart.
+- 2026-11-12 — **frontend**: Preserve local calendar dates, fix admin plan update errors and refresh recovery, and stabilize paycheck rendering.
+
 - 2026-05-24 — **household**: Repair financial overview NameError on deploy
 - 2026-05-24 — **household**: Repair missing shopping_list_items on production
 - 2026-05-23 — **debts**: Debts page pay/unpay path and unified paid-state truth

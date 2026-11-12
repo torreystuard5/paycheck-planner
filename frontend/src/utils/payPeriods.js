@@ -1,4 +1,5 @@
 import {
+  format,
   addDays,
   endOfMonth,
   lastDayOfMonth,
@@ -55,5 +56,5 @@ export function payPeriodContaining(payFrequency, anchorDateStr, refDate = new D
 export function formatDateISO(d) {
   if (!d) return '';
   const x = d instanceof Date ? d : parseISO(d);
-  return x.toISOString().slice(0, 10);
+  return format(x, 'yyyy-MM-dd');
 }

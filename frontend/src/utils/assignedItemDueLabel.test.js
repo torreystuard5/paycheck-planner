@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { formatDateISO } from './payPeriods';
 import { formatAssignedItemDueLabel } from './assignedItemDueLabel';
 
 describe('formatAssignedItemDueLabel', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 5, 18, 12)); });
+  afterEach(() => vi.useRealTimers());
   it('returns relative label within a week', () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -9,7 +12,7 @@ describe('formatAssignedItemDueLabel', () => {
     due.setDate(due.getDate() + 3);
 
     const label = formatAssignedItemDueLabel({
-      due_date: due.toISOString().slice(0, 10),
+      due_date: formatDateISO(due),
       is_overdue: false,
     });
 
@@ -43,7 +46,7 @@ describe('formatAssignedItemDueLabel', () => {
     due.setDate(due.getDate() + 3);
 
     const label = formatAssignedItemDueLabel({
-      due_date: due.toISOString().slice(0, 10),
+      due_date: formatDateISO(due),
       is_paid: false,
       is_overdue: true,
     });

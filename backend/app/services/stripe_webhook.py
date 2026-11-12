@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+from app.models.pricing_config import PricingConfig
 from app.services.tier_access import sync_app_mode_to_subscription
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,21 @@ def _dt_from_ts(ts: int | None):
     if ts is None:
         return None
     return datetime.fromtimestamp(int(ts), tz=timezone.utc)
+
+
+async def _restore_paid_plan(db: AsyncSession, user: User, sub: dict) -> None:
+    """Recover entitlements only from a known Stripe price on the current subscription."""
+    prices = [item.get("price", {}).get("id") for item in sub.get("items", {}).get("data", [])]
+    prices = [price for price in prices if price]
+    if not prices:
+        raise ValueError("Subscription has no price IDs; cannot restore paid plan")
+    result = await db.execute(select(PricingConfig).where(PricingConfig.stripe_price_id.in_(prices)))
+    plans = list(result.scalars().all())
+    tiers = {plan.tier for plan in plans if plan.tier in ("pro", "business", "bundle")}
+    if len(tiers) != 1:
+        raise ValueError("Subscription price does not identify a unique paid plan")
+    user.subscription_tier = tiers.pop()
+    user.billing_period = plans[0].billing_period
 
 
 async def _save_user(db: AsyncSession, user: User) -> None:
@@ -100,6 +116,8 @@ async def handle_subscription_updated(db: AsyncSession, sub: dict) -> None:
     if not user:
         return
 
+    if user.stripe_subscription_id and str(sub.get("id")) != user.stripe_subscription_id:
+        return
     st = _status_from_stripe(sub.get("status"))
     user.stripe_subscription_id = (
         str(sub.get("id")) if sub.get("id") else user.stripe_subscription_id
@@ -119,6 +137,8 @@ async def handle_subscription_updated(db: AsyncSession, sub: dict) -> None:
         user.subscription_tier = "early_access"
         user.subscription_status = "past_due"
     else:
+        if st in ("active", "trialing"):
+            await _restore_paid_plan(db, user, sub)
         user.subscription_status = st
 
     await _save_user(db, user)
@@ -131,6 +151,8 @@ async def handle_subscription_deleted(db: AsyncSession, sub: dict) -> None:
     result = await db.execute(select(User).where(User.stripe_customer_id == str(cust)))
     user = result.scalar_one_or_none()
     if not user:
+        return
+    if user.stripe_subscription_id != str(sub.get("id")):
         return
     user.stripe_subscription_id = None
     user.subscription_status = "none"
@@ -147,7 +169,21 @@ async def handle_invoice_paid(db: AsyncSession, invoice: dict) -> None:
     user = result.scalar_one_or_none()
     if not user:
         return
-    user.subscription_status = "active"
+    subscription_id = invoice.get("subscription") or (
+        invoice.get("parent", {}).get("subscription_details", {}).get("subscription")
+    )
+    if not subscription_id or str(subscription_id) != user.stripe_subscription_id:
+        return
+    import asyncio
+    import stripe
+    from app.config import settings
+
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    sub = await asyncio.to_thread(stripe.Subscription.retrieve, str(subscription_id))
+    if sub.get("status") not in ("active", "trialing"):
+        return
+    await _restore_paid_plan(db, user, sub)
+    user.subscription_status = _status_from_stripe(sub.get("status"))
     await _save_user(db, user)
 
 
@@ -158,6 +194,11 @@ async def handle_invoice_payment_failed(db: AsyncSession, invoice: dict) -> None
     result = await db.execute(select(User).where(User.stripe_customer_id == str(cust)))
     user = result.scalar_one_or_none()
     if not user:
+        return
+    subscription_id = invoice.get("subscription") or (
+        invoice.get("parent", {}).get("subscription_details", {}).get("subscription")
+    )
+    if not subscription_id or str(subscription_id) != user.stripe_subscription_id:
         return
     user.subscription_status = "past_due"
     user.subscription_tier = "early_access"

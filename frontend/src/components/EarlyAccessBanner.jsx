@@ -1,15 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Rocket } from 'lucide-react';
 
 const STORAGE_KEY = 'earlyAccessDismissed';
 
 export default function EarlyAccessBanner() {
-  const [dismissed, setDismissed] = useState(true);
-
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) setDismissed(false);
-  }, []);
+  const [dismissed, setDismissed] = useState(() => !!localStorage.getItem(STORAGE_KEY));
 
   const handleDismiss = () => {
     localStorage.setItem(STORAGE_KEY, 'true');

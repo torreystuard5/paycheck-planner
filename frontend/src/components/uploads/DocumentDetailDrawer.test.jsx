@@ -15,9 +15,10 @@ vi.mock('../../context/BudgetContext', () => ({
   useBudget: () => ({ activeBudget: { id: 'budget-1' } }),
 }));
 
-vi.mock('../Toast', () => ({
-  useToast: () => () => {},
-}));
+vi.mock('../Toast', () => {
+  const toast = vi.fn();
+  return { useToast: () => toast };
+});
 
 import DocumentDetailDrawer from './DocumentDetailDrawer';
 import { getDocument, confirmPaystubFromDocument } from '../../services/api';
