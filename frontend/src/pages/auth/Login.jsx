@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { Loader2, HelpCircle, CheckCircle, X } from 'lucide-react';
 import api from '../../services/api';
 import AuthLayout from '../../components/AuthLayout';

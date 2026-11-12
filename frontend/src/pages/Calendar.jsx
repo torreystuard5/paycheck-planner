@@ -13,7 +13,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import api from '../services/api';
-import { useBudget } from '../context/BudgetContext';
+import { useToast } from '../components/useToast';
+import { useBudget } from '../context/useBudget';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { Button, Card, FilterChips, PageHeader } from '../components/ui';
 
@@ -166,6 +167,7 @@ function EventDetail({ evt, onClose, onTogglePaid }) {
 
 // ── Main component ──
 export default function Calendar() {
+  const toast = useToast();
   const { activeBudget, budgetVersion } = useBudget();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -237,7 +239,7 @@ export default function Calendar() {
       }
       fetchEvents();
       setSelectedEvt(null);
-    } catch {}
+    } catch { toast('Failed to update bill payment.', 'error'); }
   };
 
   // Mobile agenda view data

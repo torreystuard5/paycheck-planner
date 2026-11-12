@@ -118,15 +118,10 @@ async def load_business_context(db: AsyncSession, actor: User) -> BusinessContex
             )
         )
         row = result.scalar_one_or_none()
-    except (ProgrammingError, DBAPIError):
-        row = None
+    except (ProgrammingError, DBAPIError) as exc:
+        raise HTTPException(status_code=503, detail="Business permissions unavailable") from exc
     if not row:
-        return BusinessContext(
-            actor=actor,
-            owner_id=owner_id,
-            role="owner",
-            permissions=dict(OWNER_PERMISSIONS),
-        )
+        raise HTTPException(status_code=403, detail="Business team membership is no longer active")
     role = (row.role or "employee").lower()
     perms = _merge_permissions(role, row.permissions if isinstance(row.permissions, dict) else None)
     return BusinessContext(actor=actor, owner_id=owner_id, role=role, permissions=perms)

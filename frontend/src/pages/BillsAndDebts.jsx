@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, lazy, Suspense, memo } from 
 import { useSearchParams } from 'react-router-dom';
 import { Plus, ChevronDown, CreditCard, FileText, TrendingDown, CheckCircle, Users } from 'lucide-react';
 import api from '../services/api';
-import { useBudget } from '../context/BudgetContext';
+import { useBudget } from '../context/useBudget';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import CurrencyDisplay from '../components/CurrencyDisplay';

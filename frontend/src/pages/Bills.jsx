@@ -2,14 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Edit, Trash2, Search, FileText, Upload, ChevronDown, ChevronUp, X, AlertCircle, CheckCircle, Circle, Undo2, Users, DollarSign, Loader2, History, ArrowLeft, Pencil, Clock } from 'lucide-react';
 import SortDropdown from '../components/SortDropdown';
 import ImportExportButton from '../components/ImportExportButton';
-import { useToast } from '../components/Toast';
+import { useToast } from '../components/useToast';
 import { format, formatDistanceToNow } from 'date-fns';
 import { formatFriendlyDate } from '../utils/formatDate';
 import { formatBillListDueLabel, isBillPaidForCurrentCycle } from '../utils/billDueDate';
 import { getCategoryColor } from '../utils/categoryColors';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { useBudget } from '../context/BudgetContext';
+import { useAuth } from '../context/useAuth';
+import { useBudget } from '../context/useBudget';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -120,20 +120,9 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
   const [postponeDate, setPostponeDate] = useState('');
   const [postponing, setPostponing] = useState(false);
 
-  useEffect(() => {
-    fetchBills(true);
-    fetchPaycheckDates();
-  }, [statusFilter, sortBy, sortOrder, budgetVersion]);
-
   // Auto-open add modal when triggered from parent
-  useEffect(() => {
-    if (autoOpenAdd) {
-      openAdd();
-      onClearAutoOpen?.();
-    }
-  }, [autoOpenAdd]);
 
-  const fetchPaycheckDates = async () => {
+  const fetchPaycheckDates = useCallback(async () => {
     try {
       const res = await api.get('/api/v1/paycheck-schedules/upcoming?count=10');
       const dates = Array.isArray(res.data) ? res.data : [];
@@ -143,7 +132,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
       setPaycheckDates([]);
       setHasPaycheckSchedule(false);
     }
-  };
+  }, []);
 
   const pollBills = useCallback(async () => {
     try {
@@ -179,7 +168,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     }
   }, [user?.household_id]);
 
-  const fetchBills = async (showLoading = false) => {
+  const fetchBills = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
     try {
@@ -203,7 +192,12 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     } finally {
       if (showLoading) setLoading(false);
     }
-  };
+  }, [statusFilter, sortBy, sortOrder, activeBudget?.id]);
+
+  useEffect(() => {
+    fetchBills(true);
+    fetchPaycheckDates();
+  }, [fetchBills, fetchPaycheckDates, budgetVersion]);
 
   const fetchHistory = async (filter = historyFilter, page = 1) => {
     setHistoryLoading(true);
@@ -225,11 +219,18 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
     fetchHistory('all', 1);
   };
 
-  const openAdd = () => {
+  const openAdd = useCallback(() => {
     setEditingBill(null);
     setForm(defaultForm);
     setShowModal(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (autoOpenAdd) {
+      openAdd();
+      onClearAutoOpen?.();
+    }
+  }, [autoOpenAdd, openAdd, onClearAutoOpen]);
 
   const openEdit = (bill) => {
     setEditingBill(bill);
@@ -828,6 +829,7 @@ export default function Bills({ autoOpenAdd, onClearAutoOpen, embedded = false }
                     <span className="text-sm font-bold text-gray-900">{fmtCurrency(bd.bill?.amount ?? bill.amount)}</span>
                   </div>
 
+                  <Button variant="secondary" onClick={() => openMemberPayModal(bill)}>Record member payment</Button>
                   <div className="space-y-2">
                     {bd.members?.map((member) => {
                       const balance = Number(member.balance);

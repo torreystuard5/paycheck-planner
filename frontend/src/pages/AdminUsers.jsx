@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -21,13 +21,12 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { formatApiError } from '../utils/formatApiError';
-import { formatFriendlyDate } from '../utils/formatDate';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
 import AdminUserQuickActions from '../components/admin/AdminUserQuickActions';
-import { useToast } from '../components/Toast';
+import { useToast } from '../components/useToast';
 
 function generatePassword(length = 12) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
@@ -164,11 +163,7 @@ export default function AdminUsers({ embedded = false, initialUserId = null, onI
     setPage(1);
   }, [debouncedSearch, accountFilter, businessFilter, sortBy, sortOrder]);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [page, accountFilter, businessFilter, debouncedSearch, sortBy, sortOrder]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -193,9 +188,13 @@ export default function AdminUsers({ embedded = false, initialUserId = null, onI
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, perPage, accountFilter, businessFilter, debouncedSearch, sortBy, sortOrder]);
 
-  const resetDetailPasswordForm = () => {
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const resetDetailPasswordForm = useCallback(() => {
     setDetailNewPassword('');
     setDetailPwdShow(false);
     setDetailPwdCopied(false);
@@ -205,7 +204,7 @@ export default function AdminUsers({ embedded = false, initialUserId = null, onI
       clearTimeout(detailPwdCopyTimerRef.current);
       detailPwdCopyTimerRef.current = null;
     }
-  };
+  }, []);
 
   const handleSort = (field) => {
     if (sortBy === field) {
@@ -316,7 +315,7 @@ export default function AdminUsers({ embedded = false, initialUserId = null, onI
     }
   };
 
-  const openDetail = async (userId) => {
+  const openDetail = useCallback(async (userId) => {
     setSelectedUser(userId);
     setDetailLoading(true);
     setDetailUser(null);
@@ -337,7 +336,7 @@ export default function AdminUsers({ embedded = false, initialUserId = null, onI
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, [resetDetailPasswordForm]);
 
   const closeDetail = () => {
     setSelectedUser(null);
@@ -350,7 +349,7 @@ export default function AdminUsers({ embedded = false, initialUserId = null, onI
     if (!initialUserId) return;
     openDetail(initialUserId);
     onInitialUserOpened?.();
-  }, [initialUserId]);
+  }, [initialUserId, openDetail, onInitialUserOpened]);
 
   const handleDetailGeneratePassword = () => {
     setDetailNewPassword(generatePassword(12));
@@ -703,11 +702,6 @@ export default function AdminUsers({ embedded = false, initialUserId = null, onI
   }
 
   const totalPages = Math.ceil(total / perPage);
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '—';
-    return formatFriendlyDate(dateStr);
-  };
 
   const formatDateTime = (dateStr) => {
     if (!dateStr) return '—';

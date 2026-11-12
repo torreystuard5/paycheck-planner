@@ -15,7 +15,7 @@ export default function Refer() {
       try {
         const { data } = await api.get('/api/v1/referrals/me');
         setInfo(data);
-      } catch (err) {
+      } catch {
         setError('Failed to load referral information.');
       } finally {
         setLoading(false);

@@ -3,7 +3,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,7 @@ from app.database import get_db
 from app.utils.email import normalize_email
 from app.models.referral import ReferralReward
 from app.models.user import User
+from app.models.budget import Budget
 from app.schemas.user import TokenResponse, UserCreate, UserDateFormatUpdate, UserLogin, UserResponse, UserUpdate
 from app.services.tier_access import sync_app_mode_to_subscription
 from app.utils.security import (
@@ -90,6 +91,13 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
     await db.refresh(user)
+
+    # New accounts need the same default workspace as migration-backed accounts.
+    budget = Budget(user_id=user.id, name="Default", is_default=True)
+    db.add(budget)
+    await db.flush()
+    user.current_budget_id = budget.id
+    await db.flush()
 
     # Create ReferralReward row if referred
     if referrer:
@@ -175,7 +183,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
+async def refresh_token(refresh_token: str = Body(..., embed=True), db: AsyncSession = Depends(get_db)):
     payload = decode_token(refresh_token)
 
     if payload.get("type") != "refresh":
@@ -191,7 +199,11 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
             detail="Invalid token payload",
         )
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    try:
+        subject = UUID(str(user_id))
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=401, detail="Invalid token subject") from None
+    result = await db.execute(select(User).where(User.id == subject))
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active:

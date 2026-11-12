@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Sparkles, Lock } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { hasProFeatureAccess } from '../utils/tierAccess';
 
 const FEATURE_LABELS = {

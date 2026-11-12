@@ -43,10 +43,12 @@ export default function CommandCenterLayout({
   children,
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  useEffect(() => {
+  const [previousTab, setPreviousTab] = useState(activeTab);
+  if (previousTab !== activeTab) {
+    setPreviousTab(activeTab);
     setMobileNavOpen(false);
-  }, [activeTab]);
+  }
+
 
   useEffect(() => {
     if (!mobileNavOpen) return undefined;

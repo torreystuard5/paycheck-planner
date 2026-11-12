@@ -1,20 +1,29 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import api from '../services/api';
-import { useAuth } from './AuthContext';
+import { useAuth } from './useAuth';
 
-const BudgetContext = createContext(null);
+import { BudgetContext } from './BudgetContextValue';
 
 export function BudgetProvider({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  return <BudgetSession key={user?.id ?? 'signed-out'} isAuthenticated={isAuthenticated}>{children}</BudgetSession>;
+}
+
+function BudgetSession({ children, isAuthenticated }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const [activeBudget, setActiveBudgetState] = useState(null);
   const [budgets, setBudgets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isAuthenticated);
   const [budgetVersion, setBudgetVersion] = useState(0);
 
   const fetchBudgets = useCallback(async () => {
     try {
       const { data } = await api.get('/api/v1/budgets');
-      setBudgets(Array.isArray(data) ? data : []);
+      if (mounted.current) setBudgets(Array.isArray(data) ? data : []);
     } catch {
       setBudgets([]);
     }
@@ -23,6 +32,7 @@ export function BudgetProvider({ children }) {
   const fetchCurrentBudget = useCallback(async () => {
     try {
       const { data } = await api.get('/api/v1/budgets/current');
+      if (!mounted.current) return;
       setActiveBudgetState(data);
       if (data?.id) {
         localStorage.setItem('active_budget_id', data.id);
@@ -39,9 +49,6 @@ export function BudgetProvider({ children }) {
   // Load budgets on auth
   useEffect(() => {
     if (!isAuthenticated) {
-      setActiveBudgetState(null);
-      setBudgets([]);
-      setLoading(false);
       return;
     }
     const init = async () => {
@@ -57,16 +64,13 @@ export function BudgetProvider({ children }) {
   }, []);
 
   const setActiveBudget = useCallback(async (budgetId) => {
-    try {
-      await api.post(`/api/v1/budgets/${budgetId}/set-active`);
-      await fetchCurrentBudget();
-      await fetchBudgets();
-      localStorage.setItem('active_budget_id', budgetId);
-      // Bump version so all data-fetching pages refetch
-      setBudgetVersion((v) => v + 1);
-    } catch (err) {
-      throw err;
-    }
+    await api.post(`/api/v1/budgets/${budgetId}/set-active`);
+    await fetchCurrentBudget();
+    await fetchBudgets();
+    if (!mounted.current) return;
+    localStorage.setItem('active_budget_id', budgetId);
+    // Bump version so all data-fetching pages refetch.
+    setBudgetVersion((v) => v + 1);
   }, [fetchCurrentBudget, fetchBudgets]);
 
   return (
@@ -84,10 +88,4 @@ export function BudgetProvider({ children }) {
       {children}
     </BudgetContext.Provider>
   );
-}
-
-export function useBudget() {
-  const ctx = useContext(BudgetContext);
-  if (!ctx) throw new Error('useBudget must be used within a BudgetProvider');
-  return ctx;
 }

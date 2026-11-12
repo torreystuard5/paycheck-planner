@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 class PaymentCreate(BaseModel):
     bill_id: Optional[UUID] = None
     debt_id: Optional[UUID] = None
-    amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     paid_date: Optional[date] = None
     pay_period_date: Optional[date] = None
     is_extra: bool = False

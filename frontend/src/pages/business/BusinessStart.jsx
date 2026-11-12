@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Briefcase, Loader2, CheckCircle } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { businessEdition } from '../../services/businessApi';
 import { useEditionSwitch } from '../../hooks/useEditionSwitch';
 import { Button, Card, IconStat, PageHeader } from '../../components/ui';

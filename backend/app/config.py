@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     R2_PRESIGNED_URL_TTL: int = 900
     R2_MAX_UPLOAD_BYTES: int = 15_728_640  # 15 MB — match frontend UPLOAD_MAX_BYTES
 
+    # Optional Ko-fi webhook authentication; never accept unauthenticated credits.
+    KOFI_VERIFICATION_TOKEN: str | None = None
+
     # Stripe (optional — checkout disabled when unset)
     STRIPE_SECRET_KEY: str | None = None
     STRIPE_PUBLISHABLE_KEY: str | None = None

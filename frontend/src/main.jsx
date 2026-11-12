@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { applyTheme, readStoredTheme } from './context/ThemeContext';
+import { applyTheme, readStoredTheme } from './context/theme';
 import './index.css';
 import App from './App';
 

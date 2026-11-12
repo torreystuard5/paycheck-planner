@@ -29,24 +29,29 @@ const fmtTooltip = (v) => `$${Number(v || 0).toLocaleString(undefined, { minimum
 export default function BusinessReports() {
   const { teamRole } = useBusinessAccess();
   const [range, setRange] = useState('month');
+  return <BusinessReportsRange key={range} range={range} setRange={setRange} teamRole={teamRole} />;
+}
+
+function BusinessReportsRange({ range, setRange, teamRole }) {
   const [data, setData] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
     Promise.all([
       businessData.getReportsOverview({ range }),
       businessData.getReportsAnalytics(12),
     ])
       .then(([overviewRes, analyticsRes]) => {
+        if (cancelled) return;
         setData(overviewRes.data);
         setAnalytics(analyticsRes.data);
       })
-      .catch(() => setError('Failed to load business reports.'))
-      .finally(() => setLoading(false));
+      .catch(() => { if (!cancelled) setError('Failed to load business reports.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [range]);
 
   const profit = data?.profit || {};

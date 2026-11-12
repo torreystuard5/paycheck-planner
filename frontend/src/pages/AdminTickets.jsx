@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { MessageSquare, AlertCircle, Send, Clock, CheckCircle2, ArrowRightCircle, ChevronLeft, ChevronRight, Loader2, Save, X } from 'lucide-react';
 import api from '../services/api';
@@ -51,11 +51,7 @@ export default function AdminTickets() {
     setPage(1);
   }, [statusFilter]);
 
-  useEffect(() => {
-    fetchTickets();
-  }, [page, statusFilter]);
-
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -73,7 +69,11 @@ export default function AdminTickets() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, perPage, statusFilter]);
+
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
 
   const openDetail = async (id) => {
     setSelectedId(id);
@@ -170,9 +170,6 @@ export default function AdminTickets() {
     if (!dateStr) return '\u2014';
     return formatFriendlyDate(dateStr);
   };
-
-  const truncate = (str, len = 80) =>
-    str && str.length > len ? str.slice(0, len) + '...' : str || '\u2014';
 
   if (loading && page === 1 && !tickets.length) return <LoadingSpinner />;
 

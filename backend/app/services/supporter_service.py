@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -27,8 +27,19 @@ async def process_kofi_donation(data: dict, db: AsyncSession) -> dict:
 
     try:
         amount = Decimal(str(raw_amount))
-    except (ValueError, TypeError):
-        amount = Decimal("0")
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise ValueError("Invalid donation amount") from exc
+    if not amount.is_finite() or amount <= 0 or amount > Decimal("9999999999.99") or amount.as_tuple().exponent < -2:
+        raise ValueError("Invalid donation amount")
+    if data.get("currency") != "USD":
+        raise ValueError("Donation currency must be USD")
+    if not isinstance(transaction_id, str) or not transaction_id.strip() or len(transaction_id) > 100:
+        raise ValueError("A valid transaction ID is required")
+    # Serialize retries of this transaction before checking the existing ledger.
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(transaction_id))))
+    existing = await db.execute(select(Supporter.id).where(Supporter.ko_fi_transaction_id == transaction_id).limit(1))
+    if existing.scalar_one_or_none():
+        return {"status": "ok", "duplicate": True}
 
     amount_int = int(amount)
 
@@ -42,7 +53,7 @@ async def process_kofi_donation(data: dict, db: AsyncSession) -> dict:
     # Find user by email if registered
     user = None
     if email:
-        result = await db.execute(select(User).where(func.lower(User.email) == email))
+        result = await db.execute(select(User).where(func.lower(User.email) == email).with_for_update())
         user = result.scalar_one_or_none()
 
     # Create Supporter record
@@ -81,7 +92,7 @@ async def apply_promo_code(code: str, user: User, db: AsyncSession) -> dict:
     - Under max_uses (max_uses is null or current_uses < max_uses)
     """
     result = await db.execute(
-        select(PromoCode).where(func.lower(PromoCode.code) == code.strip().lower())
+        select(PromoCode).where(func.lower(PromoCode.code) == code.strip().lower()).with_for_update()
     )
     promo = result.scalar_one_or_none()
 
@@ -96,6 +107,9 @@ async def apply_promo_code(code: str, user: User, db: AsyncSession) -> dict:
 
     if promo.max_uses is not None and promo.current_uses >= promo.max_uses:
         raise ValueError("This promo code has reached its usage limit.")
+
+    if user.promo_code_id == promo.id:
+        raise ValueError("This promo code has already been applied.")
 
     # Apply the promo code
     if promo.tier == "lifetime":

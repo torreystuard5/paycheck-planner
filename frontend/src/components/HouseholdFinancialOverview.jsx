@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DollarSign, Users, Loader2, ChevronDown } from 'lucide-react';
 import api from '../services/api';
-import { useBudget } from '../context/BudgetContext';
+import { useBudget } from '../context/useBudget';
 import { formatFriendlyDate } from '../utils/formatDate';
 
 const fmt = (val) => {

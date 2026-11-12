@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Loader2, Rocket } from 'lucide-react';
 import api from '../services/api';
+import WhatsNewUnseenBadge from './WhatsNewUnseenBadge';
 import { formatFriendlyDate } from '../utils/formatDate';
 import { mergeChangelogEntries } from '../lib/productUpdates';
 import { Badge, Card, cn } from './ui';
@@ -15,32 +16,11 @@ const UPDATE_TYPE_BADGE = {
   new_feature: 'success',
 };
 
-export function WhatsNewUnseenBadge() {
-  const [unseenCount, setUnseenCount] = useState(0);
-
-  useEffect(() => {
-    api.get('/api/v1/whats-new-unseen-count')
-      .then(({ data }) => setUnseenCount(data.unseen_count || 0))
-      .catch(() => {});
-  }, []);
-
-  if (unseenCount <= 0) return null;
-
-  return (
-    <span
-      className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-danger-600 px-1.5 text-xs font-bold text-white"
-      aria-label={`${unseenCount} unread updates`}
-    >
-      {unseenCount}
-    </span>
-  );
-}
 
 function RecentUpdatesPanel({ isExpanded }) {
   const [activeTab, setActiveTab] = useState('Recent Updates');
   const [updates, setUpdates] = useState([]);
   const [comingSoon, setComingSoon] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
 
   useEffect(() => {
@@ -52,7 +32,6 @@ function RecentUpdatesPanel({ isExpanded }) {
   useEffect(() => {
     if (!isExpanded || fetched) return;
 
-    setLoading(true);
     Promise.allSettled([
       api.get('/api/v1/app-updates'),
       api.get('/api/v1/coming-soon'),
@@ -86,7 +65,6 @@ function RecentUpdatesPanel({ isExpanded }) {
       }
       setComingSoon(csItems);
       setFetched(true);
-      setLoading(false);
     });
   }, [isExpanded, fetched]);
 
@@ -112,7 +90,7 @@ function RecentUpdatesPanel({ isExpanded }) {
         ))}
       </div>
 
-      {loading ? (
+      {!fetched ? (
         <div className="flex items-center justify-center py-8" role="status">
           <Loader2 className="h-5 w-5 animate-spin text-accent-600" aria-hidden />
         </div>

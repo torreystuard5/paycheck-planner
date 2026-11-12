@@ -70,7 +70,7 @@ export function setMaintenanceModeForced(value) {
 // Attach access token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
-  if (token) {
+  if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -119,11 +119,17 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 401 && !original._retry) {
+      // Never replay an old account's operation using the next account's session.
+      const currentAccess = localStorage.getItem('access_token');
+      if (original.headers?.Authorization && original.headers.Authorization !== `Bearer ${currentAccess}`) {
+        return Promise.reject(error);
+      }
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
           .then((token) => {
+            if (localStorage.getItem('access_token') !== token) throw error;
             original.headers.Authorization = `Bearer ${token}`;
             return api(original);
           })
@@ -146,9 +152,10 @@ api.interceptors.response.use(
       try {
         const { data } = await axios.post(
           `${api.defaults.baseURL}/api/v1/auth/refresh`,
-          null,
-          { params: { refresh_token: refreshToken }, timeout: 30_000 }
+          { refresh_token: refreshToken },
+          { timeout: 30_000 }
         );
+        if (localStorage.getItem('refresh_token') !== refreshToken) throw error;
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('refresh_token', data.refresh_token);
         processQueue(null, data.access_token);
@@ -156,9 +163,11 @@ api.interceptors.response.use(
         return api(original);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        if (localStorage.getItem('refresh_token') === refreshToken) {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

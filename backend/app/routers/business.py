@@ -788,6 +788,7 @@ async def staff_role_options(
     db: AsyncSession = Depends(get_db),
     ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
     r = await db.execute(
         select(BusinessStaff.role)
         .where(
@@ -808,6 +809,7 @@ async def list_staff(
     db: AsyncSession = Depends(get_db),
     ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
     r = await db.execute(
         select(BusinessStaff)
         .where(BusinessStaff.user_id == ctx.owner_id, BusinessStaff.is_active.is_(True))
@@ -847,6 +849,7 @@ async def get_staff(
     db: AsyncSession = Depends(get_db),
     ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
     r = await db.execute(
         select(BusinessStaff).where(
             BusinessStaff.id == staff_id,
@@ -930,6 +933,7 @@ async def staff_pay_summary(
     db: AsyncSession = Depends(get_db),
     ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
     d0, d1 = _parse_range(range_key, start_date, end_date)
     r = await db.execute(
         select(BusinessStaffPayRun, BusinessStaff.name)
@@ -966,6 +970,7 @@ async def list_pay_runs(
     db: AsyncSession = Depends(get_db),
     ctx: BusinessContext = Depends(get_business_ctx),
 ):
+    ctx.require("manage_staff_pay")
     sr = await db.execute(
         select(BusinessStaff).where(
             BusinessStaff.id == staff_id,

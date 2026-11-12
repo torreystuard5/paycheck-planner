@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import Modal from '../Modal';
 import ConfirmDialog from '../ConfirmDialog';
@@ -26,7 +26,11 @@ function layoutsEqual(a, b) {
   );
 }
 
-export default function CustomizeDashboardModal({
+export default function CustomizeDashboardModal(props) {
+  return props.open ? <OpenCustomizeDashboardModal {...props} /> : null;
+}
+
+function OpenCustomizeDashboardModal({
   open,
   onClose,
   visibility,
@@ -40,12 +44,6 @@ export default function CustomizeDashboardModal({
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('all');
 
-  useEffect(() => {
-    if (open) {
-      setDraft({ visibility, order: widgetOrder });
-      setCategoryFilter('all');
-    }
-  }, [open, visibility, widgetOrder]);
 
   const savedLayout = useMemo(
     () => ({ visibility, order: widgetOrder }),

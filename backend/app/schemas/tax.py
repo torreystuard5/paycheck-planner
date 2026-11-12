@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date as CalendarDate, datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -21,7 +21,7 @@ class TaxDeductionCreate(BaseModel):
     name: str = Field(max_length=255)
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     category: str = Field(max_length=50)
-    date: date
+    date: CalendarDate
     tax_year: int = Field(ge=2000, le=2100)
     receipt_note: Optional[str] = None
     bill_id: Optional[UUID] = None
@@ -32,7 +32,7 @@ class TaxDeductionUpdate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=255)
     amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     category: Optional[str] = Field(default=None, max_length=50)
-    date: Optional[date] = None
+    date: Optional[CalendarDate] = None
     tax_year: Optional[int] = Field(default=None, ge=2000, le=2100)
     receipt_note: Optional[str] = None
     budget_id: Optional[UUID] = None
@@ -45,7 +45,7 @@ class TaxDeductionResponse(BaseModel):
     name: str
     amount: Decimal
     category: str
-    date: date
+    date: CalendarDate
     tax_year: int
     receipt_note: Optional[str] = None
     budget_id: Optional[UUID] = None

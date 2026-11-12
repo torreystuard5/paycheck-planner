@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Star, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import api from '../services/api';
-import { useBudget } from '../context/BudgetContext';
+import { useBudget } from '../context/useBudget';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';

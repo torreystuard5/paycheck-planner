@@ -4,7 +4,7 @@ import { formatApiError } from '../../utils/formatApiError';
 import BusinessPageShell from '../../components/business/BusinessPageShell';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
-import { useToast } from '../../components/Toast';
+import { useToast } from '../../components/useToast';
 import { businessEdition } from '../../services/businessApi';
 import { Badge, Button, Card, cn } from '../../components/ui';
 

@@ -5,7 +5,7 @@ import CurrencyDisplay from '../../components/CurrencyDisplay';
 import BusinessPageShell from '../../components/business/BusinessPageShell';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
-import { useToast } from '../../components/Toast';
+import { useToast } from '../../components/useToast';
 import { Badge, Button, Card } from '../../components/ui';
 
 const STATUS_VARIANT = {

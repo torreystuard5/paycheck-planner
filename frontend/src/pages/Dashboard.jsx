@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { useBudget } from '../context/BudgetContext';
+import { useAuth } from '../context/useAuth';
+import { useBudget } from '../context/useBudget';
 import LoadingSpinner from '../components/LoadingSpinner';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import WhatsNewBanner from '../components/WhatsNewBanner';

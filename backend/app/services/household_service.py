@@ -1,4 +1,4 @@
-import random
+import secrets
 import string
 from uuid import UUID
 
@@ -12,7 +12,7 @@ from app.models.user import User
 
 async def generate_invite_code() -> str:
     """Generate random 8-character uppercase alphanumeric code."""
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    return "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
 
 
 async def create_household(name: str, user: User, db: AsyncSession) -> Household:

@@ -3,7 +3,8 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError as JWTError
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,7 +60,13 @@ def build_user_token_data(user: User, *, impersonated_by: str | None = None) -> 
 
 
 def validate_token_version(payload: dict, user: User) -> None:
-    token_tv = int(payload.get("tv", 0) or 0)
+    try:
+        raw_version = payload.get("tv", 0)
+        if isinstance(raw_version, bool) or not isinstance(raw_version, (int, str)):
+            raise ValueError("Invalid token version")
+        token_tv = int(raw_version)
+    except (TypeError, ValueError, OverflowError):
+        raise HTTPException(status_code=401, detail="Invalid token version") from None
     if token_tv != user_token_version(user):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -110,7 +117,11 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    result = await db.execute(select(User).where(User.id == UUID(user_id)))
+    try:
+        subject = UUID(str(user_id))
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=401, detail="Invalid token subject") from None
+    result = await db.execute(select(User).where(User.id == subject))
     user = result.scalar_one_or_none()
 
     if user is None or not user.is_active:

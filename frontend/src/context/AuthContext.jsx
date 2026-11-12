@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api, { onTosRequired, setMaintenanceModeForced, MAINTENANCE_MODE_DETAIL } from '../services/api';
 
 const IMP_ADMIN_ACCESS = 'impersonation_admin_access_token';
@@ -11,7 +11,7 @@ function isMaintenance503(err) {
   );
 }
 
-const AuthContext = createContext(null);
+import { AuthContext } from './AuthContextValue';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -30,9 +30,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const fetchSubscription = useCallback(async () => {
+    const token = localStorage.getItem('access_token');
     try {
       const { data } = await api.get('/api/v1/subscriptions/status');
-      setSubscription(data);
+      if (localStorage.getItem('access_token') === token) setSubscription(data);
     } catch {
       // not critical
     }
@@ -105,7 +106,7 @@ export function AuthProvider({ children }) {
       setLoading(false);
     };
     init();
-  }, []);
+  }, [fetchSubscription]);
 
   const login = async (email, password) => {
     const { data } = await api.post('/api/v1/auth/login', { email, password });
@@ -145,7 +146,8 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    api.post('/api/v1/auth/logout').catch(() => {});
+    const token = localStorage.getItem('access_token');
+    if (token) api.post('/api/v1/auth/logout', null, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('active_budget_id');
@@ -160,9 +162,8 @@ export function AuthProvider({ children }) {
   const refreshToken = async () => {
     const rt = localStorage.getItem('refresh_token');
     if (!rt) return;
-    const { data } = await api.post('/api/v1/auth/refresh', null, {
-      params: { refresh_token: rt },
-    });
+    const { data } = await api.post('/api/v1/auth/refresh', { refresh_token: rt });
+    if (localStorage.getItem('refresh_token') !== rt) return;
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
   };
@@ -264,10 +265,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
-  return ctx;
 }

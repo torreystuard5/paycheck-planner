@@ -16,20 +16,20 @@ const EXTRA_ACTIONS = [
   { key: 'new-announcement', label: 'Create announcement', tab: 'settings', icon: Megaphone },
 ];
 
-export default function CommandPalette({ isOpen, onClose, onNavigate, onAction }) {
+export default function CommandPalette(props) {
+  return props.isOpen ? <OpenCommandPalette {...props} /> : null;
+}
+
+function OpenCommandPalette({ onClose, onNavigate, onAction }) {
   const [query, setQuery] = useState('');
 
   useEffect(() => {
-    if (!isOpen) {
-      setQuery('');
-      return undefined;
-    }
     const onKeyDown = (e) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, onClose]);
+  }, [onClose]);
 
   const items = useMemo(() => {
     const tabItems = COMMAND_CENTER_TABS.map((t) => ({
@@ -48,7 +48,6 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onAction }
     return all.filter((item) => item.searchText.includes(q));
   }, [query]);
 
-  if (!isOpen) return null;
 
   const handleSelect = (item) => {
     if (item.type === 'action') {
@@ -125,30 +124,4 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onAction }
       </div>
     </div>
   );
-}
-
-export function useCommandPalette(onNavigate, onAction) {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setOpen((v) => !v);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
-
-  const palette = (
-    <CommandPalette
-      isOpen={open}
-      onClose={() => setOpen(false)}
-      onNavigate={onNavigate}
-      onAction={onAction}
-    />
-  );
-
-  return { paletteOpen: open, setPaletteOpen: setOpen, palette };
 }

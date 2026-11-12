@@ -1,4 +1,6 @@
 import time
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -56,12 +58,13 @@ def _increment_rate_limit(user_id: str) -> None:
         entry["count"] += 1
 
 
-def _create_notes_session_token(user_id: str, ttl_minutes: int) -> tuple[str, int]:
+def _create_notes_session_token(user_id: str, ttl_minutes: int, pin_hash: str) -> tuple[str, int]:
     expires_in = ttl_minutes * 60
     exp = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
     payload = {
         "user_id": user_id,
         "type": "notes_session",
+        "pin_version": hashlib.sha256(pin_hash.encode()).hexdigest(),
         "exp": exp,
     }
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
@@ -99,7 +102,9 @@ async def verify_notes_session(
             detail="notes_session_required",
         )
     payload = _verify_notes_session_token(x_notes_session)
-    if payload.get("user_id") != str(current_user.id):
+    expected_version = hashlib.sha256((current_user.pin_hash or '').encode()).hexdigest()
+    if (payload.get("user_id") != str(current_user.id)
+            or not secrets.compare_digest(str(payload.get("pin_version", "")), expected_version)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="notes_session_required",
@@ -110,14 +115,22 @@ async def verify_notes_session(
 # --- PIN endpoints (auth required, NO notes session) ---
 
 
+@router.get("/pin/status")
+async def pin_status(current_user: User = Depends(get_current_user)):
+    return {"pin_configured": bool(current_user.pin_hash), "lock_timeout": current_user.notes_lock_timeout or 5}
+
+
 @router.post("/pin/setup", status_code=200)
 async def setup_pin(
     body: PinSetupRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Lock/reload the user so concurrent initial setup cannot replace a newly set PIN.
+    await db.refresh(current_user, with_for_update=True)
     # Determine if this is initial setup or change
     if current_user.pin_hash is not None:
+        _check_rate_limit(str(current_user.id))
         # Changing PIN — require current_pin + new_pin
         if not body.current_pin or not body.new_pin:
             raise HTTPException(
@@ -125,11 +138,13 @@ async def setup_pin(
                 detail="current_pin and new_pin are required to change PIN",
             )
         if not pin_context.verify(body.current_pin, current_user.pin_hash):
+            _increment_rate_limit(str(current_user.id))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Current PIN is incorrect",
             )
         current_user.pin_hash = pin_context.hash(body.new_pin)
+        _pin_attempts.pop(str(current_user.id), None)
     else:
         # Initial setup — require pin
         pin_value = body.pin or body.new_pin
@@ -170,7 +185,7 @@ async def verify_pin(
     _pin_attempts.pop(user_id_str, None)
 
     ttl = current_user.notes_lock_timeout or 5
-    token, expires_in = _create_notes_session_token(user_id_str, ttl)
+    token, expires_in = _create_notes_session_token(user_id_str, ttl, current_user.pin_hash)
     return PinVerifyResponse(notes_session_token=token, expires_in=expires_in)
 
 

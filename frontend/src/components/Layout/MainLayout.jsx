@@ -18,7 +18,8 @@ import AdminMaintenanceBanner from '../AdminMaintenanceBanner';
 import ImpersonationBanner from '../ImpersonationBanner';
 import Footer from '../Footer';
 import SkipToContent from '../SkipToContent';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
+import { useBudget } from '../../context/useBudget';
 import { cn } from '../ui';
 import logo from '../../assets/PayDrift-Logo.jpg';
 
@@ -98,6 +99,7 @@ function MobileBottomNav({ user, onMenu }) {
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
+  const { activeBudget } = useBudget();
 
   const isBusiness = user?.app_mode === 'business';
 
@@ -145,7 +147,7 @@ export default function MainLayout() {
           <AdminMaintenanceBanner />
           <ImpersonationBanner />
           <AnnouncementBanner />
-          <Outlet />
+          <Outlet key={`${user?.id}:${activeBudget?.id}:${user?.app_mode}`} />
         </main>
         <div className="px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-4 md:px-6 lg:pb-0">
           <Footer />

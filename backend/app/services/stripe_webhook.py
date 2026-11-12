@@ -41,7 +41,7 @@ async def _restore_paid_plan(db: AsyncSession, user: User, sub: dict) -> None:
     prices = [price for price in prices if price]
     if not prices:
         raise ValueError("Subscription has no price IDs; cannot restore paid plan")
-    result = await db.execute(select(PricingConfig).where(PricingConfig.stripe_price_id.in_(prices)))
+    result = await db.execute(select(PricingConfig).where(PricingConfig.stripe_price_id.in_(prices), PricingConfig.is_active.is_(True)))
     plans = list(result.scalars().all())
     tiers = {plan.tier for plan in plans if plan.tier in ("pro", "business", "bundle")}
     if len(tiers) != 1:
@@ -71,38 +71,32 @@ async def handle_checkout_completed(db: AsyncSession, session: dict) -> None:
     if not user:
         return
 
-    tier = (meta.get("tier") or "pro").lower()
-    period = meta.get("billing_period")
-    cust_id = session.get("customer")
-    sub_id = session.get("subscription")
+    if session.get("mode") != "subscription" or session.get("status") != "complete":
+        return
+    if session.get("payment_status") not in ("paid", "no_payment_required"):
+        return
+    cust_id, sub_id = session.get("customer"), session.get("subscription")
+    if not cust_id or not sub_id:
+        return
+    import asyncio
+    import stripe
+    from app.config import settings
 
-    if cust_id:
-        user.stripe_customer_id = str(cust_id)
-    if sub_id:
-        user.stripe_subscription_id = str(sub_id)
-    if period:
-        user.billing_period = str(period)
-    user.subscription_tier = tier if tier in ("pro", "business", "bundle") else "pro"
-
-    if sub_id:
-        try:
-            import stripe
-            from app.config import settings
-
-            if settings.STRIPE_SECRET_KEY:
-                stripe.api_key = settings.STRIPE_SECRET_KEY
-                sub = stripe.Subscription.retrieve(str(sub_id))
-                user.subscription_status = _status_from_stripe(getattr(sub, "status", None))
-                user.trial_ends_at = _dt_from_ts(getattr(sub, "trial_end", None))
-                user.subscription_ends_at = _dt_from_ts(getattr(sub, "current_period_end", None))
-                user.subscription_started_at = _dt_from_ts(
-                    getattr(sub, "current_period_start", None)
-                )
-        except Exception:
-            logger.exception("Stripe subscription retrieve failed after checkout")
-            user.subscription_status = "trialing" if tier == "business" else "active"
-    else:
-        user.subscription_status = "active"
+    if not settings.STRIPE_SECRET_KEY:
+        raise ValueError("Stripe is not configured")
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    sub = await asyncio.to_thread(stripe.Subscription.retrieve, str(sub_id))
+    if str(sub.get("customer")) != str(cust_id) or str(sub.get("id")) != str(sub_id):
+        raise ValueError("Checkout subscription identity mismatch")
+    if sub.get("status") not in ("active", "trialing"):
+        return
+    await _restore_paid_plan(db, user, sub)
+    user.stripe_customer_id = str(cust_id)
+    user.stripe_subscription_id = str(sub_id)
+    user.subscription_status = _status_from_stripe(sub.get("status"))
+    user.trial_ends_at = _dt_from_ts(sub.get("trial_end"))
+    user.subscription_ends_at = _dt_from_ts(sub.get("current_period_end"))
+    user.subscription_started_at = _dt_from_ts(sub.get("current_period_start"))
 
     await _save_user(db, user)
 
@@ -139,6 +133,8 @@ async def handle_subscription_updated(db: AsyncSession, sub: dict) -> None:
     else:
         if st in ("active", "trialing"):
             await _restore_paid_plan(db, user, sub)
+        else:
+            user.subscription_tier = "early_access"
         user.subscription_status = st
 
     await _save_user(db, user)

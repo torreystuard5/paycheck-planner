@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { Loader2 } from 'lucide-react';
 import AuthLayout from '../../components/AuthLayout';
 
@@ -56,7 +56,7 @@ export default function Register() {
     }
 
     try {
-      const { confirm_password, ...payload } = form;
+      const payload = Object.fromEntries(Object.entries(form).filter(([key]) => key !== 'confirm_password'));
       payload.email = payload.email.trim().toLowerCase();
       payload.net_pay_amount = parseFloat(payload.net_pay_amount);
       payload.tos_accepted = true;

@@ -5,7 +5,7 @@ import BusinessPageShell from '../../components/business/BusinessPageShell';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { useBusinessProfile } from '../../hooks/useBusinessProfile';
-import { useToast } from '../../components/Toast';
+import { useToast } from '../../components/useToast';
 import { businessData } from '../../services/businessApi';
 import { Button, Card, SettingsSection } from '../../components/ui';
 

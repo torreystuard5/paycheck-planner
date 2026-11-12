@@ -1,33 +1,22 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import api from '../services/api';
-import { useAuth } from './AuthContext';
+import { useAuth } from './useAuth';
 
-const BusinessAccessContext = createContext(null);
-
-/** In-flight dedupe so parallel refresh() calls share one request. */
-let accessInflight = null;
-
-async function fetchBusinessAccess() {
-  if (!accessInflight) {
-    accessInflight = api
-      .get('/api/v1/business/edition/access')
-      .finally(() => {
-        accessInflight = null;
-      });
-  }
-  return accessInflight;
-}
+import { BusinessAccessContext } from './BusinessAccessContextValue';
 
 export function BusinessAccessProvider({ children }) {
-  const { subscription, isAuthenticated } = useAuth();
+  const { user, subscription, isAuthenticated } = useAuth();
+  return <BusinessAccessSession key={user?.id ?? 'signed-out'} subscription={subscription} isAuthenticated={isAuthenticated}>{children}</BusinessAccessSession>;
+}
+
+function BusinessAccessSession({ children, subscription, isAuthenticated }) {
+  const inflight = useRef(null);
   const [access, setAccess] = useState(null);
   const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
@@ -47,7 +36,10 @@ export function BusinessAccessProvider({ children }) {
     }
     setLoading(true);
     try {
-      const { data } = await fetchBusinessAccess();
+      if (!inflight.current) {
+        inflight.current = api.get('/api/v1/business/edition/access').finally(() => { inflight.current = null; });
+      }
+      const { data } = await inflight.current;
       if (mountedRef.current) setAccess(data);
       return data;
     } catch {
@@ -59,27 +51,22 @@ export function BusinessAccessProvider({ children }) {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setAccess(null);
-      setLoading(false);
-      return;
-    }
+    if (!isAuthenticated) return;
     refresh();
   }, [isAuthenticated, refresh]);
 
   const canWrite =
-    access?.can_write_business !== false && subscription?.can_write_business !== false;
+    isAuthenticated && !loading && access?.can_write_business === true && subscription?.can_write_business !== false;
   const trialExpired =
     (access?.access_state || subscription?.access_state) === 'trial_expired';
-  const perms = access?.team_permissions || {};
 
   const can = useCallback(
     (key) => {
       if (trialExpired || !canWrite) return false;
       if (access?.team_role === 'owner' || !access?.team_role) return true;
-      return Boolean(perms[key]);
+      return Boolean(access?.team_permissions?.[key]);
     },
-    [trialExpired, canWrite, access?.team_role, perms],
+    [trialExpired, canWrite, access?.team_role, access?.team_permissions],
   );
 
   const value = useMemo(
@@ -101,12 +88,4 @@ export function BusinessAccessProvider({ children }) {
       {children}
     </BusinessAccessContext.Provider>
   );
-}
-
-export function useBusinessAccess() {
-  const ctx = useContext(BusinessAccessContext);
-  if (!ctx) {
-    throw new Error('useBusinessAccess must be used within a BusinessAccessProvider');
-  }
-  return ctx;
 }

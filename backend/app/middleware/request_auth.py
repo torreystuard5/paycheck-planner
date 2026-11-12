@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from fastapi import Request
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError as JWTError
 from sqlalchemy import select
 
 from app.config import settings

@@ -136,6 +136,8 @@ async def create_budget(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if data.household_id is not None and data.household_id != current_user.household_id:
+        raise HTTPException(status_code=403, detail="Household access denied")
     # Check if user has any budgets — if not, auto-mark as default
     count_result = await db.execute(
         select(func.count()).select_from(Budget).where(Budget.user_id == current_user.id)

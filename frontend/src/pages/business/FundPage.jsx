@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import api from '../../services/api';
@@ -8,7 +8,7 @@ import CurrencyDisplay from '../../components/CurrencyDisplay';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import BusinessPageShell from '../../components/business/BusinessPageShell';
-import { useToast } from '../../components/Toast';
+import { useToast } from '../../components/useToast';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
 import { Button } from '../../components/ui';
@@ -30,7 +30,7 @@ export default function FundPage() {
   const [saving, setSaving] = useState(false);
   const [delTx, setDelTx] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const { data: funds } = await api.get(`/api/v1/business/funds?fund_type=${fundType}`);
       const list = Array.isArray(funds) ? funds : [];
@@ -47,12 +47,11 @@ export default function FundPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fundType, toast]);
 
   useEffect(() => {
-    setLoading(true);
     load();
-  }, [fundType]);
+  }, [load]);
 
   const pct = () => {
     if (!fund?.target_amount || Number(fund.target_amount) <= 0) return 0;

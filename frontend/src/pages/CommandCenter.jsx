@@ -59,7 +59,7 @@ import CommandCenterPanel, {
 } from '../components/admin/command-center/CommandCenterPanel';
 import GlobalControlsPanel from '../components/admin/command-center/GlobalControlsPanel';
 import DashboardQuickActions from '../components/admin/command-center/DashboardQuickActions';
-import { useCommandPalette } from '../components/admin/command-center/CommandPalette';
+import { useCommandPalette } from '../components/admin/command-center/useCommandPalette';
 import { AUDIT_ACTION_CATEGORIES } from '../components/admin/command-center/constants';
 import RecentActivityList from '../components/admin/command-center/RecentActivityList';
 import {
@@ -1205,7 +1205,7 @@ function BroadcastTab({ onRegisterRefresh }) {
     try {
       const { data } = await api.get('/api/v1/admin/broadcasts');
       setBroadcasts(data);
-    } catch {} finally {
+    } catch { setError('Failed to load broadcast data.'); } finally {
       setLoadingHistory(false);
     }
   }, []);
@@ -1215,7 +1215,7 @@ function BroadcastTab({ onRegisterRefresh }) {
     try {
       const { data } = await api.get('/api/v1/admin/unsubscribed');
       setUnsubscribed(data);
-    } catch {} finally {
+    } catch { setError('Failed to load broadcast data.'); } finally {
       setLoadingUnsub(false);
     }
   }, []);
@@ -1275,7 +1275,7 @@ function BroadcastTab({ onRegisterRefresh }) {
     try {
       await api.post(`/api/v1/admin/resubscribe/${userId}`);
       fetchUnsubscribed();
-    } catch {}
+    } catch { setError('Failed to resubscribe user.'); }
   };
 
   return (

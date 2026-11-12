@@ -8,7 +8,7 @@ import UploadDropzone from '../../components/uploads/UploadDropzone';
 import DocumentDetailDrawer from '../../components/uploads/DocumentDetailDrawer';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
-import { useToast } from '../../components/Toast';
+import { useToast } from '../../components/useToast';
 import { getStatusPill } from '../../lib/uploadStatus';
 import { Badge, Button, Card, FilterChips } from '../../components/ui';
 
@@ -45,12 +45,10 @@ export default function BusinessDocuments() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [detailId, setDetailId] = useState(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async () => {
     const params = filterType !== 'all' ? { document_type: filterType } : {};
-    listBusinessDocuments(params)
-      .then(({ data }) => setDocs(Array.isArray(data) ? data : []))
+    await listBusinessDocuments(params)
+      .then(({ data }) => { setError(null); setDocs(Array.isArray(data) ? data : []); })
       .catch(() => {
         setError('Failed to load documents.');
         setDocs([]);

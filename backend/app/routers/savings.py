@@ -209,7 +209,7 @@ async def create_contribution(
 ):
     # Verify the goal belongs to the current user or a household member
     result = await db.execute(
-        select(SavingsGoal).where(SavingsGoal.id == data.goal_id)
+        select(SavingsGoal).where(SavingsGoal.id == data.goal_id).with_for_update()
     )
     goal = result.scalar_one_or_none()
     if not goal:

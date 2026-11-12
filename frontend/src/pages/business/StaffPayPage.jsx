@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import api from '../../services/api';
 import { formatApiError } from '../../utils/formatApiError';
@@ -9,7 +9,7 @@ import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
 import BusinessPageShell from '../../components/business/BusinessPageShell';
-import { useToast } from '../../components/Toast';
+import { useToast } from '../../components/useToast';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
 import { Button } from '../../components/ui';
@@ -79,12 +79,12 @@ export default function StaffPayPage() {
     return out;
   }, [roleOptionsFromApi]);
 
-  const loadStaff = async () => {
+  const loadStaff = useCallback(async () => {
     const { data } = await api.get('/api/v1/business/staff');
     setStaff(Array.isArray(data) ? data : []);
-  };
+  }, []);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       await loadStaff();
       const ro = await api.get('/api/v1/business/staff/role-options');
@@ -94,12 +94,11 @@ export default function StaffPayPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, loadStaff]);
 
   useEffect(() => {
-    setLoading(true);
     load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!staff.length) {

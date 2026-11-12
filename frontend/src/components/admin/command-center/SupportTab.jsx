@@ -19,7 +19,7 @@ import {
   Flag,
 } from 'lucide-react';
 import api from '../../../services/api';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../context/useAuth';
 import LoadingSpinner from '../../LoadingSpinner';
 import EmptyState from '../../EmptyState';
 import SortDropdown from '../../SortDropdown';

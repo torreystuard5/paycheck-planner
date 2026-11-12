@@ -9,9 +9,9 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import api from '../services/api';
 import { formatApiError } from '../utils/formatApiError';
 import { formatLabel } from '../utils/formatLabel';
-import { useAuth } from '../context/AuthContext';
-import { useBudget } from '../context/BudgetContext';
-import { useToast } from '../components/Toast';
+import { useAuth } from '../context/useAuth';
+import { useBudget } from '../context/useBudget';
+import { useToast } from '../components/useToast';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -89,27 +89,16 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
   const [postponing, setPostponing] = useState(false);
   const [paycheckDates, setPaycheckDates] = useState([]);
 
-  useEffect(() => {
-    fetchDebts(true);
-    fetchPaycheckDates();
-  }, [sortBy, sortOrder, budgetVersion]);
-
-  const fetchPaycheckDates = async () => {
+  const fetchPaycheckDates = useCallback(async () => {
     try {
       const res = await api.get('/api/v1/paycheck-schedules/upcoming?count=10');
       setPaycheckDates(Array.isArray(res.data) ? res.data : []);
     } catch {
       setPaycheckDates([]);
     }
-  };
+  }, []);
 
   // Auto-open add modal when triggered from parent
-  useEffect(() => {
-    if (autoOpenAdd) {
-      openAdd();
-      onClearAutoOpen?.();
-    }
-  }, [autoOpenAdd]);
 
   useEffect(() => {
     if (!showModal) return;
@@ -145,7 +134,7 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
     if (activeTab === 'Credit Cards') fetchCreditData();
   }, [activeTab]);
 
-  const fetchDebts = async (showLoading = false) => {
+  const fetchDebts = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
     try {
@@ -157,7 +146,12 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
     } finally {
       if (showLoading) setLoading(false);
     }
-  };
+  }, [sortBy, sortOrder, activeBudget?.id]);
+
+  useEffect(() => {
+    fetchDebts(true);
+    fetchPaycheckDates();
+  }, [fetchDebts, fetchPaycheckDates, budgetVersion]);
 
   const fetchPayoffData = async () => {
     setTabLoading(true);
@@ -206,12 +200,19 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
     setModalError(null);
   };
 
-  const openAdd = () => {
+  const openAdd = useCallback(() => {
     setEditingDebt(null);
     setForm(defaultForm);
     setModalError(null);
     setShowModal(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (autoOpenAdd) {
+      openAdd();
+      onClearAutoOpen?.();
+    }
+  }, [autoOpenAdd, openAdd, onClearAutoOpen]);
 
   const openEdit = (debt) => {
     setEditingDebt(debt);
@@ -431,7 +432,6 @@ export default function Debts({ autoOpenAdd, onClearAutoOpen, embedded = false }
 
   const totalDebt = debts.reduce((sum, d) => sum + (Number(d.balance) || 0), 0);
   const totalMinPayment = debts.reduce((sum, d) => sum + (Number(d.minimum_payment) || 0), 0);
-
 
   if (loading) return <LoadingSpinner />;
 

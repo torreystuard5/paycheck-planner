@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date as CalendarDate, datetime
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
@@ -14,7 +14,7 @@ LIST_LIMIT = 500
 
 
 class SaleCreate(BaseModel):
-    date: date
+    date: CalendarDate
     amount: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)
     source: Optional[str] = Field(None, max_length=255)
     category: Optional[str] = Field(None, max_length=100)
@@ -25,7 +25,7 @@ class SaleCreate(BaseModel):
 
 
 class SaleUpdate(BaseModel):
-    date: Optional[date] = None
+    date: Optional[CalendarDate] = None
     amount: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
     source: Optional[str] = Field(None, max_length=255)
     category: Optional[str] = Field(None, max_length=100)
@@ -37,7 +37,7 @@ class SaleUpdate(BaseModel):
 
 class SaleResponse(BaseModel):
     id: UUID
-    date: date
+    date: CalendarDate
     amount: Decimal
     source: Optional[str] = None
     category: Optional[str] = None
@@ -80,7 +80,7 @@ class SaleSummary(BaseModel):
 
 
 class DeductionCreate(BaseModel):
-    date: date
+    date: CalendarDate
     amount: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)
     category: str = Field(..., max_length=100)
     vendor: Optional[str] = Field(None, max_length=255)
@@ -91,7 +91,7 @@ class DeductionCreate(BaseModel):
 
 
 class DeductionUpdate(BaseModel):
-    date: Optional[date] = None
+    date: Optional[CalendarDate] = None
     amount: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
     category: Optional[str] = Field(None, max_length=100)
     vendor: Optional[str] = Field(None, max_length=255)
@@ -103,7 +103,7 @@ class DeductionUpdate(BaseModel):
 
 class DeductionResponse(BaseModel):
     id: UUID
-    date: date
+    date: CalendarDate
     amount: Decimal
     category: str
     vendor: Optional[str] = None
@@ -150,7 +150,7 @@ class StaffCreate(BaseModel):
     pay_frequency: Optional[str] = Field(
         None, pattern="^(weekly|biweekly|semi_monthly|monthly)$"
     )
-    anchor_date: Optional[date] = None
+    anchor_date: Optional[CalendarDate] = None
     tax_rate: Optional[Decimal] = Field(None, ge=0, le=100, max_digits=5, decimal_places=2)
 
 
@@ -162,7 +162,7 @@ class StaffUpdate(BaseModel):
     pay_frequency: Optional[str] = Field(
         None, pattern="^(weekly|biweekly|semi_monthly|monthly)$"
     )
-    anchor_date: Optional[date] = None
+    anchor_date: Optional[CalendarDate] = None
     tax_rate: Optional[Decimal] = Field(None, ge=0, le=100, max_digits=5, decimal_places=2)
     is_active: Optional[bool] = None
 
@@ -176,7 +176,7 @@ class StaffResponse(BaseModel):
     pay_type: str
     pay_rate: Optional[Decimal] = None
     pay_frequency: Optional[str] = None
-    anchor_date: Optional[date] = None
+    anchor_date: Optional[CalendarDate] = None
     tax_rate: Optional[Decimal] = None
     is_active: bool = True
     created_at: datetime
@@ -187,24 +187,24 @@ class StaffResponse(BaseModel):
 
 
 class PayRunCreate(BaseModel):
-    period_start: date
-    period_end: date
+    period_start: CalendarDate
+    period_end: CalendarDate
     hours: Optional[Decimal] = Field(None, ge=0, max_digits=10, decimal_places=2)
     gross_pay: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)
     taxes_withheld: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=2)
     net_pay: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)
-    paid_on: Optional[date] = None
+    paid_on: Optional[CalendarDate] = None
     notes: Optional[str] = None
 
 
 class PayRunUpdate(BaseModel):
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
+    period_start: Optional[CalendarDate] = None
+    period_end: Optional[CalendarDate] = None
     hours: Optional[Decimal] = Field(None, ge=0, max_digits=10, decimal_places=2)
     gross_pay: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
     taxes_withheld: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
     net_pay: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
-    paid_on: Optional[date] = None
+    paid_on: Optional[CalendarDate] = None
     notes: Optional[str] = None
 
 
@@ -213,13 +213,13 @@ class PayRunResponse(BaseModel):
 
     id: UUID
     staff_id: UUID
-    period_start: date
-    period_end: date
+    period_start: CalendarDate
+    period_end: CalendarDate
     hours: Optional[Decimal] = None
     gross_pay: Decimal
     taxes_withheld: Decimal
     net_pay: Decimal
-    paid_on: Optional[date] = None
+    paid_on: Optional[CalendarDate] = None
     notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -266,7 +266,7 @@ class FundResponse(BaseModel):
 class FundTransactionCreate(BaseModel):
     """amount is always positive for deposit and withdrawal; server stores signed."""
 
-    date: date
+    date: CalendarDate
     amount: Decimal = Field(..., max_digits=12, decimal_places=2)
     kind: str = Field(..., pattern="^(deposit|withdrawal|adjustment)$")
     note: Optional[str] = Field(None, max_length=500)
@@ -339,7 +339,7 @@ class CustomerResponse(BaseModel):
 class FundTransactionResponse(BaseModel):
     id: UUID
     fund_id: UUID
-    date: date
+    date: CalendarDate
     amount: Decimal
     kind: str
     note: Optional[str] = None
@@ -374,8 +374,8 @@ class MonthlyBreakdownRow(BaseModel):
 
 
 class NetProfitResponse(BaseModel):
-    range_start: date
-    range_end: date
+    range_start: CalendarDate
+    range_end: CalendarDate
     total_sales: Decimal
     total_deductions: Decimal
     total_staff_pay: Decimal

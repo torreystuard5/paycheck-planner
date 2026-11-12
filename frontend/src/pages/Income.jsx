@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import ProFeatureGate from '../components/ProFeatureGate';
 import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
-import { useBudget } from '../context/BudgetContext';
+import { useBudget } from '../context/useBudget';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -25,7 +25,6 @@ const defaultEntryForm = {
 
 export default function Income() {
   const { activeBudget, budgetVersion, bumpBudgetVersion } = useBudget();
-  const [entries, setEntries] = useState([]);
   const [monthlySummary, setMonthlySummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -42,7 +41,7 @@ export default function Income() {
   const [firstLoad, setFirstLoad] = useState(true);
   const [paystubDetailId, setPaystubDetailId] = useState(null);
 
-  const now = new Date();
+  const [now] = useState(() => new Date());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
 
@@ -54,7 +53,7 @@ export default function Income() {
       opts.push({ month: d.getMonth() + 1, year: d.getFullYear(), label: d.toLocaleString('default', { month: 'long', year: 'numeric' }) });
     }
     return opts;
-  }, []);
+  }, [now]);
 
   // Distinct source names for auto-fill
   const [distinctSources, setDistinctSources] = useState([]);
@@ -72,7 +71,6 @@ export default function Income() {
       ]);
       if (entriesRes.status === 'fulfilled') {
         const all = Array.isArray(entriesRes.value.data) ? entriesRes.value.data : [];
-        setEntries(all);
         setAllEntries(all);
         // Auto-expand the most recent entry on first load
         if (firstLoad && all.length > 0) {

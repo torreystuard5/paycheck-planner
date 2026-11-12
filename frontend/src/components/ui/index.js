@@ -1,6 +1,7 @@
 export { default as Button } from './Button';
 export { Card, CardHeader, CardTitle, CardDescription, CardContent } from './Card';
-export { default as Badge, statusToVariant } from './Badge';
+export { default as Badge } from './Badge';
+export { statusToVariant } from './badgeStatus';
 export { default as IconStat } from './IconStat';
 export { default as PageHeader } from './PageHeader';
 export { default as CollapsibleCard } from './CollapsibleCard';

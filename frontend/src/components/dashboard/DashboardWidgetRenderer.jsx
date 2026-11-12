@@ -3,7 +3,7 @@ import { parseISO, formatDistanceToNow } from 'date-fns';
 import { CheckCircle, Clock } from 'lucide-react';
 import LoadingSpinner from '../LoadingSpinner';
 import CurrencyDisplay from '../CurrencyDisplay';
-import { WhatsNewUnseenBadge } from '../RecentUpdates';
+import WhatsNewUnseenBadge from '../WhatsNewUnseenBadge';
 import DashboardWidget from './DashboardWidget';
 import { DASHBOARD_WIDGETS } from '../../config/dashboardWidgets';
 import { getWidgetIcon } from '../../config/dashboardWidgetIcons';

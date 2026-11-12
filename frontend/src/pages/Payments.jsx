@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Filter, Receipt, Download, ChevronDown, Trash2 } from 'lucide-react';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { formatFriendlyDate } from '../utils/formatDate';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { useBudget } from '../context/BudgetContext';
+import { useAuth } from '../context/useAuth';
+import { useBudget } from '../context/useBudget';
 import Modal from '../components/Modal';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
@@ -41,9 +41,7 @@ export default function Payments() {
   const [deleting, setDeleting] = useState(false);
   const exportRef = useRef(null);
 
-  useEffect(() => {
-    fetchAll(true);
-  }, [budgetVersion]);
+
 
   const pollPayments = useCallback(async () => {
     const bq = activeBudget?.id ? `?budget_id=${activeBudget.id}` : '';
@@ -74,7 +72,7 @@ export default function Payments() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchAll = async (showLoading = false) => {
+  const fetchAll = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
     const bq = activeBudget?.id ? `?budget_id=${activeBudget.id}` : '';
@@ -92,7 +90,11 @@ export default function Payments() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  };
+  }, [activeBudget?.id]);
+
+  useEffect(() => {
+    fetchAll(true);
+  }, [fetchAll, budgetVersion]);
 
   const handleFilter = async () => {
     setLoading(true);

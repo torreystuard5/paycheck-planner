@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { onBusinessGate } from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { useBusinessAccess } from '../hooks/useBusinessAccess';
-import { useToast } from './Toast';
+import { useToast } from './useToast';
 import LoadingSpinner from './LoadingSpinner';
 import BusinessTrialBanner from './BusinessTrialBanner';
 import BusinessRouteErrorBoundary from './BusinessRouteErrorBoundary';

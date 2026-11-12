@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Download } from 'lucide-react';
 import api from '../../services/api';
@@ -6,7 +6,7 @@ import { formatApiError } from '../../utils/formatApiError';
 import CurrencyDisplay from '../../components/CurrencyDisplay';
 import BusinessPageShell from '../../components/business/BusinessPageShell';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
-import { useToast } from '../../components/Toast';
+import { useToast } from '../../components/useToast';
 import { Button, Card } from '../../components/ui';
 
 export default function NetProfitPage() {
@@ -19,7 +19,7 @@ export default function NetProfitPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
@@ -35,11 +35,11 @@ export default function NetProfitPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [range, customStart, customEnd]);
 
   useEffect(() => {
     if (range !== 'custom') load();
-  }, [range]);
+  }, [range, load]);
 
   const exportCsv = () => {
     if (!data?.monthly?.length) {

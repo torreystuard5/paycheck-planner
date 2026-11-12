@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import api from '../../services/api';
 import { formatApiError } from '../../utils/formatApiError';
@@ -9,7 +9,7 @@ import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
 import BusinessPageShell from '../../components/business/BusinessPageShell';
-import { useToast } from '../../components/Toast';
+import { useToast } from '../../components/useToast';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
 import { Button } from '../../components/ui';
@@ -71,7 +71,7 @@ export default function DeductionsPage() {
   });
   const filterCategoryOptions = ['', ...[...new Set(mergedCategories)]];
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setError(null);
     try {
       const params = new URLSearchParams();
@@ -95,12 +95,11 @@ export default function DeductionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, filterCategory, range]);
 
   useEffect(() => {
-    setLoading(true);
     load();
-  }, [range]);
+  }, [load]);
 
   const filterVendors = (t) => {
     if (vTimer.current) clearTimeout(vTimer.current);

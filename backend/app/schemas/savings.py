@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 class SavingsGoalCreate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=150)
-    target_amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
+    target_amount: Optional[Decimal] = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     target_date: Optional[date] = None
     budget_id: Optional[UUID] = None
 
@@ -43,7 +43,7 @@ class SavingsGoalResponse(BaseModel):
 
 class ContributionCreate(BaseModel):
     goal_id: UUID
-    amount: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     pay_period_date: Optional[date] = None
 
 

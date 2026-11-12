@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Lock,
   Unlock,
@@ -592,12 +591,12 @@ function PasswordsTab({ vApi, resetTimer }) {
       clipboardTimerRef.current = setTimeout(async () => {
         try {
           await navigator.clipboard.writeText('');
-        } catch {}
+        } catch { setError('Clipboard or vault settings operation failed.'); }
         setCopied(null);
       }, 30000);
       // Clear "Copied!" indicator after 2s
       setTimeout(() => setCopied(null), 2000);
-    } catch {}
+    } catch { setError('Clipboard or vault settings operation failed.'); }
   };
 
   if (loading) return <LoadingSpinner />;
@@ -915,7 +914,7 @@ function VaultSettings({ vApi, lockTimeout, setLockTimeout, onClose }) {
     try {
       await vApi.patch('/api/v1/notes/settings', { lock_timeout: n });
       setLockTimeout(n);
-    } catch {}
+    } catch { setError('Clipboard or vault settings operation failed.'); }
     setSavingTimeout(false);
   };
 
@@ -1006,7 +1005,6 @@ function VaultSettings({ vApi, lockTimeout, setLockTimeout, onClose }) {
 
 // ─── Main Vault Component ─────────────────────────────────────────────
 export default function Vault() {
-  const navigate = useNavigate();
   const [screen, setScreen] = useState('loading'); // loading | setup | verify | vault
   const [sessionToken, setSessionToken] = useState(null);
   const [activeTab, setActiveTab] = useState('notes');
@@ -1014,31 +1012,19 @@ export default function Vault() {
   const [lockTimeout, setLockTimeout] = useState(5);
   const [timeLeft, setTimeLeft] = useState(null); // seconds
   const timerRef = useRef(null);
-  const lastActivityRef = useRef(Date.now());
+  const lastActivityRef = useRef(null);
   const sessionTokenRef = useRef(null);
 
   // Determine initial screen
   useEffect(() => {
     const detectPinStatus = async () => {
       try {
-        // Try verify with empty pin to detect if PIN is set
-        await api.post('/api/v1/notes/pin/verify', { pin: '000000' });
-        // If it succeeds (unlikely), go to vault
+        const { data } = await api.get('/api/v1/notes/pin/status');
+        setLockTimeout(data.lock_timeout);
+        setScreen(data.pin_configured ? 'verify' : 'setup');
+      } catch {
+        // Fail closed on an unavailable status; never assume a missing PIN.
         setScreen('verify');
-      } catch (err) {
-        if (err.response?.status === 401) {
-          // PIN exists, wrong PIN
-          setScreen('verify');
-        } else if (err.response?.status === 400 || err.response?.data?.detail?.includes('no pin')) {
-          // No PIN set
-          setScreen('setup');
-        } else if (err.response?.status === 429) {
-          // Rate limited — PIN exists
-          setScreen('verify');
-        } else {
-          // Fallback: assume setup needed
-          setScreen('setup');
-        }
       }
     };
     detectPinStatus();
@@ -1057,7 +1043,6 @@ export default function Vault() {
 
     const totalSeconds = lockTimeout * 60;
     lastActivityRef.current = Date.now();
-    setTimeLeft(totalSeconds);
 
     const interval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - lastActivityRef.current) / 1000);
@@ -1089,79 +1074,31 @@ export default function Vault() {
     return () => events.forEach((e) => window.removeEventListener(e, resetTimer));
   }, [screen, resetTimer]);
 
-  const handlePinSuccess = (token, expiresIn) => {
+  const handlePinSuccess = (token) => {
     setSessionToken(token);
     sessionTokenRef.current = token;
+    setTimeLeft(lockTimeout * 60);
     setScreen('vault');
   };
 
-  const vApi = sessionToken ? vaultApi(sessionToken) : null;
-
-  // Wrap vApi to detect 403 session_required
-  const wrappedVApi = vApi
-    ? {
-        get: async (...args) => {
-          try {
-            return await vApi.get(...args);
-          } catch (err) {
-            if (err.response?.status === 403 && err.response?.data?.detail === 'notes_session_required') {
-              setSessionToken(null);
-              sessionTokenRef.current = null;
-              setScreen('verify');
-            }
-            throw err;
-          }
-        },
-        post: async (...args) => {
-          try {
-            return await vApi.post(...args);
-          } catch (err) {
-            if (err.response?.status === 403 && err.response?.data?.detail === 'notes_session_required') {
-              setSessionToken(null);
-              sessionTokenRef.current = null;
-              setScreen('verify');
-            }
-            throw err;
-          }
-        },
-        put: async (...args) => {
-          try {
-            return await vApi.put(...args);
-          } catch (err) {
-            if (err.response?.status === 403 && err.response?.data?.detail === 'notes_session_required') {
-              setSessionToken(null);
-              sessionTokenRef.current = null;
-              setScreen('verify');
-            }
-            throw err;
-          }
-        },
-        patch: async (...args) => {
-          try {
-            return await vApi.patch(...args);
-          } catch (err) {
-            if (err.response?.status === 403 && err.response?.data?.detail === 'notes_session_required') {
-              setSessionToken(null);
-              sessionTokenRef.current = null;
-              setScreen('verify');
-            }
-            throw err;
-          }
-        },
-        delete: async (...args) => {
-          try {
-            return await vApi.delete(...args);
-          } catch (err) {
-            if (err.response?.status === 403 && err.response?.data?.detail === 'notes_session_required') {
-              setSessionToken(null);
-              sessionTokenRef.current = null;
-              setScreen('verify');
-            }
-            throw err;
-          }
-        },
+  // Keep request clients stable across countdown renders. Each response still
+  // validates the server-side vault session and returns to PIN verification on expiry.
+  const wrappedVApi = useMemo(() => {
+    if (!sessionToken) return null;
+    const client = vaultApi(sessionToken);
+    return Object.fromEntries(['get', 'post', 'put', 'patch', 'delete'].map((method) => [method, async (...args) => {
+      try {
+        return await client[method](...args);
+      } catch (err) {
+        if (err.response?.status === 403 && err.response?.data?.detail === 'notes_session_required') {
+          setSessionToken(null);
+          sessionTokenRef.current = null;
+          setScreen('verify');
+        }
+        throw err;
       }
-    : null;
+    }]));
+  }, [sessionToken]);
 
   const formatTime = (seconds) => {
     if (seconds == null) return '';

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Loader2, Sparkles } from 'lucide-react';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const PRO_FEATURES = [
@@ -162,7 +162,3 @@ export default function Upgrade() {
     </div>
   );
 }
-
-
-
-

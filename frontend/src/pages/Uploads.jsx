@@ -8,8 +8,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { listDocuments, deleteDocument } from '../services/api';
-import { useBudget } from '../context/BudgetContext';
-import { useToast } from '../components/Toast';
+import { useBudget } from '../context/useBudget';
+import { useToast } from '../components/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
 import UploadDropzone from '../components/uploads/UploadDropzone';

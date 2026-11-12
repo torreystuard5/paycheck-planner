@@ -30,8 +30,8 @@ import {
   FolderOpen,
   Upload,
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { useBudget } from '../../context/BudgetContext';
+import { useAuth } from '../../context/useAuth';
+import { useBudget } from '../../context/useBudget';
 // tierAccess import removed — early access, mode toggle always shown
 import { APP_VERSION } from '../../config';
 import { BUSINESS_NAV_LINKS, filterBusinessNavLinks } from '../../config/businessNav';
@@ -64,11 +64,11 @@ const adminLinks = [
 ];
 
 function BudgetSwitcher({ onClose }) {
+  const navigate = useNavigate();
   const { activeBudget, budgets, setActiveBudget } = useBudget();
   const [menuOpen, setMenuOpen] = useState(false);
   const [switchingId, setSwitchingId] = useState(null);
   const menuRef = useRef(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -149,7 +149,6 @@ function BudgetSwitcher({ onClose }) {
 
 export default function Sidebar({ open, onClose }) {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
   const { can, loading: accessLoading } = useBusinessAccess();
   const { appMode, switching, switchToBusiness, switchToPersonal } = useEditionSwitch();
   const businessLinks =

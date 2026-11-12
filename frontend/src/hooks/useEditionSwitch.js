@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../components/Toast';
+import { useAuth } from '../context/useAuth';
+import { useToast } from '../components/useToast';
 import { useBusinessAccess } from './useBusinessAccess';
 import {
   activateBusinessEdition,

@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date as CalendarDate, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -9,20 +9,20 @@ from pydantic import BaseModel
 
 
 class AppUpdateCreate(BaseModel):
-    date: date
+    date: CalendarDate
     description: str
     type: str = "update"
 
 
 class AppUpdateUpdate(BaseModel):
-    date: Optional[date] = None
+    date: Optional[CalendarDate] = None
     description: Optional[str] = None
     type: Optional[str] = None
 
 
 class AppUpdateOut(BaseModel):
     id: int
-    date: date
+    date: CalendarDate
     description: str
     type: str
     created_by: UUID

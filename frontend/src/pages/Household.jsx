@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Users, UserPlus, Copy, LogOut, Activity, Clock, Settings, CheckCircle, DollarSign, ClipboardList, Trash2, ShoppingCart, Plus, Edit2 } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';

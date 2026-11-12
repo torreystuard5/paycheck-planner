@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from './Toast';
+import { useAuth } from '../context/useAuth';
+import { useToast } from './useToast';
 import LoadingSpinner from './LoadingSpinner';
 import { hasPersonalHomeAccess } from '../utils/tierAccess';
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import api from '../../services/api';
 import { formatApiError } from '../../utils/formatApiError';
@@ -6,7 +6,7 @@ import BusinessPageShell from '../../components/business/BusinessPageShell';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
-import { useToast } from '../../components/Toast';
+import { useToast } from '../../components/useToast';
 import { useBusinessWrite } from '../../hooks/useBusinessWrite';
 import { useBusinessAccess } from '../../hooks/useBusinessAccess';
 import { Button, Card } from '../../components/ui';
@@ -34,7 +34,7 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
   const [del, setDel] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setError(null);
     try {
       const params = new URLSearchParams();
@@ -46,12 +46,11 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [q]);
 
   useEffect(() => {
-    setLoading(true);
     load();
-  }, []);
+  }, [load]);
 
   const openAdd = () => {
     setEditing(null);

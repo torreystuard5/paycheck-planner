@@ -5,8 +5,8 @@ import { formatFriendlyDate } from '../utils/formatDate';
 import { getGoalProgress, getGoalVisual, estimateProjectedDate } from '../utils/savingsGoalMeta';
 import { formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { useBudget } from '../context/BudgetContext';
+import { useAuth } from '../context/useAuth';
+import { useBudget } from '../context/useBudget';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -46,9 +46,7 @@ export default function Savings() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
-  useEffect(() => {
-    fetchData(true);
-  }, [sortBy, sortOrder, budgetVersion]);
+
 
   const pollData = useCallback(async () => {
     const bq = activeBudget?.id ? `&budget_id=${activeBudget.id}` : '';
@@ -73,7 +71,7 @@ export default function Savings() {
 
   usePolling(pollData, 30000, !!user?.household_id);
 
-  const fetchData = async (showLoading = false) => {
+  const fetchData = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setError(null);
     const bq = activeBudget?.id ? `&budget_id=${activeBudget.id}` : '';
@@ -95,7 +93,11 @@ export default function Savings() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  };
+  }, [sortBy, sortOrder, activeBudget?.id]);
+
+  useEffect(() => {
+    fetchData(true);
+  }, [fetchData, budgetVersion]);
 
   const openAddGoal = () => { setEditingGoal(null); setGoalForm(defaultGoalForm); setShowGoalModal(true); };
   const openEditGoal = (goal) => {

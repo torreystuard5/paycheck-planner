@@ -11,11 +11,11 @@ vi.mock('../../services/api', () => ({
   confirmPaystubFromDocument: vi.fn(() => Promise.resolve({ data: {} })),
 }));
 
-vi.mock('../../context/BudgetContext', () => ({
+vi.mock('../../context/useBudget', () => ({
   useBudget: () => ({ activeBudget: { id: 'budget-1' } }),
 }));
 
-vi.mock('../Toast', () => {
+vi.mock('../useToast', () => {
   const toast = vi.fn();
   return { useToast: () => toast };
 });

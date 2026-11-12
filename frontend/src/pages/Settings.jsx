@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Save, User, DollarSign, Download, Loader2, Calendar, Plus, Edit, Trash2, Clock, Briefcase, Palette } from 'lucide-react';
 import ThemePreferencePicker from '../components/ThemePreferencePicker';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -101,8 +101,7 @@ const TABS = [
 ];
 
 export default function Settings() {
-  const { user, updateUser } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('account');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -133,11 +132,6 @@ export default function Settings() {
   const [deleteScheduleTarget, setDeleteScheduleTarget] = useState(null);
 
   useEffect(() => {
-    fetchProfile();
-    fetchSchedules();
-  }, []);
-
-  useEffect(() => {
     if (user?.app_mode !== 'business') return;
     (async () => {
       try {
@@ -149,16 +143,16 @@ export default function Settings() {
     })();
   }, [user?.app_mode, user?.id]);
 
-  const fetchSchedules = async () => {
+  const fetchSchedules = useCallback(async () => {
     try {
       const res = await api.get('/api/v1/paycheck-schedules');
       setSchedules(Array.isArray(res.data) ? res.data : []);
     } catch {
       setSchedules([]);
     }
-  };
+  }, []);
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get('/api/v1/auth/me');
@@ -187,7 +181,12 @@ export default function Settings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    fetchProfile();
+    fetchSchedules();
+  }, [fetchProfile, fetchSchedules]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -380,7 +379,7 @@ export default function Settings() {
                   setDateFormat(newFormat);
                   try {
                     await api.patch('/api/v1/auth/me/date-format', { date_format: newFormat });
-                  } catch {}
+                  } catch { setError('Failed to save date format.'); setDateFormat(dateFormat); }
                 }}
                 className="form-input"
               >

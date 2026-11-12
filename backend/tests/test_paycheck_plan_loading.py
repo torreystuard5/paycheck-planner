@@ -360,6 +360,9 @@ class TestPaycheckPlanLoading(unittest.TestCase):
 
         async def run():
             db = AsyncMock()
+            ownership = MagicMock()
+            ownership.scalar_one_or_none.return_value = budget_id
+            db.execute.return_value = ownership
             with patch(
                 "app.services.pay_period_planner.resolve_anchor_income",
                 new_callable=AsyncMock,
@@ -388,6 +391,10 @@ class TestPaycheckPlanLoading(unittest.TestCase):
                 "app.services.pay_period_planner.build_pay_calendar_context",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("planning boom"),
+            ), patch(
+                "app.services.pay_period_planner.get_paid_bill_map",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("fallback lookup unavailable"),
             ):
                 plan = await build_full_paycheck_plan_response(
                     db, user, budget_id, periods=2

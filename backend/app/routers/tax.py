@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.tax_deduction import TaxDeduction
+from app.models.bill import Bill
 from app.models.user import User
 from app.schemas.tax import (
     TaxDeductionCreate,
@@ -42,6 +43,13 @@ async def create_deduction(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if body.bill_id is not None:
+        result = await db.execute(select(Bill).where(Bill.id == body.bill_id))
+        bill = result.scalar_one_or_none()
+        if not bill or (bill.user_id != current_user.id and (
+            not current_user.household_id or bill.household_id != current_user.household_id
+        )):
+            raise HTTPException(status_code=404, detail="Bill not found")
     budget_id = await resolve_budget_id(current_user, db, body.budget_id)
     deduction = TaxDeduction(
         user_id=current_user.id,

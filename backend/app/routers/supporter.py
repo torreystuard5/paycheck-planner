@@ -1,10 +1,11 @@
 import json
-import os
+import secrets
 
 from fastapi import APIRouter, Depends, Form, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.config import settings
 from app.schemas.supporter import (
     PromoCodeApply,
     PromoCodeCreate,
@@ -22,7 +23,6 @@ from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/supporter", tags=["supporter"])
 
-ADMIN_EMAIL = os.getenv("SUPPORT_EMAIL", "spsoftwaresolutionsllc@gmail.com")
 
 
 @router.post("/kofi-webhook")
@@ -30,17 +30,21 @@ async def kofi_webhook(
     data: str = Form(default="{}"),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Public Ko-fi webhook endpoint — no auth required.
-    Ko-fi sends form data with a 'data' field containing a JSON string.
-    Always returns 200 OK. Never crashes on malformed data.
-    """
+    """Accept credits only from a configured, authenticated Ko-fi sender."""
+    expected = settings.KOFI_VERIFICATION_TOKEN
+    if not expected:
+        raise HTTPException(status_code=503, detail="Ko-fi webhook not configured")
     try:
         payload = json.loads(data)
-        result = await process_kofi_donation(payload, db)
-        return result
-    except Exception:
-        return {"status": "ok"}
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid Ko-fi payload") from exc
+    supplied = payload.get("verification_token") if isinstance(payload, dict) else None
+    if not isinstance(supplied, str) or not secrets.compare_digest(supplied, expected):
+        raise HTTPException(status_code=403, detail="Invalid Ko-fi verification token")
+    try:
+        return await process_kofi_donation(payload, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/status", response_model=SupporterStatus)
@@ -73,7 +77,7 @@ async def create_promo(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin-only: Create a new promo code."""
-    if current_user.email.lower() != ADMIN_EMAIL.lower():
+    if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required.",
@@ -93,7 +97,7 @@ async def get_promo_codes(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin-only: List all promo codes."""
-    if current_user.email.lower() != ADMIN_EMAIL.lower():
+    if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required.",

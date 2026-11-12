@@ -13,8 +13,8 @@ import {
   Tag,
 } from 'lucide-react';
 import api from '../services/api';
-import { useBudget } from '../context/BudgetContext';
-import { useToast } from '../components/Toast';
+import { useBudget } from '../context/useBudget';
+import { useToast } from '../components/useToast';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -60,7 +60,7 @@ const defaultForm = {
 };
 
 // ── Category bar chart ──
-function CategoryBars({ byCategory, total }) {
+function CategoryBars({ byCategory }) {
   const entries = Object.entries(byCategory).sort(([, a], [, b]) => Number(b) - Number(a));
   if (entries.length === 0) return null;
 
@@ -131,7 +131,7 @@ export default function TaxPrep() {
     } finally {
       setLoading(false);
     }
-  }, [taxYear, activeBudget?.id]);
+  }, [taxYear, activeBudget?.id, toast]);
 
   useEffect(() => { fetchData(); }, [fetchData, budgetVersion]);
 
